@@ -13,7 +13,7 @@ import { AgencyAnalyticsDashboard } from './components/AgencyAnalyticsDashboard'
 
 import { AgentBrain, AgentState } from './logic/agentBrain';
 import { AgentMessage, MediaPlan, User, Brand, Campaign, Flight, UserType, LayoutPosition } from './types';
-import { MOCK_DATA, SAMPLE_BRANDS } from './logic/dummyData';
+import { MOCK_DATA, SAMPLE_BRANDS, generateCampaign, generateFlight, generateId } from './logic/dummyData';
 
 import { generateMediaPlanPDF } from './utils/pdfGenerator';
 import { generateMediaPlanPPT } from './utils/pptGenerator';
@@ -22,6 +22,12 @@ import { ArrowLeft } from 'lucide-react';
 type ViewState = 'LOGIN' | 'CLIENT_SELECTION' | 'CAMPAIGN_LIST' | 'FLIGHT_LIST' | 'MEDIA_PLAN' | 'AGENCY_ANALYTICS';
 
 function App() {
+    // Mutable Data State
+    const [brands, setBrands] = useState(() => {
+        // Deep copy MOCK_DATA.brands to allow mutations
+        return JSON.parse(JSON.stringify(MOCK_DATA.brands));
+    });
+
     // Navigation & Context State
     const [view, setView] = useState<ViewState>('LOGIN');
     const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -176,6 +182,121 @@ function App() {
         setView('CAMPAIGN_LIST');
     };
 
+    const handleCreateCampaign = (name: string, budget?: number, startDate?: string, endDate?: string) => {
+        if (!currentBrand) return;
+
+        const campaignId = generateId();
+        const today = new Date().toISOString().split('T')[0];
+        const in90Days = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+        // Create new campaign with NO default flights
+        const newCampaign: Campaign = {
+            id: campaignId,
+            name: name,
+            brandId: currentBrand.id,
+            advertiser: currentBrand.name,
+            budget: budget || 100000,
+            startDate: startDate || today,
+            endDate: endDate || in90Days,
+            goals: ['Brand Awareness'],
+            flights: [], // Start with zero flights
+            status: 'PLANNING',
+            forecast: {
+                impressions: 0,
+                spend: 0,
+                reach: 0,
+                frequency: 0,
+                source: 'Internal'
+            },
+            delivery: {
+                actualImpressions: 0,
+                actualSpend: 0,
+                pacing: 0,
+                status: 'ON_TRACK'
+            },
+            placements: [] // Legacy support
+        };
+
+        // Update brands state
+        setBrands((prevBrands: Brand[]) => {
+            return prevBrands.map((b: Brand) => {
+                if (b.id === currentBrand.id) {
+                    return {
+                        ...b,
+                        campaigns: [...(b as any).campaigns, newCampaign]
+                    };
+                }
+                return b;
+            });
+        });
+
+        // Select the new campaign and navigate to flight list
+        setCurrentCampaign(newCampaign);
+        setView('FLIGHT_LIST');
+    };
+
+    const handleCreateFlight = (name: string, budget?: number, startDate?: string, endDate?: string) => {
+        if (!currentCampaign) return;
+
+        // Calculate default budget (25% of campaign budget)
+        const flightBudget = budget || Math.floor(currentCampaign.budget * 0.25);
+
+        // Generate base flight
+        const baseFlight = generateFlight(currentCampaign.id, name, flightBudget);
+
+        // Override to start with zero lines and reset forecast/delivery
+        const newFlight: Flight = {
+            ...baseFlight,
+            startDate: startDate || baseFlight.startDate,
+            endDate: endDate || baseFlight.endDate,
+            lines: [], // Start with zero lines
+            status: 'DRAFT', // New flights start as draft
+            forecast: {
+                impressions: 0,
+                spend: 0,
+                reach: 0,
+                frequency: 0,
+                source: 'Internal'
+            },
+            delivery: {
+                actualImpressions: 0,
+                actualSpend: 0,
+                pacing: 0,
+                status: 'ON_TRACK'
+            }
+        };
+
+        // Update brands state
+        setBrands((prevBrands: Brand[]) => {
+            return prevBrands.map((b: Brand) => {
+                return {
+                    ...b,
+                    campaigns: (b as any).campaigns.map((c: Campaign) => {
+                        if (c.id === currentCampaign.id) {
+                            return {
+                                ...c,
+                                flights: [...c.flights, newFlight]
+                            };
+                        }
+                        return c;
+                    })
+                };
+            });
+        });
+
+        // Update current campaign reference
+        setCurrentCampaign(prev => {
+            if (!prev) return prev;
+            return {
+                ...prev,
+                flights: [...prev.flights, newFlight]
+            };
+        });
+
+        // Select the new flight and navigate to media plan
+        handleSelectFlight(newFlight);
+    };
+
     // --- Agent Interaction ---
 
     const handleSendMessage = async (text: string) => {
@@ -313,10 +434,10 @@ function App() {
             <div className="flex-1 overflow-hidden">
                 {view === 'CAMPAIGN_LIST' && currentBrand && (
                     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 h-full overflow-y-auto">
-                        {/* Find campaigns for this brand from MOCK_DATA */}
                         <CampaignList
-                            campaigns={MOCK_DATA.brands.find(b => b.id === currentBrand.id)?.campaigns || []}
+                            campaigns={brands.find((b: Brand) => b.id === currentBrand.id)?.campaigns || []}
                             onSelectCampaign={handleSelectCampaign}
+                            onCreateCampaign={handleCreateCampaign}
                         />
                     </div>
                 )}
@@ -327,6 +448,7 @@ function App() {
                             flights={currentCampaign.flights}
                             onSelectFlight={handleSelectFlight}
                             onBack={() => setView('CAMPAIGN_LIST')}
+                            onCreateFlight={handleCreateFlight}
                         />
                     </div>
                 )}

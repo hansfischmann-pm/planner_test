@@ -5,17 +5,28 @@ import { Calendar, DollarSign, ArrowRight, Plus, MessageSquare, Send } from 'luc
 interface CampaignListProps {
     campaigns: Campaign[];
     onSelectCampaign: (campaign: Campaign) => void;
-    onCreateCampaign?: (name: string) => void;
+    onCreateCampaign?: (name: string, budget?: number, startDate?: string, endDate?: string) => void;
 }
 
 export const CampaignList: React.FC<CampaignListProps> = ({ campaigns, onSelectCampaign, onCreateCampaign }) => {
     const [showNewCampaign, setShowNewCampaign] = useState(false);
     const [campaignName, setCampaignName] = useState('');
+    const [campaignBudget, setCampaignBudget] = useState('');
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
 
     const handleCreate = () => {
         if (campaignName.trim() && onCreateCampaign) {
-            onCreateCampaign(campaignName.trim());
+            onCreateCampaign(
+                campaignName.trim(),
+                campaignBudget ? parseFloat(campaignBudget) : undefined,
+                startDate || undefined,
+                endDate || undefined
+            );
             setCampaignName('');
+            setCampaignBudget('');
+            setStartDate('');
+            setEndDate('');
             setShowNewCampaign(false);
         }
     };
@@ -36,31 +47,77 @@ export const CampaignList: React.FC<CampaignListProps> = ({ campaigns, onSelectC
             {/* Campaign Creation Input */}
             {showNewCampaign && (
                 <div className="bg-white p-4 rounded-xl border border-purple-200 shadow-sm">
-                    <div className="flex items-center gap-2 mb-2">
+                    <div className="flex items-center gap-2 mb-3">
                         <MessageSquare className="h-5 w-5 text-purple-600" />
                         <h3 className="text-sm font-medium text-gray-900">Create New Campaign</h3>
                     </div>
-                    <div className="flex gap-2">
-                        <input
-                            type="text"
-                            value={campaignName}
-                            onChange={(e) => setCampaignName(e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
-                            placeholder="Enter campaign name (e.g., 'Q2 2025 Campaign')"
-                            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                        />
-                        <button
-                            onClick={handleCreate}
-                            disabled={!campaignName.trim()}
-                            className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                        >
-                            <Send className="h-4 w-4" />
-                            Create
-                        </button>
+                    <div className="space-y-3">
+                        <div>
+                            <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Campaign Name</label>
+                            <input
+                                type="text"
+                                value={campaignName}
+                                onChange={(e) => setCampaignName(e.target.value)}
+                                placeholder="e.g., 'Q2 2025 Campaign' or 'Holiday 2025'"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Budget</label>
+                            <input
+                                type="number"
+                                value={campaignBudget}
+                                onChange={(e) => setCampaignBudget(e.target.value)}
+                                placeholder="e.g., 100000 (defaults to $100k if not specified)"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                            />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Start Date</label>
+                                <input
+                                    type="date"
+                                    value={startDate}
+                                    onChange={(e) => setStartDate(e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-gray-500 uppercase mb-1">End Date</label>
+                                <input
+                                    type="date"
+                                    value={endDate}
+                                    onChange={(e) => setEndDate(e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                />
+                            </div>
+                        </div>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={handleCreate}
+                                disabled={!campaignName.trim()}
+                                className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                            >
+                                <Send className="h-4 w-4" />
+                                Create Campaign
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setCampaignName('');
+                                    setCampaignBudget('');
+                                    setStartDate('');
+                                    setEndDate('');
+                                    setShowNewCampaign(false);
+                                }}
+                                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                        <p className="text-xs text-gray-500">
+                            Tip: Dates default to today and +90 days if not specified
+                        </p>
                     </div>
-                    <p className="text-xs text-gray-500 mt-2">
-                        Tip: You can also type naturally like "Create a campaign for Q3 2025"
-                    </p>
                 </div>
             )}
 
@@ -103,17 +160,75 @@ export const CampaignList: React.FC<CampaignListProps> = ({ campaigns, onSelectC
                             </div>
                         </div>
 
-                        {/* Progress bar */}
-                        <div className="mt-4">
-                            <div className="flex justify-between text-xs text-gray-500 mb-1">
-                                <span>Progress</span>
-                                <span>{campaign.status === 'COMPLETED' ? '100%' : campaign.status === 'ACTIVE' ? '45%' : '10%'}</span>
+                        {/* Progress bars */}
+                        <div className="mt-4 space-y-2">
+                            {/* Campaign Timeline */}
+                            <div>
+                                <div className="flex justify-between text-xs text-gray-500 mb-1">
+                                    <span>Campaign Timeline</span>
+                                    <span>
+                                        {(() => {
+                                            const start = new Date(campaign.startDate);
+                                            const end = new Date(campaign.endDate);
+                                            const now = new Date();
+                                            const total = end.getTime() - start.getTime();
+                                            const elapsed = now.getTime() - start.getTime();
+                                            const remaining = end.getTime() - now.getTime();
+                                            const daysRemaining = Math.ceil(remaining / (1000 * 60 * 60 * 24));
+                                            return daysRemaining > 0 ? `${daysRemaining} days remaining` : 'Completed';
+                                        })()}
+                                    </span>
+                                </div>
+                                <div className="w-full bg-gray-100 rounded-full h-1.5">
+                                    <div
+                                        className={`h-1.5 rounded-full transition-all ${campaign.status === 'COMPLETED' ? 'bg-gray-600' : 'bg-purple-600'
+                                            }`}
+                                        style={{
+                                            width: `${(() => {
+                                                const start = new Date(campaign.startDate);
+                                                const end = new Date(campaign.endDate);
+                                                const now = new Date();
+                                                const total = end.getTime() - start.getTime();
+                                                const elapsed = now.getTime() - start.getTime();
+                                                return Math.min(100, Math.max(0, (elapsed / total) * 100));
+                                            })()}%`
+                                        }}
+                                    ></div>
+                                </div>
                             </div>
-                            <div className="w-full bg-gray-100 rounded-full h-1.5">
-                                <div
-                                    className={`h-1.5 rounded-full ${campaign.status === 'COMPLETED' ? 'bg-gray-600' : 'bg-purple-600'}`}
-                                    style={{ width: campaign.status === 'COMPLETED' ? '100%' : campaign.status === 'ACTIVE' ? '45%' : '10%' }}
-                                ></div>
+
+                            {/* Spend to Budget */}
+                            <div>
+                                <div className="flex justify-between text-xs text-gray-500 mb-1">
+                                    <span>Spend to Budget</span>
+                                    <span>
+                                        ${(campaign.delivery?.actualSpend || 0).toLocaleString()} / ${campaign.budget.toLocaleString()}
+                                    </span>
+                                </div>
+                                <div className="w-full bg-gray-100 rounded-full h-1.5">
+                                    <div
+                                        className="h-1.5 rounded-full bg-green-500 transition-all"
+                                        style={{ width: `${Math.min(100, ((campaign.delivery?.actualSpend || 0) / campaign.budget) * 100)}%` }}
+                                    ></div>
+                                </div>
+                            </div>
+
+                            {/* Forecast to Actuals */}
+                            <div>
+                                <div className="flex justify-between text-xs text-gray-500 mb-1">
+                                    <span>Forecast to Actuals</span>
+                                    <span>
+                                        {((campaign.delivery?.actualImpressions || 0) / 1000000).toFixed(1)}M / {((campaign.forecast?.impressions || 0) / 1000000).toFixed(1)}M
+                                    </span>
+                                </div>
+                                <div className="w-full bg-gray-100 rounded-full h-1.5">
+                                    <div
+                                        className={`h-1.5 rounded-full transition-all ${campaign.delivery?.status === 'UNDER_PACING' ? 'bg-red-500' :
+                                            campaign.delivery?.status === 'OVER_PACING' ? 'bg-yellow-500' : 'bg-blue-500'
+                                            }`}
+                                        style={{ width: `${Math.min(100, ((campaign.delivery?.actualImpressions || 0) / Math.max(1, campaign.forecast?.impressions || 1)) * 100)}%` }}
+                                    ></div>
+                                </div>
                             </div>
                         </div>
                     </div>

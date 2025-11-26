@@ -154,8 +154,34 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
                             </>
                         ) : (
                             <>
-                                <td className="py-3 px-6 text-sm text-gray-600 text-right tabular-nums">{group.impressions.toLocaleString()}</td>
-                                <td className="py-3 px-6 text-sm text-gray-600 text-right tabular-nums">-</td>
+                                <td className="py-3 px-6 text-sm text-gray-600">
+                                    <div className="flex flex-col gap-1">
+                                        <div className="flex justify-between text-xs mb-1">
+                                            <span>{group.impressions.toLocaleString()}</span>
+                                            <span className="text-gray-400">/ {(group.placements.reduce((sum: number, p: any) => sum + (p.forecast?.impressions || 0), 0)).toLocaleString()}</span>
+                                        </div>
+                                        <div className="w-full bg-gray-100 rounded-full h-1.5">
+                                            <div
+                                                className="bg-blue-500 h-1.5 rounded-full"
+                                                style={{ width: `${Math.min(100, (group.impressions / Math.max(1, group.placements.reduce((sum: number, p: any) => sum + (p.forecast?.impressions || 0), 0))) * 100)}%` }}
+                                            />
+                                        </div>
+                                    </div>
+                                </td>
+                                <td className="py-3 px-6 text-sm text-gray-600">
+                                    <div className="flex flex-col gap-1">
+                                        <div className="flex justify-between text-xs mb-1">
+                                            <span>${group.totalCost.toLocaleString()}</span>
+                                            <span className="text-gray-400">/ ${(group.placements.reduce((sum: number, p: any) => sum + (p.forecast?.spend || 0), 0)).toLocaleString()}</span>
+                                        </div>
+                                        <div className="w-full bg-gray-100 rounded-full h-1.5">
+                                            <div
+                                                className="bg-green-500 h-1.5 rounded-full"
+                                                style={{ width: `${Math.min(100, (group.totalCost / Math.max(1, group.placements.reduce((sum: number, p: any) => sum + (p.forecast?.spend || 0), 0))) * 100)}%` }}
+                                            />
+                                        </div>
+                                    </div>
+                                </td>
                                 <td className="py-3 px-6 text-sm text-gray-600 text-right tabular-nums">${group.cpa.toFixed(2)}</td>
                                 <td className="py-3 px-6 text-sm font-medium text-right tabular-nums">{group.roas.toFixed(1)}x</td>
                                 <td className="py-3 px-6 text-center">-</td>
@@ -228,12 +254,52 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
                     </td>
                     <td className="py-3 px-6 text-sm text-gray-600 text-right tabular-nums">{placement.quantity.toLocaleString()}</td>
                     <td className="py-3 px-6 text-sm font-medium text-gray-900 text-right tabular-nums">${placement.totalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    <td className="py-3 px-6 text-sm text-gray-400 text-center text-xs">{placement.forecast?.source || 'Internal'}</td>
                 </>
             ) : (
                 <>
-                    <td className="py-3 px-6 text-sm text-gray-600 text-right tabular-nums">{placement.performance?.impressions.toLocaleString() || '-'}</td>
-                    <td className="py-3 px-6 text-sm text-gray-600 text-right tabular-nums">{((placement.performance?.ctr || 0) * 100).toFixed(2)}%</td>
-                    <td className="py-3 px-6 text-sm text-gray-600 text-right tabular-nums">${placement.performance?.cpa.toFixed(2) || '-'}</td>
+                    <td className="py-3 px-6 text-sm text-gray-600">
+                        <div className="flex flex-col gap-1 min-w-[140px]">
+                            <div className="flex justify-between text-xs mb-1">
+                                <span className="font-medium">{(placement.delivery?.actualImpressions || 0).toLocaleString()}</span>
+                                <span className="text-gray-400">/ {(placement.forecast?.impressions || 0).toLocaleString()}</span>
+                            </div>
+                            <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                                <div
+                                    className={clsx("h-1.5 rounded-full transition-all duration-500",
+                                        placement.delivery?.status === 'UNDER_PACING' ? "bg-red-500" :
+                                            placement.delivery?.status === 'OVER_PACING' ? "bg-yellow-500" : "bg-blue-500"
+                                    )}
+                                    style={{ width: `${Math.min(100, ((placement.delivery?.actualImpressions || 0) / Math.max(1, placement.forecast?.impressions || 1)) * 100)}%` }}
+                                />
+                            </div>
+                        </div>
+                    </td>
+                    <td className="py-3 px-6 text-sm text-gray-600">
+                        <div className="flex flex-col gap-1 min-w-[140px]">
+                            <div className="flex justify-between text-xs mb-1">
+                                <span className="font-medium">${(placement.delivery?.actualSpend || 0).toLocaleString()}</span>
+                                <span className="text-gray-400">/ ${placement.totalCost.toLocaleString()}</span>
+                            </div>
+                            <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                                <div
+                                    className="bg-green-500 h-1.5 rounded-full transition-all duration-500"
+                                    style={{ width: `${Math.min(100, ((placement.delivery?.actualSpend || 0) / Math.max(1, placement.totalCost)) * 100)}%` }}
+                                />
+                            </div>
+                        </div>
+                    </td>
+                    <td className="py-3 px-6 text-sm text-gray-600 text-right tabular-nums">
+                        <div className="flex flex-col items-end">
+                            <span>{placement.delivery?.pacing || 0}%</span>
+                            <span className={clsx("text-[10px] font-medium uppercase",
+                                placement.delivery?.status === 'UNDER_PACING' ? "text-red-500" :
+                                    placement.delivery?.status === 'OVER_PACING' ? "text-yellow-600" : "text-green-500"
+                            )}>
+                                {placement.delivery?.status?.replace('_', ' ') || 'ON TRACK'}
+                            </span>
+                        </div>
+                    </td>
                     <td className={clsx("py-3 px-6 text-sm font-medium text-right tabular-nums",
                         (placement.performance?.roas || 0) > 2 ? "text-green-600" : "text-red-500"
                     )}>
@@ -365,12 +431,13 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
                                         <HeaderCell label="Rate" align="right" />
                                         <HeaderCell label="Quantity" align="right" />
                                         <HeaderCell label="Total Cost" sortKey="totalCost" align="right" />
+                                        <HeaderCell label="Source" align="center" />
                                     </>
                                 ) : (
                                     <>
-                                        <HeaderCell label="Impressions" sortKey="performance.impressions" align="right" />
-                                        <HeaderCell label="CTR" sortKey="performance.ctr" align="right" />
-                                        <HeaderCell label="CPA" sortKey="performance.cpa" align="right" />
+                                        <HeaderCell label="Impressions (Delivered / Forecast)" sortKey="delivery.actualImpressions" />
+                                        <HeaderCell label="Spend (Actual / Budget)" sortKey="delivery.actualSpend" />
+                                        <HeaderCell label="Pacing" sortKey="delivery.pacing" align="right" />
                                         <HeaderCell label="ROAS" sortKey="performance.roas" align="right" />
                                         <HeaderCell label="Status" align="center" />
                                     </>

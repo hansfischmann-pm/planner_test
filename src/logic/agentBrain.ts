@@ -253,6 +253,33 @@ export class AgentBrain {
             return this.handleInventoryQuery(input);
         }
 
+        // Handle Forecast/Delivery questions
+        // Triggers: "how is the plan pacing", "what is the forecast", "delivery status"
+        if (lowerInput.includes('forecast') || lowerInput.includes('delivery') || lowerInput.includes('pacing') || lowerInput.includes('performance')) {
+            console.log('[AgentBrain] Matched: Forecast/Delivery query');
+            const plan = this.context.mediaPlan;
+            if (!plan) {
+                return this.createAgentMessage("I can't show you the forecast yet because we haven't created a plan. Shall we start by defining a budget?", []);
+            }
+
+            const forecast = plan.campaign.forecast;
+            const delivery = plan.campaign.delivery;
+
+            if (!forecast || !delivery) {
+                return this.createAgentMessage("I don't have forecast data for this plan yet. Try generating placements first.", []);
+            }
+
+            return this.createAgentMessage(
+                `**📊 Plan Performance & Forecast:**\n\n` +
+                `**Delivery Status:** ${delivery.status.replace('_', ' ')} (${delivery.pacing}% Pacing)\n` +
+                `**Impressions:** ${(delivery.actualImpressions || 0).toLocaleString()} delivered / ${(forecast.impressions || 0).toLocaleString()} forecasted\n` +
+                `**Spend:** $${(delivery.actualSpend || 0).toLocaleString()} spent / $${(forecast.spend || 0).toLocaleString()} planned\n\n` +
+                `**Forecast Source:** ${forecast.source}\n` +
+                `**Est. Reach:** ${(forecast.reach || 0).toLocaleString()} unique users`,
+                ['Show detailed performance', 'Optimize under-pacing lines']
+            );
+        }
+
         // 1. Add Channel
         const addMatch = lowerInput.match(/add\s+(search|social|display|tv|radio|ooh|print|espn|cbs|nbc|abc|fox|cnn|msnbc|hgtv|discovery|tlc|bravo|tnt|netflix|hulu|amazon|disney|hbo|apple|paramount|peacock|youtube|roku|tubi|pluto|f1|dazn|sling)/i);
 

@@ -1,4 +1,4 @@
-import { Campaign, Line, CostMethod, Brand, User, Flight, MediaPlan, AgentInfo, AgentExecution, PlanMetrics } from '../types';
+import { Campaign, Line, CostMethod, Brand, User, Flight, MediaPlan, AgentInfo, AgentExecution, PlanMetrics, ForecastMetrics, DeliveryMetrics, ForecastSource } from '../types';
 
 export const generateId = () => Math.random().toString(36).substr(2, 9);
 
@@ -126,16 +126,70 @@ export const SAMPLE_AGENTS: AgentInfo[] = [
 
 // --- Generators ---
 
-export function generateLine(channel: 'Search' | 'Social' | 'Display' | 'TV' | 'Radio' | 'OOH' | 'Print', advertiser: string, networkName?: string, programName?: string): Line {
-    const vendors = {
-        'Search': ['Google Ads', 'Bing Ads'],
-        'Social': ['Meta (Facebook/Instagram)', 'TikTok', 'LinkedIn', 'Pinterest'],
-        'Display': ['Google Display Network', 'The Trade Desk', 'Teads'],
-        'TV': ['NBCUniversal', 'Disney', 'Local Broadcast'],
-        'Radio': ['iHeartMedia', 'Spotify Audio', 'Pandora'],
-        'OOH': ['Clear Channel', 'Outfront Media', 'Lamar'],
-        'Print': ['Conde Nast', 'Hearst', 'Local News']
+const generateForecast = (channel: string, vendor: string, budget: number): { forecast: ForecastMetrics, delivery: DeliveryMetrics } => {
+    // 1. Determine Source
+    let source: ForecastSource = 'Internal';
+    if (channel === 'TV') source = 'Nielsen';
+    else if (channel === 'Radio') source = 'Arbitron';
+    else if (channel === 'OOH') source = 'Geopath';
+    else if (channel === 'Display' || channel === 'TV') source = 'Comscore'; // CTV often Comscore
+    else if (channel === 'Search' || channel === 'Social') source = 'Internal'; // Platform data
+
+    // 2. Generate Forecast Metrics (Simulated)
+    // CPM assumptions for forecasting
+    let estimatedCpm = 15;
+    if (channel === 'TV') estimatedCpm = 25;
+    if (channel === 'Social') estimatedCpm = 8;
+    if (channel === 'Search') estimatedCpm = 5;
+    if (channel === 'OOH') estimatedCpm = 12;
+
+    const forecastedImpressions = Math.floor((budget / estimatedCpm) * 1000);
+    const forecastedReach = Math.floor(forecastedImpressions * 0.4); // Rough estimate
+    const forecastedFreq = 2.5;
+
+    const forecast: ForecastMetrics = {
+        impressions: forecastedImpressions,
+        spend: budget,
+        reach: forecastedReach,
+        frequency: forecastedFreq,
+        source: source
     };
+
+    // 3. Generate Delivery Metrics (Simulated Actuals)
+    // Randomize delivery status: 70% On Track, 15% Under, 15% Over
+    const rand = Math.random();
+    let pacing = 1.0; // 100%
+    let status: 'ON_TRACK' | 'UNDER_PACING' | 'OVER_PACING' = 'ON_TRACK';
+
+    if (rand > 0.85) {
+        pacing = 1.15; // Over-pacing
+        status = 'OVER_PACING';
+    } else if (rand > 0.70) {
+        pacing = 0.85; // Under-pacing
+        status = 'UNDER_PACING';
+    } else {
+        pacing = 0.98 + (Math.random() * 0.04); // +/- 2%
+    }
+
+    // Assume we are part-way through the campaign, so actuals are proportional to pacing * progress
+    // For simplicity in this mock, let's say we are 50% through the flight
+    const progress = 0.5;
+
+    const actualSpend = Math.floor(budget * progress * pacing);
+    const actualImpressions = Math.floor(forecastedImpressions * progress * pacing);
+
+    const delivery: DeliveryMetrics = {
+        actualImpressions: actualImpressions,
+        actualSpend: actualSpend,
+        pacing: Math.round(pacing * 100), // Store as percentage (e.g., 98)
+        status: status
+    };
+
+    return { forecast, delivery };
+};
+
+export function generateLine(channel: 'Search' | 'Social' | 'Display' | 'TV' | 'Radio' | 'OOH' | 'Print', advertiser: string, networkName?: string, programName?: string): Line {
+    const vendors = VENDORS;
 
     const adUnits = {
         'Search': ['Responsive Search Ad', 'Exact Match Keyword', 'Shopping Ad'],
@@ -177,10 +231,14 @@ export function generateLine(channel: 'Search' | 'Social' | 'Display' | 'TV' | '
 
     // TV Logic (simplified from original for brevity, but keeping core logic)
     if (channel === 'TV' && (networkName || programName)) {
-        // ... (Logic to match network/program would go here, reusing existing logic if needed)
-        // For now, simple random fallback or specific if provided
+        // Logic to match network/program
         if (networkName) vendor = networkName;
         if (programName) adUnit = programName;
+
+        // Try to find specific network data if available
+        if (networkName && TV_NETWORKS.Linear[networkName]) {
+            // Could use this to validate or refine adUnits
+        }
     } else {
         vendor = vendorList[Math.floor(Math.random() * vendorList.length)];
         adUnit = unitList[Math.floor(Math.random() * unitList.length)];
@@ -264,14 +322,18 @@ export function generateLine(channel: 'Search' | 'Social' | 'Display' | 'TV' | '
 
     const creative = {
         id: Math.random().toString(36).substr(2, 9),
-        name: `${advertiser} ${channel} ${isVideo ? 'Spot' : 'Banner'} v${Math.floor(Math.random() * 5) + 1}`,
+        name: `${vendor} ${channel} ${isVideo ? 'Spot' : 'Banner'} v${Math.floor(Math.random() * 5) + 1}`,
         type: isVideo ? 'video' as const : 'image' as const,
         url: isVideo ? videoUrls[Math.floor(Math.random() * videoUrls.length)] : `https://picsum.photos/seed/${Math.random()}/400/300`
     };
 
+    // Generate Forecast & Delivery Data
+    // Use totalCost as budget proxy
+    const { forecast, delivery } = generateForecast(channel, vendor, totalCost);
+
     return {
         id: generateId(),
-        name: `${vendor} - ${adUnit}`,
+        name: `${vendor} - ${channel} Line`,
         channel,
         vendor,
         adUnit,
@@ -282,13 +344,25 @@ export function generateLine(channel: 'Search' | 'Social' | 'Display' | 'TV' | '
         endDate: '2024-03-31',
         quantity,
         totalCost,
-        performance,
+        forecast: forecast,
+        delivery: delivery,
+        performance: {
+            impressions: delivery.actualImpressions, // Sync performance with delivery actuals
+            clicks: Math.floor(delivery.actualImpressions * (ctr || 0.01)),
+            conversions: Math.floor(delivery.actualImpressions * (cvr || 0.001)),
+            ctr: ctr || 0.01,
+            cvr: cvr || 0.001,
+            cpc: clicks > 0 ? totalCost / clicks : 0,
+            cpa: conversions > 0 ? totalCost / conversions : 0,
+            roas: totalCost > 0 ? revenue / totalCost : 0,
+            status: 'ACTIVE'
+        },
         buyingType,
         dealId,
         ioNumber,
         creative
     };
-}
+};
 
 export function calculatePlanMetrics(lines: Line[]): PlanMetrics {
     const impressions = lines.reduce((sum, line) => sum + (line.performance?.impressions || 0), 0);
@@ -336,7 +410,20 @@ export function generateFlight(campaignId: string, name: string, budget: number)
         endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
         budget,
         lines,
-        status: 'ACTIVE'
+        status: 'ACTIVE',
+        forecast: {
+            impressions: lines.reduce((sum, line) => sum + (line.forecast?.impressions || 0), 0),
+            spend: lines.reduce((sum, line) => sum + (line.forecast?.spend || 0), 0),
+            reach: lines.reduce((sum, line) => sum + (line.forecast?.reach || 0), 0),
+            frequency: lines.reduce((sum, line) => sum + (line.forecast?.impressions || 0), 0) / Math.max(1, lines.reduce((sum, line) => sum + (line.forecast?.reach || 0), 0)),
+            source: 'Internal'
+        },
+        delivery: {
+            actualImpressions: lines.reduce((sum, line) => sum + (line.delivery?.actualImpressions || 0), 0),
+            actualSpend: lines.reduce((sum, line) => sum + (line.delivery?.actualSpend || 0), 0),
+            pacing: Math.round(lines.reduce((sum, line) => sum + (line.delivery?.pacing || 100), 0) / Math.max(1, lines.length)),
+            status: 'ON_TRACK' // Simplified, could calculate based on pacing
+        }
     };
 }
 
@@ -359,6 +446,19 @@ export function generateCampaign(brand: Brand): Campaign {
         goals: ['Brand Awareness', 'Sales'],
         flights: [flight1, flight2],
         status: 'ACTIVE',
+        forecast: {
+            impressions: [flight1, flight2].reduce((sum, flight) => sum + (flight.forecast?.impressions || 0), 0),
+            spend: [flight1, flight2].reduce((sum, flight) => sum + (flight.forecast?.spend || 0), 0),
+            reach: [flight1, flight2].reduce((sum, flight) => sum + (flight.forecast?.reach || 0), 0),
+            frequency: [flight1, flight2].reduce((sum, flight) => sum + (flight.forecast?.impressions || 0), 0) / Math.max(1, [flight1, flight2].reduce((sum, flight) => sum + (flight.forecast?.reach || 0), 0)),
+            source: 'Internal'
+        },
+        delivery: {
+            actualImpressions: [flight1, flight2].reduce((sum, flight) => sum + (flight.delivery?.actualImpressions || 0), 0),
+            actualSpend: [flight1, flight2].reduce((sum, flight) => sum + (flight.delivery?.actualSpend || 0), 0),
+            pacing: Math.round([flight1, flight2].reduce((sum, flight) => sum + (flight.delivery?.pacing || 100), 0) / 2),
+            status: 'ON_TRACK'
+        },
         placements: [...flight1.lines, ...flight2.lines] // Legacy support
     };
 }

@@ -29,6 +29,8 @@ export interface Flight {
     budget: number;
     lines: Line[];
     status: 'DRAFT' | 'ACTIVE' | 'COMPLETED';
+    forecast?: ForecastMetrics;
+    delivery?: DeliveryMetrics;
 }
 
 export interface PlanMetrics {
@@ -102,11 +104,42 @@ export interface Campaign {
     goals: string[];
     flights: Flight[];
     status: 'PLANNING' | 'ACTIVE' | 'COMPLETED';
+    forecast?: ForecastMetrics;
+    delivery?: DeliveryMetrics;
     // Legacy support (optional, or computed)
     placements?: Line[];
 }
 
 export type CostMethod = 'CPM' | 'CPC' | 'Flat' | 'Spot';
+
+export type ForecastSource = 'Nielsen' | 'Comscore' | 'Geopath' | 'Arbitron' | 'Internal';
+
+export interface ForecastMetrics {
+    impressions: number;
+    spend: number;
+    reach: number;
+    frequency: number;
+    source: ForecastSource;
+}
+
+export interface DeliveryMetrics {
+    actualImpressions: number;
+    actualSpend: number;
+    pacing: number; // Percentage (0-100+)
+    status: 'ON_TRACK' | 'UNDER_PACING' | 'OVER_PACING';
+}
+
+export interface PerformanceMetrics {
+    impressions: number;
+    clicks: number;
+    conversions: number;
+    ctr: number;
+    cvr: number;
+    cpc: number;
+    cpa: number;
+    roas: number;
+    status: 'ACTIVE' | 'PAUSED';
+}
 
 // Renamed from Placement to Line, keeping alias for backward compatibility
 export interface Line {
@@ -122,6 +155,11 @@ export interface Line {
     endDate: string;
     quantity: number;
     totalCost: number;
+
+    // New Forecasting & Delivery Fields
+    forecast?: ForecastMetrics;
+    delivery?: DeliveryMetrics;
+
     performance?: PerformanceMetrics;
     buyingType?: 'Auction' | 'PMP' | 'Direct';
     dealId?: string;
@@ -130,18 +168,6 @@ export interface Line {
 }
 
 export type Placement = Line; // Alias for backward compatibility
-
-export interface PerformanceMetrics {
-    impressions: number;
-    clicks: number;
-    conversions: number;
-    ctr: number;
-    cvr: number;
-    cpc: number;
-    cpa: number;
-    roas: number;
-    status: 'ACTIVE' | 'PAUSED';
-}
 
 export interface CreativeAsset {
     id: string;

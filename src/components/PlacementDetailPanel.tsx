@@ -191,6 +191,52 @@ export const PlacementDetailPanel: React.FC<PlacementDetailPanelProps> = ({ plac
 
                 <hr className="border-gray-100" />
 
+                {/* Forecasting & Delivery Section */}
+                <section>
+                    <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-4">Forecasting & Delivery</h3>
+                    <div className="bg-gray-50 rounded-xl p-4 space-y-4">
+                        <div className="flex justify-between items-center">
+                            <span className="text-sm text-gray-500">Source</span>
+                            <span className="text-sm font-medium text-gray-900 bg-white px-2 py-1 rounded border border-gray-200 shadow-sm">
+                                {placement.forecast?.source || 'Internal'}
+                            </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Forecast Impr.</label>
+                                <p className="text-sm text-gray-900 font-mono">{(placement.forecast?.impressions || 0).toLocaleString()}</p>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Actual Impr.</label>
+                                <p className="text-sm text-gray-900 font-mono">{(placement.delivery?.actualImpressions || 0).toLocaleString()}</p>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Pacing</label>
+                                <div className="flex items-center gap-2">
+                                    <span className={clsx("text-sm font-bold",
+                                        placement.delivery?.status === 'UNDER_PACING' ? "text-red-600" :
+                                            placement.delivery?.status === 'OVER_PACING' ? "text-yellow-600" : "text-green-600"
+                                    )}>
+                                        {placement.delivery?.pacing || 0}%
+                                    </span>
+                                    <span className="text-xs text-gray-400">
+                                        ({placement.delivery?.status?.replace('_', ' ') || 'ON TRACK'})
+                                    </span>
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Reach / Freq</label>
+                                <p className="text-sm text-gray-900 font-mono">
+                                    {(placement.forecast?.reach || 0).toLocaleString()} / {(placement.forecast?.frequency || 0).toFixed(1)}x
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <hr className="border-gray-100" />
+
                 {/* Read Only Details */}
                 <section className="grid grid-cols-2 gap-4">
                     <div>
@@ -212,6 +258,6 @@ export const PlacementDetailPanel: React.FC<PlacementDetailPanelProps> = ({ plac
                 </section>
 
             </div>
-        </div>
+        </div >
     );
 };
