@@ -6,6 +6,7 @@ import { LoginScreen } from './components/LoginScreen';
 import { ClientSelectionDashboard } from './components/ClientSelectionDashboard';
 import { ClientSwitcher } from './components/ClientSwitcher';
 import { LayoutControls } from './components/LayoutControls';
+import { ContextualHelp } from './components/ContextualHelp';
 import { CampaignList } from './components/CampaignList';
 import { FlightList } from './components/FlightList';
 import { AgencyAnalyticsDashboard } from './components/AgencyAnalyticsDashboard';
@@ -336,8 +337,8 @@ function App() {
                         {/* Chat Panel */}
                         <div
                             className={`bg-white flex flex-col ${layout === 'LEFT' ? 'border-r border-gray-200 order-1' :
-                                    layout === 'RIGHT' ? 'border-l border-gray-200 order-3' :
-                                        'border-t border-gray-200 order-3'
+                                layout === 'RIGHT' ? 'border-l border-gray-200 order-3' :
+                                    'border-t border-gray-200 order-3'
                                 }`}
                             style={{
                                 width: layout !== 'BOTTOM' ? `${chatSize}px` : '100%',
@@ -345,7 +346,14 @@ function App() {
                                 flexShrink: 0
                             }}
                         >
-                            <ChatInterface messages={messages} onSendMessage={handleSendMessage} isTyping={isTyping} />
+                            <ChatInterface
+                                messages={messages}
+                                onSendMessage={handleSendMessage}
+                                isTyping={isTyping}
+                                currentView={view}
+                                agentState={agentState}
+                                hasPlan={mediaPlan !== null}
+                            />
                         </div>
 
                         {/* Resize Handle */}
@@ -359,8 +367,8 @@ function App() {
 
                         {/* Visualizer Panel */}
                         <div className={`flex-1 flex flex-col overflow-hidden relative bg-gray-50 ${layout === 'LEFT' ? 'order-3' :
-                                layout === 'RIGHT' ? 'order-1' :
-                                    'order-1'
+                            layout === 'RIGHT' ? 'order-1' :
+                                'order-1'
                             }`}>
                             <PlanVisualizer
                                 mediaPlan={mediaPlan}

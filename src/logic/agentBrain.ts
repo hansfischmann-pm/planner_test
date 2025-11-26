@@ -217,10 +217,35 @@ export class AgentBrain {
         let responseContent = '';
         let suggestedActions: string[] = [];
 
+        // Log user input for pattern analysis
+        console.log('[AgentBrain] User Input:', {
+            timestamp: new Date().toISOString(),
+            input: input,
+            lowerInput: lowerInput,
+            length: input.length,
+            hasNumbers: /\d/.test(input),
+            hasDollarSign: /\$/.test(input)
+        });
+
+        // Handle conversational help/suggestions requests
+        // Triggers: "help", "suggestions", "what can you do", "help me"
+        if (lowerInput === 'help' || lowerInput.includes('suggestion') || lowerInput.includes('what can') || (lowerInput.includes('help') && lowerInput.includes('me'))) {
+            console.log('[AgentBrain] Matched: Help/Suggestions query');
+            return this.provideSuggestions();
+        }
+
+        // Handle inventory questions
+        // Triggers: "what available", "what avail", "what inventory"
+        if (lowerInput.includes('what') && (lowerInput.includes('available') || lowerInput.includes('avail') || lowerInput.includes('inventory'))) {
+            console.log('[AgentBrain] Matched: Inventory query');
+            return this.handleInventoryQuery(input);
+        }
+
         // 1. Add Channel
         const addMatch = lowerInput.match(/add\s+(search|social|display|tv|radio|ooh|print|espn|cbs|nbc|abc|fox|cnn|msnbc|hgtv|discovery|tlc|bravo|tnt|netflix|hulu|amazon|disney|hbo|apple|paramount|peacock|youtube|roku|tubi|pluto|f1|dazn|sling)/i);
 
         if (addMatch) {
+            console.log('[AgentBrain] Matched: Add channel/placement', addMatch[1]);
             let channelStr = addMatch[1].toLowerCase();
             let channel: any;
             let networkName: string | undefined;
@@ -658,4 +683,319 @@ export class AgentBrain {
             action
         };
     }
+
+    private provideSuggestions(): AgentMessage {
+        const hasPlan = this.context.mediaPlan !== null;
+
+        if (!hasPlan) {
+            return this.createAgentMessage(
+                "Here are some ways to get started:\n\n" +
+                "• **'Create a media plan with a budget of $500k'** - Generate a new plan\n" +
+                "• **'Build a balanced plan for Q1 2025'** - Create quarterly plan\n" +
+                "• **'What sports programming is available?'** - Browse TV inventory\n" +
+                "• **'What DOOH is available in New York?'** - Check outdoor inventory",
+                ['Create a $500k plan', 'Show TV sports inventory']
+            );
+        }
+
+        return this.createAgentMessage(
+            "Here's what I can help you with:\n\n" +
+            "**Add Placements:**\n" +
+            "• 'Add Google Search ads'\n" +
+            "• 'Add ESPN SportsCenter'\n\n" +
+            "**Optimize:**\n" +
+            "• 'Optimize for reach'\n" +
+            "• 'Pause underperformers'\n\n" +
+            "**Inventory Questions:**\n" +
+            "• 'What sports shows are available?'\n" +
+            "• 'What DOOH is in Seoul?'\n" +
+            "• 'Where can I run vertical video?'",
+            ['Add TV placement', 'Optimize for conversions']
+        );
+    }
+
+    private handleInventoryQuery(query: string): AgentMessage {
+        const lowerQuery = query.toLowerCase();
+
+        // Sports programming
+        if (lowerQuery.includes('sports') && (lowerQuery.includes('tv') || lowerQuery.includes('program') || lowerQuery.includes('show'))) {
+            console.log('[AgentBrain] Matched: Sports TV inventory');
+            return this.createAgentMessage(
+                "**📺 Available Sports Programming:**\n\n" +
+                "**ESPN:**\n" +
+                "• SportsCenter (2-5M viewers)\n" +
+                "• Monday Night Football (12-15M viewers)\n" +
+                "• NBA on ESPN (3-6M viewers)\n\n" +
+                "**Fox Sports:**\n" +
+                "• NFL on Fox (15-20M viewers)\n" +
+                "• UEFA Champions League (2-4M viewers)\n\n" +
+                "**NBC Sports:**\n" +
+                "• Sunday Night Football (18-22M viewers)\n" +
+                "• Premier League (1-3M viewers)",
+                ['Add ESPN Monday Night Football', 'Add NFL Sunday slot']
+            );
+        }
+
+        // News programming
+        if ((lowerQuery.includes('news') || lowerQuery.includes('current events')) && (lowerQuery.includes('program') || lowerQuery.includes('show') || lowerQuery.includes('available') || lowerQuery.includes('avail'))) {
+            console.log('[AgentBrain] Matched: News TV inventory');
+            return this.createAgentMessage(
+                "**📰 Available News Programming:**\n\n" +
+                "**Cable News:**\n" +
+                "• CNN Prime Time (1-3M viewers)\n" +
+                "• Fox News Tonight (3-5M viewers)\n" +
+                "• MSNBC Evening (1.5-2.5M viewers)\n\n" +
+                "**Broadcast News:**\n" +
+                "• NBC Nightly News (6-8M viewers)\n" +
+                "• ABC World News Tonight (7-9M viewers)\n" +
+                "• CBS Evening News (5-6M viewers)\n\n" +
+                "**Morning Shows:**\n" +
+                "• Today Show (3-4M viewers)\n" +
+                "• Good Morning America (3.5-4.5M viewers)\n" +
+                "• CBS Mornings (2.5-3M viewers)",
+                ['Add CNN Prime', 'Add NBC Nightly News']
+            );
+        }
+
+        // Drama series
+        if ((lowerQuery.includes('drama') || lowerQuery.includes('series')) && (lowerQuery.includes('show') || lowerQuery.includes('program') || lowerQuery.includes('available') || lowerQuery.includes('avail'))) {
+            console.log('[AgentBrain] Matched: Drama TV inventory');
+            return this.createAgentMessage(
+                "**🎬 Available Drama Programming:**\n\n" +
+                "**Network Drama:**\n" +
+                "• Law & Order SVU - NBC (4-6M viewers)\n" +
+                "• Chicago Fire - NBC (6-8M viewers)\n" +
+                "• FBI - CBS (6-7M viewers)\n" +
+                "• The Rookie - ABC (4-5M viewers)\n\n" +
+                "**Streaming Originals:**\n" +
+                "• Stranger Things - Netflix\n" +
+                "• The Bear - Hulu\n" +
+                "• Yellowstone - Paramount+\n" +
+                "• House of the Dragon - HBO Max",
+                ['Add Law & Order SVU', 'Add Yellowstone']
+            );
+        }
+
+        // Comedy programming
+        if ((lowerQuery.includes('comedy') || lowerQuery.includes('sitcom')) && (lowerQuery.includes('show') || lowerQuery.includes('program') || lowerQuery.includes('available') || lowerQuery.includes('avail'))) {
+            console.log('[AgentBrain] Matched: Comedy TV inventory');
+            return this.createAgentMessage(
+                "**😂 Available Comedy Programming:**\n\n" +
+                "**Network Comedy:**\n" +
+                "• Abbott Elementary - ABC (3-4M viewers)\n" +
+                "• Young Sheldon - CBS (6-8M viewers)\n" +
+                "• The Conners - ABC (3-4M viewers)\n\n" +
+                "**Late Night:**\n" +
+                "• The Tonight Show - NBC (1.5-2M viewers)\n" +
+                "• Jimmy Kimmel Live - ABC (1.8-2.3M viewers)\n" +
+                "• The Late Show - CBS (2-2.5M viewers)\n\n" +
+                "**Streaming:**\n" +
+                "• Ted Lasso - Apple TV+\n" +
+                "• Only Murders in the Building - Hulu",
+                ['Add Abbott Elementary', 'Add Tonight Show']
+            );
+        }
+
+        // Reality TV
+        if ((lowerQuery.includes('reality') || lowerQuery.includes('competition')) && (lowerQuery.includes('show') || lowerQuery.includes('program') || lowerQuery.includes('available') || lowerQuery.includes('avail'))) {
+            console.log('[AgentBrain] Matched: Reality TV inventory');
+            return this.createAgentMessage(
+                "**⭐ Available Reality Programming:**\n\n" +
+                "**Competition Shows:**\n" +
+                "• The Voice - NBC (6-8M viewers)\n" +
+                "• American Idol - ABC (5-6M viewers)\n" +
+                "• Survivor - CBS (6-7M viewers)\n" +
+                "• The Masked Singer - Fox (5-6M viewers)\n\n" +
+                "**Lifestyle/Home:**\n" +
+                "• Fixer Upper - HGTV (2-3M viewers)\n" +
+                "• Property Brothers - HGTV (1.5-2M viewers)\n\n" +
+                "**Dating/Social:**\n" +
+                "• The Bachelor - ABC (4-5M viewers)\n" +
+                "• Love Island - Peacock",
+                ['Add The Voice', 'Add Survivor']
+            );
+        }
+
+        // Kids/Family programming
+        if ((lowerQuery.includes('kids') || lowerQuery.includes('family') || lowerQuery.includes('children')) && (lowerQuery.includes('show') || lowerQuery.includes('program') || lowerQuery.includes('available') || lowerQuery.includes('avail'))) {
+            console.log('[AgentBrain] Matched: Kids/Family TV inventory');
+            return this.createAgentMessage(
+                "**👨‍👩‍👧‍👦 Available Kids/Family Programming:**\n\n" +
+                "**Preschool:**\n" +
+                "• Sesame Street - PBS\n" +
+                "• Bluey - Disney Jr (1-2M viewers)\n" +
+                "• Daniel Tiger - PBS\n\n" +
+                "**Kids 6-11:**\n" +
+                "• SpongeBob - Nickelodeon (1.5-2M viewers)\n" +
+                "• Paw Patrol - Nickelodeon (1-1.5M viewers)\n\n" +
+                "**Family Prime:**\n" +
+                "• America's Funniest Home Videos - ABC (3-4M viewers)\n" +
+                "• The Simpsons - Fox (2-3M viewers)",
+                ['Add Bluey', 'Add SpongeBob']
+            );
+        }
+
+        // Documentary/Educational
+        if ((lowerQuery.includes('documentary') || lowerQuery.includes('educational') || lowerQuery.includes('nature')) && (lowerQuery.includes('show') || lowerQuery.includes('program') || lowerQuery.includes('available') || lowerQuery.includes('avail'))) {
+            console.log('[AgentBrain] Matched: Documentary TV inventory');
+            return this.createAgentMessage(
+                "**🌍 Available Documentary Programming:**\n\n" +
+                "**Nature/Science:**\n" +
+                "• Planet Earth - Discovery/BBC\n" +
+                "• Our Planet - Netflix\n" +
+                "• Cosmos - National Geographic\n\n" +
+                "**True Crime:**\n" +
+                "• Dateline NBC (3-4M viewers)\n" +
+                "• 48 Hours - CBS (2-3M viewers)\n\n" +
+                "**Educational:**\n" +
+                "• NOVA - PBS\n" +
+                "• How It's Made - Discovery",
+                ['Add Planet Earth', 'Add Dateline']
+            );
+        }
+
+        // DOOH inventory
+        if (lowerQuery.includes('dooh') || lowerQuery.includes('outdoor') || lowerQuery.includes('billboard')) {
+            // Seoul / Korea
+            if (lowerQuery.includes('seoul') || lowerQuery.includes('korea') || lowerQuery.includes('icn')) {
+                console.log('[AgentBrain] Matched: DOOH Seoul/Korea inventory');
+                return this.createAgentMessage(
+                    "**🌏 DOOH Inventory - Seoul:**\n\n" +
+                    "**Clear Channel Korea:**\n" +
+                    "• Gangnam Station (120 screens, 2.5M monthly impr)\n" +
+                    "• Seoul Station Hub (85 screens, 1.8M impr)\n\n" +
+                    "**JCDecaux Korea:**\n" +
+                    "• Hongdae District (150 screens, 1.9M impr)\n" +
+                    "• Coex Mall (45 screens, 800K impr)",
+                    ['Add Gangnam Station DOOH']
+                );
+            }
+
+            // New York / NYC / JFK / LGA / EWR
+            if (lowerQuery.includes('new york') || lowerQuery.includes('nyc') || lowerQuery.includes('jfk') || lowerQuery.includes('lga') || lowerQuery.includes('ewr')) {
+                console.log('[AgentBrain] Matched: DOOH NYC inventory');
+                return this.createAgentMessage(
+                    "**🗽 DOOH Inventory - NYC:**\n\n" +
+                    "**Clear Channel:**\n" +
+                    "• Times Square (25 screens, 15M monthly impr)\n" +
+                    "• Penn Station (180 screens, 4.5M impr)\n\n" +
+                    "**Outfront Media:**\n" +
+                    "• MTA Subway (4,500+ screens, 25M impr)\n" +
+                    "• LinkNYC Kiosks (1,750 screens, 12M impr)",
+                    ['Add Times Square placement']
+                );
+            }
+
+            // Los Angeles / LA / LAX
+            if (lowerQuery.includes('los angeles') || lowerQuery.includes('la ') || lowerQuery.includes(' la') || lowerQuery.includes('lax')) {
+                console.log('[AgentBrain] Matched: DOOH LA inventory');
+                return this.createAgentMessage(
+                    "**🌴 DOOH Inventory - Los Angeles:**\n\n" +
+                    "**Clear Channel:**\n" +
+                    "• Hollywood Blvd (85 screens, 8M monthly impr)\n" +
+                    "• Sunset Strip (45 screens, 5M impr)\n\n" +
+                    "**Outfront Media:**\n" +
+                    "• LAX Airport (320 screens, 12M impr)\n" +
+                    "• Metro Network (1,200 screens, 15M impr)\n\n" +
+                    "**JCDecaux:**\n" +
+                    "• Beach Cities (180 screens, 6M impr)",
+                    ['Add Hollywood Blvd DOOH', 'Add LAX airport']
+                );
+            }
+
+            // Dallas / DFW
+            if (lowerQuery.includes('dallas') || lowerQuery.includes('dfw')) {
+                console.log('[AgentBrain] Matched: DOOH Dallas/DFW inventory');
+                return this.createAgentMessage(
+                    "**🤠 DOOH Inventory - Dallas/Fort Worth:**\n\n" +
+                    "**Clear Channel:**\n" +
+                    "• DFW Airport (280 screens, 18M monthly impr)\n" +
+                    "• Downtown Dallas (65 screens, 4.5M impr)\n\n" +
+                    "**Outfront Media:**\n" +
+                    "• DART Rail Network (450 screens, 8M impr)\n" +
+                    "• Highway Digital Bulletins (220 screens, 12M impr)",
+                    ['Add DFW Airport DOOH']
+                );
+            }
+
+            // Chicago / ORD
+            if (lowerQuery.includes('chicago') || lowerQuery.includes('ord')) {
+                console.log('[AgentBrain] Matched: DOOH Chicago inventory');
+                return this.createAgentMessage(
+                    "**🏙️ DOOH Inventory - Chicago:**\n\n" +
+                    "**Clear Channel:**\n" +
+                    "• O'Hare Airport (ORD) (350 screens, 22M monthly impr)\n" +
+                    "• Loop District (95 screens, 6M impr)\n\n" +
+                    "**Outfront Media:**\n" +
+                    "• CTA Train Network (2,100 screens, 18M impr)\n" +
+                    "• Michigan Avenue (120 screens, 8M impr)",
+                    ['Add ORD Airport DOOH', 'Add CTA network']
+                );
+            }
+
+            // Atlanta / ATL
+            if (lowerQuery.includes('atlanta') || lowerQuery.includes('atl')) {
+                console.log('[AgentBrain] Matched: DOOH Atlanta inventory');
+                return this.createAgentMessage(
+                    "**🍑 DOOH Inventory - Atlanta:**\n\n" +
+                    "**Clear Channel:**\n" +
+                    "• ATL Airport (420 screens, 28M monthly impr)\n" +
+                    "• Midtown Atlanta (75 screens, 5M impr)\n\n" +
+                    "**Outfront Media:**\n" +
+                    "• MARTA Network (850 screens, 12M impr)\n" +
+                    "• Perimeter Highway (180 screens, 9M impr)",
+                    ['Add ATL Airport DOOH']
+                );
+            }
+
+            // Miami / MIA
+            if (lowerQuery.includes('miami') || lowerQuery.includes('mia')) {
+                console.log('[AgentBrain] Matched: DOOH Miami inventory');
+                return this.createAgentMessage(
+                    "**🌺 DOOH Inventory - Miami:**\n\n" +
+                    "**Clear Channel:**\n" +
+                    "• MIA Airport (185 screens, 14M monthly impr)\n" +
+                    "• South Beach (95 screens, 6.5M impr)\n\n" +
+                    "**Outfront Media:**\n" +
+                    "• Brickell Financial (65 screens, 4M impr)\n" +
+                    "• I-95 Corridor (140 screens, 8M impr)",
+                    ['Add MIA Airport DOOH']
+                );
+            }
+
+            return this.createAgentMessage(
+                "**🌍 DOOH Available in:**\n\n" +
+                "• New York (7,000+ screens)\n" +
+                "• Los Angeles (5,500+ screens)\n" +
+                "• Seoul (2,100+ screens)\n" +
+                "• Tokyo (6,500+ screens)\n\n" +
+                "Try asking about a specific city!",
+                ['Show New York DOOH', 'Show Seoul DOOH']
+            );
+        }
+
+        // Vertical video
+        if ((lowerQuery.includes('vertical') || lowerQuery.includes('9:16')) && lowerQuery.includes('video')) {
+            return this.createAgentMessage(
+                "**📱 Vertical Video Options:**\n\n" +
+                "**Social:**\n" +
+                "• TikTok (up to 60s, 9:16)\n" +
+                "• Instagram Reels (up to 90s, 9:16)\n" +
+                "• Instagram Stories (15s, 9:16)\n" +
+                "• Snapchat (up to 60s, 9:16)\n" +
+                "• YouTube Shorts (up to 60s, 9:16)\n\n" +
+                "**Best for engagement:** TikTok & Instagram Reels",
+                ['Add TikTok vertical video', 'Add Instagram Reels']
+            );
+        }
+
+        return this.createAgentMessage(
+            "I can help you find inventory! Try:\n\n" +
+            "• 'What sports programming is available?'\n" +
+            "• 'What DOOH is in [city]?'\n" +
+            "• 'Where can I run vertical video?'",
+            ['Show sports programming']
+        );
+    }
 }
+

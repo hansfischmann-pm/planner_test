@@ -1,44 +1,48 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { AgentMessage } from '../types';
 import { Send, Cpu, ChevronDown, ChevronRight } from 'lucide-react';
+import { ContextualHelp } from './ContextualHelp';
 
 interface ChatInterfaceProps {
-    messages: AgentMessage[];
-    onSendMessage: (msg: string) => void;
-    isTyping?: boolean;
+  messages: AgentMessage[];
+  onSendMessage: (msg: string) => void;
+  isTyping?: boolean;
+  currentView?: 'LOGIN' | 'CLIENT_SELECTION' | 'CAMPAIGN_LIST' | 'FLIGHT_LIST' | 'MEDIA_PLAN' | 'AGENCY_ANALYTICS';
+  agentState?: 'IDLE' | 'WORKING' | 'WAITING';
+  hasPlan?: boolean;
 }
 
-export const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, onSendMessage, isTyping }) => {
-    const [input, setInput] = useState('');
-    const [expandedAgents, setExpandedAgents] = useState<Set<string>>(new Set());
-    const bottomRef = useRef<HTMLDivElement>(null);
+export const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, onSendMessage, isTyping, currentView, agentState, hasPlan }) => {
+  const [input, setInput] = useState('');
+  const [expandedAgents, setExpandedAgents] = useState<Set<string>>(new Set());
+  const bottomRef = useRef<HTMLDivElement>(null);
 
-    useEffect(() => {
-        bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [messages]);
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
-    const handleSend = () => {
-        if (!input.trim()) return;
-        onSendMessage(input);
-        setInput('');
-    };
+  const handleSend = () => {
+    if (!input.trim()) return;
+    onSendMessage(input);
+    setInput('');
+  };
 
-    const toggleAgentExpansion = (messageId: string, agentName: string) => {
-        const key = `${messageId}-${agentName}`;
-        const newExpanded = new Set(expandedAgents);
-        if (newExpanded.has(key)) {
-            newExpanded.delete(key);
-        } else {
-            newExpanded.add(key);
-        }
-        setExpandedAgents(newExpanded);
-    };
+  const toggleAgentExpansion = (messageId: string, agentName: string) => {
+    const key = `${messageId}-${agentName}`;
+    const newExpanded = new Set(expandedAgents);
+    if (newExpanded.has(key)) {
+      newExpanded.delete(key);
+    } else {
+      newExpanded.add(key);
+    }
+    setExpandedAgents(newExpanded);
+  };
 
-    const getAgentDetails = (agentName: string) => {
-        const details: Record<string, { description: string; code: string }> = {
-            'Insights Agent': {
-                description: 'Analyzing campaign data and identifying optimization opportunities based on performance metrics and industry benchmarks.',
-                code: `// Campaign Performance Analysis
+  const getAgentDetails = (agentName: string) => {
+    const details: Record<string, { description: string; code: string }> = {
+      'Insights Agent': {
+        description: 'Analyzing campaign data and identifying optimization opportunities based on performance metrics and industry benchmarks.',
+        code: `// Campaign Performance Analysis
 async function analyzePerformance(campaign) {
   const placements = campaign.placements || [];
   
@@ -75,10 +79,10 @@ async function analyzePerformance(campaign) {
     }
   };
 }`
-            },
-            'Performance Agent': {
-                description: 'Optimizing budget allocation across channels to maximize ROI and campaign effectiveness.',
-                code: `// Budget Optimization Algorithm
+      },
+      'Performance Agent': {
+        description: 'Optimizing budget allocation across channels to maximize ROI and campaign effectiveness.',
+        code: `// Budget Optimization Algorithm
 function optimizeBudgetAllocation(placements, totalBudget) {
   // Calculate efficiency score for each placement
   const placementScores = placements.map(p => {
@@ -129,10 +133,10 @@ function calculateScalePotential(placement) {
   const roomToGrow = 1 - impressionShare;
   return roomToGrow * (placement.performance?.roas || 1);
 }`
-            },
-            'Yield Agent': {
-                description: 'Negotiating rates with media vendors and identifying cost-saving opportunities through volume discounts.',
-                code: `// Vendor Rate Negotiation
+      },
+      'Yield Agent': {
+        description: 'Negotiating rates with media vendors and identifying cost-saving opportunities through volume discounts.',
+        code: `// Vendor Rate Negotiation
 class YieldOptimizer {
   constructor(vendors, historicalData) {
     this.vendors = vendors;
@@ -177,10 +181,10 @@ class YieldOptimizer {
       .reduce((sum, p) => sum + (p.performance?.impressions || 0), 0);
   }
 }`
-            },
-            'Creative Agent': {
-                description: 'Analyzing creative performance to identify winning ad formats and messaging strategies.',
-                code: `// Creative Performance Analysis
+      },
+      'Creative Agent': {
+        description: 'Analyzing creative performance to identify winning ad formats and messaging strategies.',
+        code: `// Creative Performance Analysis
 async function analyzeCreativePerformance(placements) {
   const creativeData = [];
   
@@ -240,10 +244,10 @@ function generateCreativeRecommendation(insights) {
   return \`Focus on \${top.type} creatives with \${top.avgCTR.toFixed(2)}% CTR. 
           Consider A/B testing variations of top performers.\`;
 }`
-            },
-            'Audience Agent': {
-                description: 'Identifying high-converting audience segments and optimizing targeting strategies.',
-                code: `// Audience Segmentation & Optimization
+      },
+      'Audience Agent': {
+        description: 'Identifying high-converting audience segments and optimizing targeting strategies.',
+        code: `// Audience Segmentation & Optimization
 class AudienceOptimizer {
   async analyzeSegments(placements) {
     const segments = this.groupBySegment(placements);
@@ -312,109 +316,120 @@ class AudienceOptimizer {
       These show CVR above 3% and strong ROAS.\`;
   }
 }`
-            }
-        };
-        return details[agentName] || {
-            description: 'Processing campaign data and providing recommendations.',
-            code: '// Agent logic'
-        };
+      }
     };
+    return details[agentName] || {
+      description: 'Processing campaign data and providing recommendations.',
+      code: '// Agent logic'
+    };
+  };
 
-    return (
-        <div className="flex flex-col h-full bg-white shadow-sm">
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                {messages.map((msg) => (
-                    <div
-                        key={msg.id}
-                        className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                    >
-                        <div
-                            className={`max-w-[85%] rounded-2xl p-4 ${msg.role === 'user'
-                                ? 'bg-purple-600 text-white rounded-br-none'
-                                : 'bg-gray-100 text-gray-800 rounded-bl-none'
-                                }`}
+  return (
+    <div className="flex flex-col h-full bg-white shadow-sm">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {messages.map((msg) => (
+          <div
+            key={msg.id}
+            className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+          >
+            <div
+              className={`max-w-[85%] rounded-2xl p-4 ${msg.role === 'user'
+                ? 'bg-purple-600 text-white rounded-br-none'
+                : 'bg-gray-100 text-gray-800 rounded-bl-none'
+                }`}
+            >
+              {msg.agentsInvoked && msg.agentsInvoked.length > 0 && (
+                <div className="mb-3 space-y-2">
+                  {msg.agentsInvoked.map((agent, idx) => {
+                    const key = `${msg.id}-${agent}`;
+                    const isExpanded = expandedAgents.has(key);
+                    const details = getAgentDetails(agent);
+
+                    return (
+                      <div key={idx} className="border border-purple-200 rounded-lg overflow-hidden">
+                        <button
+                          onClick={() => toggleAgentExpansion(msg.id, agent)}
+                          className="w-full flex items-center justify-between px-3 py-2 bg-purple-50 hover:bg-purple-100 transition-colors"
                         >
-                            {msg.agentsInvoked && msg.agentsInvoked.length > 0 && (
-                                <div className="mb-3 space-y-2">
-                                    {msg.agentsInvoked.map((agent, idx) => {
-                                        const key = `${msg.id}-${agent}`;
-                                        const isExpanded = expandedAgents.has(key);
-                                        const details = getAgentDetails(agent);
-
-                                        return (
-                                            <div key={idx} className="border border-purple-200 rounded-lg overflow-hidden">
-                                                <button
-                                                    onClick={() => toggleAgentExpansion(msg.id, agent)}
-                                                    className="w-full flex items-center justify-between px-3 py-2 bg-purple-50 hover:bg-purple-100 transition-colors"
-                                                >
-                                                    <div className="flex items-center gap-2">
-                                                        <Cpu className="h-3 w-3 text-purple-600" />
-                                                        <span className="text-xs font-medium text-purple-700">{agent}</span>
-                                                    </div>
-                                                    {isExpanded ? (
-                                                        <ChevronDown className="h-3 w-3 text-purple-600" />
-                                                    ) : (
-                                                        <ChevronRight className="h-3 w-3 text-purple-600" />
-                                                    )}
-                                                </button>
-                                                {isExpanded && (
-                                                    <div className="p-3 bg-white space-y-2">
-                                                        <p className="text-xs text-gray-600 leading-relaxed">{details.description}</p>
-                                                        <div className="bg-gray-900 rounded p-2 overflow-x-auto">
-                                                            <pre className="text-xs text-gray-100 font-mono">{details.code}</pre>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            )}
-                            <div className="whitespace-pre-wrap text-sm">{msg.content}</div>
-                            {msg.suggestedActions && (
-                                <div className="mt-3 flex flex-wrap gap-2">
-                                    {msg.suggestedActions.map((action) => (
-                                        <button
-                                            key={action}
-                                            onClick={() => onSendMessage(action)}
-                                            className="text-xs bg-white/50 hover:bg-white/80 text-purple-900 px-3 py-1 rounded-full transition-colors border border-purple-200"
-                                        >
-                                            {action}
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                ))}
-                {isTyping && (
-                    <div className="flex justify-start">
-                        <div className="bg-gray-100 rounded-2xl rounded-bl-none p-4">
-                            <span className="animate-pulse">...</span>
-                        </div>
-                    </div>
-                )}
-                <div ref={bottomRef} />
-            </div>
-
-            <div className="p-4 border-t border-gray-100 bg-white">
-                <div className="flex gap-2">
-                    <input
-                        type="text"
-                        value={input}
-                        onChange={(e) => setInput(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                        placeholder="Type your instruction..."
-                        className="flex-1 px-4 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    />
-                    <button
-                        onClick={handleSend}
-                        className="p-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors"
-                    >
-                        <Send className="w-5 h-5" />
-                    </button>
+                          <div className="flex items-center gap-2">
+                            <Cpu className="h-3 w-3 text-purple-600" />
+                            <span className="text-xs font-medium text-purple-700">{agent}</span>
+                          </div>
+                          {isExpanded ? (
+                            <ChevronDown className="h-3 w-3 text-purple-600" />
+                          ) : (
+                            <ChevronRight className="h-3 w-3 text-purple-600" />
+                          )}
+                        </button>
+                        {isExpanded && (
+                          <div className="p-3 bg-white space-y-2">
+                            <p className="text-xs text-gray-600 leading-relaxed">{details.description}</p>
+                            <div className="bg-gray-900 rounded p-2 overflow-x-auto">
+                              <pre className="text-xs text-gray-100 font-mono">{details.code}</pre>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
+              )}
+              <div className="whitespace-pre-wrap text-sm">{msg.content}</div>
+              {msg.suggestedActions && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {msg.suggestedActions.map((action) => (
+                    <button
+                      key={action}
+                      onClick={() => onSendMessage(action)}
+                      className="text-xs bg-white/50 hover:bg-white/80 text-purple-900 px-3 py-1 rounded-full transition-colors border border-purple-200"
+                    >
+                      {action}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
+          </div>
+        ))}
+        {isTyping && (
+          <div className="flex justify-start">
+            <div className="bg-gray-100 rounded-2xl rounded-bl-none p-4">
+              <span className="animate-pulse">...</span>
+            </div>
+          </div>
+        )}
+        <div ref={bottomRef} />
+      </div>
+
+      <div className="p-4 border-t border-gray-100 bg-white">
+        {/* Contextual Help - Above Input */}
+        <div className="mb-3">
+          <ContextualHelp
+            state={agentState || 'IDLE'}
+            currentView={currentView}
+            hasPlan={hasPlan}
+            onSendPrompt={onSendMessage}
+          />
         </div>
-    );
+
+        {/* Input Area */}
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+            placeholder="Type your instruction..."
+            className="flex-1 px-4 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+          />
+          <button
+            onClick={handleSend}
+            className="p-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors"
+          >
+            <Send className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 };
