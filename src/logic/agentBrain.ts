@@ -856,110 +856,219 @@ export class AgentBrain {
 
         // DOOH inventory
         if (lowerQuery.includes('dooh') || lowerQuery.includes('outdoor') || lowerQuery.includes('billboard')) {
-            // Seoul / Korea
-            if (lowerQuery.includes('seoul') || lowerQuery.includes('korea') || lowerQuery.includes('icn')) {
-                console.log('[AgentBrain] Matched: DOOH Seoul/Korea inventory');
+            // Airport-specific queries (airport codes only)
+            if (lowerQuery.includes('dfw') && !lowerQuery.includes('dallas')) {
+                console.log('[AgentBrain] Matched: DOOH DFW Airport only');
                 return this.createAgentMessage(
-                    "**🌏 DOOH Inventory - Seoul:**\n\n" +
+                    "**✈️ DOOH Inventory - DFW Airport:**\n\n" +
+                    "**Clear Channel Airports:**\n" +
+                    "• DFW Terminal Network (280 screens, 18M monthly impr)\n" +
+                    "• Baggage Claim Displays (85 screens, 6M impr)\n\n" +
+                    "**JCDecaux Airport:**\n" +
+                    "• Gate Area Screens (120 screens, 8M impr)\n" +
+                    "• Concourse Digital (65 screens, 4.5M impr)",
+                    ['Add DFW Airport DOOH']
+                );
+            }
+
+            if (lowerQuery.includes('ord') && !lowerQuery.includes('chicago')) {
+                console.log('[AgentBrain] Matched: DOOH ORD Airport only');
+                return this.createAgentMessage(
+                    "**✈️ DOOH Inventory - O'Hare Airport (ORD):**\n\n" +
+                    "**Clear Channel Airports:**\n" +
+                    "• ORD Terminal Network (350 screens, 22M monthly impr)\n" +
+                    "• United Concourse (140 screens, 12M impr)\n\n" +
+                    "**JCDecaux Airport:**\n" +
+                    "• International Terminal (95 screens, 8M impr)\n" +
+                    "• Baggage & Arrivals (78 screens, 5.5M impr)",
+                    ['Add ORD Airport DOOH']
+                );
+            }
+
+            if (lowerQuery.includes('lax') && !lowerQuery.includes('los angeles') && !lowerQuery.includes('la ') && !lowerQuery.includes(' la')) {
+                console.log('[AgentBrain] Matched: DOOH LAX Airport only');
+                return this.createAgentMessage(
+                    "**✈️ DOOH Inventory - LAX Airport:**\n\n" +
+                    "**Clear Channel Airports:**\n" +
+                    "• LAX Terminal Network (320 screens, 16M monthly impr)\n" +
+                    "• Tom Bradley International (110 screens, 9M impr)\n\n" +
+                    "**Outfront Airport:**\n" +
+                    "• Arrivals Hall (95 screens, 6.5M impr)\n" +
+                    "• Curbside Digital (68 screens, 4M impr)",
+                    ['Add LAX Airport DOOH']
+                );
+            }
+
+            if (lowerQuery.includes('atl') && !lowerQuery.includes('atlanta')) {
+                console.log('[AgentBrain] Matched: DOOH ATL Airport only');
+                return this.createAgentMessage(
+                    "**✈️ DOOH Inventory - ATL Airport:**\n\n" +
+                    "**Clear Channel Airports:**\n" +
+                    "• ATL Terminal Network (420 screens, 28M monthly impr)\n" +
+                    "• Domestic Concourses (185 screens, 15M impr)\n\n" +
+                    "**JCDecaux Airport:**\n" +
+                    "• International Terminal (125 screens, 9M impr)\n" +
+                    "• Baggage Claim (95 screens, 6.5M impr)",
+                    ['Add ATL Airport DOOH']
+                );
+            }
+
+            if ((lowerQuery.includes('jfk') || lowerQuery.includes('lga') || lowerQuery.includes('ewr')) && !lowerQuery.includes('new york') && !lowerQuery.includes('nyc')) {
+                console.log('[AgentBrain] Matched: DOOH NYC Airports only');
+                return this.createAgentMessage(
+                    "**✈️ DOOH Inventory - NYC Airports:**\n\n" +
+                    "**JFK Airport:**\n" +
+                    "• Terminal Network (285 screens, 20M monthly impr)\n\n" +
+                    "**Newark (EWR):**\n" +
+                    "• Terminal Network (195 screens, 14M impr)\n\n" +
+                    "**LaGuardia (LGA):**\n" +
+                    "• New Terminal Network (165 screens, 11M impr)",
+                    ['Add JFK Airport DOOH']
+                );
+            }
+
+            if (lowerQuery.includes('mia') && !lowerQuery.includes('miami')) {
+                console.log('[AgentBrain] Matched: DOOH MIA Airport only');
+                return this.createAgentMessage(
+                    "**✈️ DOOH Inventory - MIA Airport:**\n\n" +
+                    "**Clear Channel Airports:**\n" +
+                    "• MIA Terminal Network (185 screens, 14M monthly impr)\n" +
+                    "• Concourse D-E (78 screens, 6M impr)\n\n" +
+                    "**JCDecaux Airport:**\n" +
+                    "• International Arrivals (65 screens, 5M impr)",
+                    ['Add MIA Airport DOOH']
+                );
+            }
+
+            if (lowerQuery.includes('icn') && !lowerQuery.includes('seoul') && !lowerQuery.includes('korea')) {
+                console.log('[AgentBrain] Matched: DOOH ICN Airport only');
+                return this.createAgentMessage(
+                    "**✈️ DOOH Inventory - Incheon Airport (ICN):**\n\n" +
+                    "**JCDecaux Korea:**\n" +
+                    "• ICN Terminal 1 (145 screens, 12M monthly impr)\n" +
+                    "• ICN Terminal 2 (95 screens, 8M impr)\n\n" +
+                    "**Clear Channel Korea:**\n" +
+                    "• Arrivals Hall (68 screens, 5.5M impr)",
+                    ['Add ICN Airport DOOH']
+                );
+            }
+
+            // City-wide queries (includes airport in totals)
+            if (lowerQuery.includes('seoul') || lowerQuery.includes('korea')) {
+                console.log('[AgentBrain] Matched: DOOH Seoul/Korea city-wide');
+                return this.createAgentMessage(
+                    "**🌏 DOOH Inventory - Seoul (City-Wide):**\n\n" +
                     "**Clear Channel Korea:**\n" +
                     "• Gangnam Station (120 screens, 2.5M monthly impr)\n" +
-                    "• Seoul Station Hub (85 screens, 1.8M impr)\n\n" +
+                    "• Seoul Station Hub (85 screens, 1.8M impr)\n" +
+                    "• Incheon Airport (ICN) (68 screens, 5.5M impr)\n\n" +
                     "**JCDecaux Korea:**\n" +
                     "• Hongdae District (150 screens, 1.9M impr)\n" +
-                    "• Coex Mall (45 screens, 800K impr)",
-                    ['Add Gangnam Station DOOH']
+                    "• Coex Mall (45 screens, 800K impr)\n" +
+                    "• ICN Terminals (240 screens, 20M impr)\n\n" +
+                    "**Total: 708 screens, 32.5M monthly impressions**",
+                    ['Add Gangnam Station DOOH', 'Add ICN Airport']
                 );
             }
 
-            // New York / NYC / JFK / LGA / EWR
-            if (lowerQuery.includes('new york') || lowerQuery.includes('nyc') || lowerQuery.includes('jfk') || lowerQuery.includes('lga') || lowerQuery.includes('ewr')) {
-                console.log('[AgentBrain] Matched: DOOH NYC inventory');
+            if (lowerQuery.includes('new york') || lowerQuery.includes('nyc')) {
+                console.log('[AgentBrain] Matched: DOOH NYC city-wide');
                 return this.createAgentMessage(
-                    "**🗽 DOOH Inventory - NYC:**\n\n" +
+                    "**🗽 DOOH Inventory - NYC (City-Wide):**\n\n" +
                     "**Clear Channel:**\n" +
                     "• Times Square (25 screens, 15M monthly impr)\n" +
-                    "• Penn Station (180 screens, 4.5M impr)\n\n" +
+                    "• Penn Station (180 screens, 4.5M impr)\n" +
+                    "• JFK/EWR/LGA Airports (645 screens, 45M impr)\n\n" +
                     "**Outfront Media:**\n" +
                     "• MTA Subway (4,500+ screens, 25M impr)\n" +
-                    "• LinkNYC Kiosks (1,750 screens, 12M impr)",
-                    ['Add Times Square placement']
+                    "• LinkNYC Kiosks (1,750 screens, 12M impr)\n\n" +
+                    "**Total: 7,100+ screens, 101.5M monthly impressions**",
+                    ['Add Times Square DOOH', 'Add MTA Subway']
                 );
             }
 
-            // Los Angeles / LA / LAX
-            if (lowerQuery.includes('los angeles') || lowerQuery.includes('la ') || lowerQuery.includes(' la') || lowerQuery.includes('lax')) {
-                console.log('[AgentBrain] Matched: DOOH LA inventory');
+            if (lowerQuery.includes('los angeles') || (lowerQuery.includes('la ') || lowerQuery.includes(' la'))) {
+                console.log('[AgentBrain] Matched: DOOH LA city-wide');
                 return this.createAgentMessage(
-                    "**🌴 DOOH Inventory - Los Angeles:**\n\n" +
+                    "**🌴 DOOH Inventory - Los Angeles (City-Wide):**\n\n" +
                     "**Clear Channel:**\n" +
                     "• Hollywood Blvd (85 screens, 8M monthly impr)\n" +
-                    "• Sunset Strip (45 screens, 5M impr)\n\n" +
+                    "• Sunset Strip (45 screens, 5M impr)\n" +
+                    "• LAX Airport (320 screens, 16M impr)\n\n" +
                     "**Outfront Media:**\n" +
-                    "• LAX Airport (320 screens, 12M impr)\n" +
                     "• Metro Network (1,200 screens, 15M impr)\n\n" +
                     "**JCDecaux:**\n" +
-                    "• Beach Cities (180 screens, 6M impr)",
-                    ['Add Hollywood Blvd DOOH', 'Add LAX airport']
+                    "• Beach Cities (180 screens, 6M impr)\n\n" +
+                    "**Total: 1,830 screens, 50M monthly impressions**",
+                    ['Add Hollywood Blvd DOOH', 'Add LAX Airport']
                 );
             }
 
-            // Dallas / DFW
-            if (lowerQuery.includes('dallas') || lowerQuery.includes('dfw')) {
-                console.log('[AgentBrain] Matched: DOOH Dallas/DFW inventory');
+            if (lowerQuery.includes('dallas')) {
+                console.log('[AgentBrain] Matched: DOOH Dallas city-wide');
                 return this.createAgentMessage(
-                    "**🤠 DOOH Inventory - Dallas/Fort Worth:**\n\n" +
+                    "**🤠 DOOH Inventory - Dallas/Fort Worth (City-Wide):**\n\n" +
                     "**Clear Channel:**\n" +
                     "• DFW Airport (280 screens, 18M monthly impr)\n" +
                     "• Downtown Dallas (65 screens, 4.5M impr)\n\n" +
                     "**Outfront Media:**\n" +
                     "• DART Rail Network (450 screens, 8M impr)\n" +
-                    "• Highway Digital Bulletins (220 screens, 12M impr)",
-                    ['Add DFW Airport DOOH']
+                    "• Highway Digital Bulletins (220 screens, 12M impr)\n\n" +
+                    "**JCDecaux:**\n" +
+                    "• DFW Terminals (185 screens, 12.5M impr)\n\n" +
+                    "**Total: 1,200 screens, 55M monthly impressions**",
+                    ['Add DFW Airport DOOH', 'Add Downtown Dallas']
                 );
             }
 
-            // Chicago / ORD
-            if (lowerQuery.includes('chicago') || lowerQuery.includes('ord')) {
-                console.log('[AgentBrain] Matched: DOOH Chicago inventory');
+            if (lowerQuery.includes('chicago')) {
+                console.log('[AgentBrain] Matched: DOOH Chicago city-wide');
                 return this.createAgentMessage(
-                    "**🏙️ DOOH Inventory - Chicago:**\n\n" +
+                    "**🏙️ DOOH Inventory - Chicago (City-Wide):**\n\n" +
                     "**Clear Channel:**\n" +
                     "• O'Hare Airport (ORD) (350 screens, 22M monthly impr)\n" +
                     "• Loop District (95 screens, 6M impr)\n\n" +
                     "**Outfront Media:**\n" +
                     "• CTA Train Network (2,100 screens, 18M impr)\n" +
-                    "• Michigan Avenue (120 screens, 8M impr)",
-                    ['Add ORD Airport DOOH', 'Add CTA network']
+                    "• Michigan Avenue (120 screens, 8M impr)\n\n" +
+                    "**JCDecaux:**\n" +
+                    "• ORD International (95 screens, 8M impr)\n\n" +
+                    "**Total: 2,760 screens, 62M monthly impressions**",
+                    ['Add ORD Airport DOOH', 'Add CTA Network']
                 );
             }
 
-            // Atlanta / ATL
-            if (lowerQuery.includes('atlanta') || lowerQuery.includes('atl')) {
-                console.log('[AgentBrain] Matched: DOOH Atlanta inventory');
+            if (lowerQuery.includes('atlanta')) {
+                console.log('[AgentBrain] Matched: DOOH Atlanta city-wide');
                 return this.createAgentMessage(
-                    "**🍑 DOOH Inventory - Atlanta:**\n\n" +
+                    "**🍑 DOOH Inventory - Atlanta (City-Wide):**\n\n" +
                     "**Clear Channel:**\n" +
                     "• ATL Airport (420 screens, 28M monthly impr)\n" +
                     "• Midtown Atlanta (75 screens, 5M impr)\n\n" +
                     "**Outfront Media:**\n" +
                     "• MARTA Network (850 screens, 12M impr)\n" +
-                    "• Perimeter Highway (180 screens, 9M impr)",
-                    ['Add ATL Airport DOOH']
+                    "• Perimeter Highway (180 screens, 9M impr)\n\n" +
+                    "**JCDecaux:**\n" +
+                    "• ATL International (125 screens, 9M impr)\n\n" +
+                    "**Total: 1,650 screens, 63M monthly impressions**",
+                    ['Add ATL Airport DOOH', 'Add MARTA Network']
                 );
             }
 
-            // Miami / MIA
-            if (lowerQuery.includes('miami') || lowerQuery.includes('mia')) {
-                console.log('[AgentBrain] Matched: DOOH Miami inventory');
+            if (lowerQuery.includes('miami')) {
+                console.log('[AgentBrain] Matched: DOOH Miami city-wide');
                 return this.createAgentMessage(
-                    "**🌺 DOOH Inventory - Miami:**\n\n" +
+                    "**🌺 DOOH Inventory - Miami (City-Wide):**\n\n" +
                     "**Clear Channel:**\n" +
                     "• MIA Airport (185 screens, 14M monthly impr)\n" +
                     "• South Beach (95 screens, 6.5M impr)\n\n" +
                     "**Outfront Media:**\n" +
                     "• Brickell Financial (65 screens, 4M impr)\n" +
-                    "• I-95 Corridor (140 screens, 8M impr)",
-                    ['Add MIA Airport DOOH']
+                    "• I-95 Corridor (140 screens, 8M impr)\n\n" +
+                    "**JCDecaux:**\n" +
+                    "• MIA International (65 screens, 5M impr)\n\n" +
+                    "**Total: 550 screens, 37.5M monthly impressions**",
+                    ['Add MIA Airport DOOH', 'Add South Beach']
                 );
             }
 
