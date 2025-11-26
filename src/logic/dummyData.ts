@@ -1,75 +1,273 @@
-import { Campaign, Placement, CostMethod } from '../types';
-
-const VENDORS = {
-    Search: ['Google Ads', 'Bing Ads'],
-    Social: ['Facebook', 'Instagram', 'TikTok', 'LinkedIn'],
-    Display: ['Google Display Network', 'Trade Desk', 'Criteo'],
-    TV: ['NBC', 'ABC', 'Hulu', 'Roku'],
-    Radio: ['Spotify', 'Pandora', 'iHeartRadio'],
-    OOH: ['Clear Channel', 'Outfront'],
-    Print: ['NY Times', 'WSJ', 'Local Daily']
-};
-
-const AD_UNITS = {
-    Search: ['Keywords', 'Shopping'],
-    Social: ['Sponsored Post', 'Story', 'Reel'],
-    Display: ['300x250', '728x90', '160x600'],
-    TV: ['15s Spot', '30s Spot'],
-    Radio: ['30s Audio'],
-    OOH: ['Billboard', 'Digital Screen'],
-    Print: ['Full Page', 'Half Page']
-};
+import { Campaign, Line, CostMethod, Brand, User, Flight, MediaPlan, AgentInfo, AgentExecution, PlanMetrics } from '../types';
 
 export const generateId = () => Math.random().toString(36).substr(2, 9);
 
-export const createDummyCampaign = (advertiser: string, budget: number): Campaign => {
-    const startDate = new Date().toISOString().split('T')[0];
-    const endDate = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]; // 90 days out
+// --- Constants & Reference Data ---
 
-    return {
-        id: generateId(),
-        name: `${advertiser} Q${Math.floor((new Date().getMonth() + 3) / 3)} Campaign`,
-        advertiser,
-        budget,
-        startDate,
-        endDate,
-        goals: ['Brand Awareness', 'Conversions'],
-        placements: []
-    };
+const VENDORS: Record<string, string[]> = {
+    Search: ['Google Ads', 'Microsoft Ads', 'Amazon Ads'],
+    Social: ['Meta', 'TikTok', 'LinkedIn', 'Snapchat', 'Pinterest', 'X (Twitter)'],
+    Display: ['Google Display Network', 'Taboola', 'Outbrain', 'Criteo', 'The Trade Desk'],
+    TV: ['Linear TV', 'CTV'],
+    Radio: ['iHeartRadio', 'Spotify Audio Ads', 'Pandora', 'SiriusXM'],
+    OOH: ['Clear Channel', 'Lamar', 'Outfront Media', 'JCDecaux'],
+    Print: ['The New York Times', 'WSJ', 'USA Today', 'Local Newspapers']
 };
 
-export const generatePlacement = (campaignId: string, channel: keyof typeof VENDORS): Placement => {
-    const vendor = VENDORS[channel][Math.floor(Math.random() * VENDORS[channel].length)];
-    const adUnit = AD_UNITS[channel][Math.floor(Math.random() * AD_UNITS[channel].length)];
+const TV_NETWORKS: {
+    Linear: Record<string, string[]>;
+    CTV: Record<string, string[]>;
+} = {
+    Linear: {
+        'ESPN': ['SportsCenter', 'Monday Night Football', 'NBA on ESPN', 'College GameDay', 'First Take'],
+        'ESPN2': ['NFL Live', 'College Football', 'NBA Coast to Coast', 'SportsNation'],
+        'CBS': ['60 Minutes', 'NCIS', 'FBI', 'Matlock', 'The Price is Right', 'Young Sheldon'],
+        'NBC': ['Sunday Night Football', 'The Voice', 'Law & Order', 'Chicago Fire', 'Today Show'],
+        'ABC': ['Good Morning America', 'Grey\'s Anatomy', 'The Bachelor', '20/20', 'Dancing with the Stars'],
+        'FOX': ['The Simpsons', 'Family Guy', '9-1-1', 'The Masked Singer', 'NFL on FOX'],
+        'CNN': ['Anderson Cooper 360', 'The Situation Room', 'CNN Tonight', 'New Day'],
+        'MSNBC': ['Morning Joe', 'The Rachel Maddow Show', 'Deadline: White House'],
+        'Fox News': ['Tucker Carlson Tonight', 'Hannity', 'The Five', 'Fox & Friends'],
+        'HGTV': ['Fixer Upper', 'Property Brothers', 'House Hunters', 'Love It or List It'],
+        'Food Network': ['Chopped', 'Guy\'s Grocery Games', 'The Pioneer Woman', 'Beat Bobby Flay'],
+        'Discovery': ['Deadliest Catch', 'Gold Rush', 'Mythbusters', 'Shark Week'],
+        'TLC': ['90 Day Fiancé', 'My 600-lb Life', 'Say Yes to the Dress'],
+        'Bravo': ['Real Housewives', 'Top Chef', 'Below Deck', 'Vanderpump Rules'],
+        'TNT': ['NBA on TNT', 'Inside the NBA', 'AEW Dynamite'],
+        'USA Network': ['WWE Raw', 'Law & Order: SVU', 'Suits']
+    },
+    CTV: {
+        'Netflix': ['Stranger Things', 'The Crown', 'Squid Game', 'Wednesday', 'Bridgerton', 'Ozark', 'The Witcher'],
+        'Hulu': ['The Handmaid\'s Tale', 'Only Murders in the Building', 'The Bear', 'Abbott Elementary'],
+        'Amazon Prime Video': ['The Boys', 'Jack Ryan', 'The Marvelous Mrs. Maisel', 'Reacher', 'The Rings of Power'],
+        'Disney+': ['The Mandalorian', 'Loki', 'Andor', 'WandaVision', 'Ahsoka'],
+        'HBO Max': ['House of the Dragon', 'The Last of Us', 'Succession', 'Euphoria', 'White Lotus'],
+        'Apple TV+': ['Ted Lasso', 'The Morning Show', 'Severance', 'For All Mankind', 'Shrinking'],
+        'Paramount+': ['1923', 'Yellowstone', 'Star Trek: Strange New Worlds', 'Mayor of Kingstown'],
+        'Peacock': ['The Office', 'Poker Face', 'Bel-Air', 'Ted'],
+        'YouTube': ['MrBeast', 'MKBHD', 'Dude Perfect', 'Good Mythical Morning'],
+        'Roku Channel': ['Roku Originals', 'Live Sports', 'News'],
+        'Tubi': ['Free Movies', 'Classic TV', 'Tubi Originals'],
+        'Pluto TV': ['Live News', 'Sports', 'Entertainment Channels'],
+        'F1 TV': ['Formula 1 Races', 'F1 Highlights', 'Drive to Survive'],
+        'ESPN+': ['UFC Fight Night', 'Top Rank Boxing', 'NHL Games', '30 for 30'],
+        'DAZN': ['Boxing', 'MMA', 'Soccer'],
+        'Sling TV': ['Live TV Channels', 'Sports', 'News']
+    }
+};
 
-    let costMethod: CostMethod = 'CPM';
-    let rate = 10;
-    let quantity = 100000;
+// --- Sample Data Generation ---
 
-    switch (channel) {
-        case 'Search':
-            costMethod = 'CPC';
-            rate = 2.50;
-            quantity = 5000;
-            break;
-        case 'TV':
-            costMethod = 'Spot';
-            rate = 5000;
-            quantity = 20;
-            break;
-        case 'Social':
-            costMethod = 'CPM';
-            rate = 15;
-            quantity = 50000;
-            break;
-        case 'Display':
-            costMethod = 'CPM';
-            rate = 5;
-            quantity = 200000;
-            break;
+export const SAMPLE_USERS: User[] = [
+    {
+        id: 'user_agency_1',
+        name: 'Alex Agency',
+        email: 'agency_demo@fuseiq.ai',
+        type: 'AGENCY',
+        agencyId: 'agency_1',
+        avatarUrl: 'https://i.pravatar.cc/150?u=alex'
+    },
+    {
+        id: 'user_brand_pepsi',
+        name: 'Pat Pepsi',
+        email: 'brand_demo@fuseiq.ai',
+        type: 'BRAND',
+        brandId: 'brand_pepsi',
+        avatarUrl: 'https://i.pravatar.cc/150?u=pat'
+    }
+];
+
+export const SAMPLE_BRANDS: Brand[] = [
+    {
+        id: 'brand_coke',
+        name: 'Coca-Cola',
+        logoUrl: 'https://logo.clearbit.com/coca-cola.com',
+        agencyId: 'agency_1',
+        totalSpend: 45000000,
+        budget: 50000000,
+        activeCampaigns: 3
+    },
+    {
+        id: 'brand_gm',
+        name: 'General Motors',
+        logoUrl: 'https://logo.clearbit.com/gm.com',
+        agencyId: 'agency_1',
+        totalSpend: 82000000,
+        budget: 90000000,
+        activeCampaigns: 5
+    },
+    {
+        id: 'brand_pg',
+        name: 'Procter & Gamble',
+        logoUrl: 'https://logo.clearbit.com/pg.com',
+        agencyId: 'agency_1',
+        totalSpend: 120000000,
+        budget: 125000000,
+        activeCampaigns: 8
+    },
+    {
+        id: 'brand_pepsi',
+        name: 'Pepsi',
+        logoUrl: 'https://logo.clearbit.com/pepsi.com',
+        agencyId: 'agency_1',
+        totalSpend: 38000000,
+        budget: 42000000,
+        activeCampaigns: 2
+    }
+];
+
+export const SAMPLE_AGENTS: AgentInfo[] = [
+    { id: 'agent_insights', name: 'Insights Agent', role: 'Analyst', capabilities: ['TRENDS', 'AUDIENCE'], status: 'IDLE', color: 'bg-blue-100 text-blue-800' },
+    { id: 'agent_performance', name: 'Performance Agent', role: 'Optimizer', capabilities: ['EFFICIENCY', 'CONVERSION'], status: 'IDLE', color: 'bg-green-100 text-green-800' },
+    { id: 'agent_yield', name: 'Yield Agent', role: 'Negotiator', capabilities: ['COST', 'RATES'], status: 'IDLE', color: 'bg-purple-100 text-purple-800' },
+    { id: 'agent_creative', name: 'Creative Agent', role: 'Designer', capabilities: ['ASSETS', 'MESSAGING'], status: 'IDLE', color: 'bg-pink-100 text-pink-800' },
+    { id: 'agent_audience', name: 'Audience Agent', role: 'Strategist', capabilities: ['SEGMENTS', 'REACH'], status: 'IDLE', color: 'bg-orange-100 text-orange-800' }
+];
+
+// --- Generators ---
+
+export function generateLine(channel: 'Search' | 'Social' | 'Display' | 'TV' | 'Radio' | 'OOH' | 'Print', advertiser: string, networkName?: string, programName?: string): Line {
+    const vendors = {
+        'Search': ['Google Ads', 'Bing Ads'],
+        'Social': ['Meta (Facebook/Instagram)', 'TikTok', 'LinkedIn', 'Pinterest'],
+        'Display': ['Google Display Network', 'The Trade Desk', 'Teads'],
+        'TV': ['NBCUniversal', 'Disney', 'Local Broadcast'],
+        'Radio': ['iHeartMedia', 'Spotify Audio', 'Pandora'],
+        'OOH': ['Clear Channel', 'Outfront Media', 'Lamar'],
+        'Print': ['Conde Nast', 'Hearst', 'Local News']
+    };
+
+    const adUnits = {
+        'Search': ['Responsive Search Ad', 'Exact Match Keyword', 'Shopping Ad'],
+        'Social': ['Newsfeed Image', 'Story Video', 'Carousel', 'Reels'],
+        'Display': ['300x250', '728x90', '160x600', 'Native'],
+        'TV': [':30 Spot', ':15 Spot', 'Sponsorship'],
+        'Radio': ['Audio Spot :30', 'Host Read'],
+        'OOH': ['Digital Billboard', 'Transit Shelter', 'Highway Bulletin'],
+        'Print': ['Full Page Color', 'Half Page', 'Quarter Page']
+    };
+
+    const segments = {
+        'Search': ['High Intent', 'Brand Keywords', 'Competitor Conquesting'],
+        'Social': ['A18-34', 'Parents', 'Interest: Tech', 'Lookalike 1%'],
+        'Display': ['Retargeting', 'In-Market Auto', 'Affinity: Luxury'],
+        'TV': ['Broad Reach', 'Sports Fans', 'Morning News'],
+        'Radio': ['Commuters', 'Music Lovers'],
+        'OOH': ['Urban Centers', 'Highway Traffic'],
+        'Print': ['Affluent Readers', 'Local Community']
+    };
+
+    const rateInfo = {
+        'Search': { method: 'CPC' as const, min: 0.5, max: 12 },
+        'Social': { method: 'CPM' as const, min: 3, max: 20 },
+        'Display': { method: 'CPM' as const, min: 1, max: 8 },
+        'TV': { method: 'Spot' as const, min: 500, max: 50000 },
+        'Radio': { method: 'Spot' as const, min: 50, max: 2000 },
+        'OOH': { method: 'Flat' as const, min: 1000, max: 25000 },
+        'Print': { method: 'Flat' as const, min: 500, max: 10000 }
+    };
+
+    const vendorList = vendors[channel];
+    const unitList = adUnits[channel];
+    const segmentList = segments[channel];
+    const rateInfo2 = rateInfo[channel];
+
+    let vendor: string = vendorList[0];
+    let adUnit: string = unitList[0];
+
+    // TV Logic (simplified from original for brevity, but keeping core logic)
+    if (channel === 'TV' && (networkName || programName)) {
+        // ... (Logic to match network/program would go here, reusing existing logic if needed)
+        // For now, simple random fallback or specific if provided
+        if (networkName) vendor = networkName;
+        if (programName) adUnit = programName;
+    } else {
+        vendor = vendorList[Math.floor(Math.random() * vendorList.length)];
+        adUnit = unitList[Math.floor(Math.random() * unitList.length)];
     }
 
-    const totalCost = costMethod === 'CPM' ? (rate * quantity) / 1000 : rate * quantity;
+    const segment = segmentList[Math.floor(Math.random() * segmentList.length)];
+    const rate = Math.floor(Math.random() * (rateInfo2.max - rateInfo2.min + 1)) + rateInfo2.min;
+
+    // Generate Performance Data
+    const quantity = Math.floor(Math.random() * 1000) + 100;
+    const totalCost = rate * quantity;
+    const ctr = Math.random() * 0.05;
+
+    const costMethod = rateInfo2.method;
+
+    // Estimate impressions based on cost method
+    let impressions: number;
+
+    if (channel === 'TV') {
+        // TV impressions based on ratings/viewership
+        // Using realistic Nielsen-style ratings
+        // :30 spot during primetime: 2-10M viewers
+        // :30 spot during daytime: 500K-2M viewers
+        // Sports/major events: 5-20M viewers
+        const isPrimetime = adUnit.includes(':30') || adUnit.includes('Sponsorship');
+        const isSports = segment?.includes('Sports') || programName?.toLowerCase().includes('sport');
+
+        if (isSports) {
+            impressions = (5000000 + Math.random() * 15000000) * quantity; // 5M-20M per spot
+        } else if (isPrimetime) {
+            impressions = (2000000 + Math.random() * 8000000) * quantity; // 2M-10M per spot
+        } else {
+            impressions = (500000 + Math.random() * 1500000) * quantity; // 500K-2M per spot
+        }
+    } else if (costMethod === 'CPM') {
+        impressions = quantity * 1000;
+    } else if (costMethod === 'CPC') {
+        impressions = quantity / ctr; // if quantity is clicks
+    } else {
+        impressions = (totalCost / (rate / 1000)); // fallback estimation
+    }
+
+    const clicks = Math.floor(impressions * ctr);
+    const cvr = 0.001 + Math.random() * 0.05;
+    const conversions = Math.floor(impressions * cvr);
+    const revenue = conversions * (50 + Math.random() * 100);
+
+    const performance = {
+        impressions: Math.floor(impressions),
+        clicks,
+        conversions,
+        ctr,
+        cvr,
+        cpc: clicks > 0 ? totalCost / clicks : 0,
+        cpa: conversions > 0 ? totalCost / conversions : 0,
+        roas: totalCost > 0 ? revenue / totalCost : 0,
+        status: 'ACTIVE' as const
+    };
+
+    // Buying Type Logic
+    const buyingRoll = Math.random();
+    let buyingType: 'Auction' | 'PMP' | 'Direct' = 'Auction';
+    let dealId: string | undefined;
+    let ioNumber: string | undefined;
+
+    if (channel === 'TV' || channel === 'OOH') {
+        buyingType = buyingRoll > 0.3 ? 'Direct' : 'Auction';
+    } else if (channel === 'Display') {
+        if (buyingRoll > 0.8) buyingType = 'PMP';
+        else if (buyingRoll > 0.95) buyingType = 'Direct';
+    }
+
+    if (buyingType === 'PMP') dealId = `PMP-${Math.floor(Math.random() * 100000)}`;
+    if (buyingType === 'Direct') ioNumber = `IO-${new Date().getFullYear()}-${Math.floor(Math.random() * 1000)}`;
+
+    const isVideo = channel === 'TV' || channel === 'Social' && (adUnit.includes('Video') || adUnit.includes('Reel') || adUnit.includes('Story'));
+    const videoUrls = [
+        'https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_1MB.mp4',
+        'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4'
+    ];
+
+    const creative = {
+        id: Math.random().toString(36).substr(2, 9),
+        name: `${advertiser} ${channel} ${isVideo ? 'Spot' : 'Banner'} v${Math.floor(Math.random() * 5) + 1}`,
+        type: isVideo ? 'video' as const : 'image' as const,
+        url: isVideo ? videoUrls[Math.floor(Math.random() * videoUrls.length)] : `https://picsum.photos/seed/${Math.random()}/400/300`
+    };
 
     return {
         id: generateId(),
@@ -77,11 +275,125 @@ export const generatePlacement = (campaignId: string, channel: keyof typeof VEND
         channel,
         vendor,
         adUnit,
+        segment,
         rate,
-        costMethod,
+        costMethod: rateInfo2.method as any,
+        startDate: '2024-01-01',
+        endDate: '2024-03-31',
+        quantity,
+        totalCost,
+        performance,
+        buyingType,
+        dealId,
+        ioNumber,
+        creative
+    };
+}
+
+export function calculatePlanMetrics(lines: Line[]): PlanMetrics {
+    const impressions = lines.reduce((sum, line) => sum + (line.performance?.impressions || 0), 0);
+    const totalCost = lines.reduce((sum, line) => sum + line.totalCost, 0);
+
+    // Mock calculations for reach/frequency since we don't have real audience data
+    const reach = Math.floor(impressions * 0.4); // Assume 40% unique reach
+    const frequency = impressions > 0 ? impressions / reach : 0;
+    const cpm = impressions > 0 ? (totalCost / impressions) * 1000 : 0;
+
+    return {
+        impressions,
+        reach,
+        frequency,
+        cpm
+    };
+}
+
+export function generateFlight(campaignId: string, name: string, budget: number): Flight {
+    const flightId = generateId();
+    const lines: Line[] = [];
+    let remainingBudget = budget;
+
+    // Distribute budget across channels
+    const channels: Array<'Search' | 'Social' | 'Display' | 'TV'> = ['Search', 'Social', 'Display', 'TV'];
+
+    channels.forEach(channel => {
+        if (remainingBudget <= 0) return;
+
+        const allocation = Math.floor(budget * (0.2 + Math.random() * 0.1)); // ~20-30% per channel
+        const line = generateLine(channel, 'Brand');
+        // Adjust line cost to match allocation
+        line.totalCost = allocation;
+        line.quantity = Math.floor(allocation / line.rate);
+
+        lines.push(line);
+        remainingBudget -= allocation;
+    });
+
+    return {
+        id: flightId,
+        name,
+        campaignId,
         startDate: new Date().toISOString().split('T')[0],
         endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        quantity,
-        totalCost
+        budget,
+        lines,
+        status: 'ACTIVE'
     };
+}
+
+export function generateCampaign(brand: Brand): Campaign {
+    const campaignId = generateId();
+    const budget = brand.budget ? brand.budget / 4 : 1000000; // Quarter budget
+
+    // Generate 2 flights
+    const flight1 = generateFlight(campaignId, 'Q1 Launch', budget * 0.4);
+    const flight2 = generateFlight(campaignId, 'Q1 Sustain', budget * 0.6);
+
+    return {
+        id: campaignId,
+        name: `${brand.name} Q1 2025 Campaign`,
+        brandId: brand.id,
+        advertiser: brand.name,
+        budget,
+        startDate: flight1.startDate,
+        endDate: flight2.endDate,
+        goals: ['Brand Awareness', 'Sales'],
+        flights: [flight1, flight2],
+        status: 'ACTIVE',
+        placements: [...flight1.lines, ...flight2.lines] // Legacy support
+    };
+}
+
+// Generate full data set
+export const MOCK_DATA = {
+    brands: SAMPLE_BRANDS.map(brand => {
+        // Campaign 1: Q1 2025 (Active)
+        const campaign1 = generateCampaign(brand);
+
+        // Campaign 2: Q4 2024 (Completed)
+        const campaign2 = generateCampaign(brand);
+        campaign2.id = generateId();
+        campaign2.name = `${brand.name} Q4 2024 Campaign`;
+        campaign2.startDate = '2024-10-01';
+        campaign2.endDate = '2024-12-31';
+        campaign2.status = 'COMPLETED';
+
+        // Regenerate flights for Q4
+        const flight1 = generateFlight(campaign2.id, 'Holiday Push', campaign2.budget * 0.5);
+        flight1.startDate = '2024-11-15';
+        flight1.endDate = '2024-12-25';
+        flight1.status = 'COMPLETED';
+
+        const flight2 = generateFlight(campaign2.id, 'End of Year Closeout', campaign2.budget * 0.3);
+        flight2.startDate = '2024-12-26';
+        flight2.endDate = '2024-12-31';
+        flight2.status = 'COMPLETED';
+
+        campaign2.flights = [flight1, flight2];
+        campaign2.placements = [...flight1.lines, ...flight2.lines];
+
+        return {
+            ...brand,
+            campaigns: [campaign1, campaign2]
+        };
+    })
 };

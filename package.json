@@ -14,6 +14,7 @@
         "jspdf": "^3.0.4",
         "jspdf-autotable": "^5.0.2",
         "lucide-react": "^0.292.0",
+        "pptxgenjs": "^3.12.0",
         "react": "^18.2.0",
         "react-dom": "^18.2.0",
         "tailwind-merge": "^2.0.0"

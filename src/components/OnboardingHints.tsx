@@ -1,12 +1,14 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { AgentState } from '../logic/agentBrain';
-import { HelpCircle, Info } from 'lucide-react';
+import { Info, X } from 'lucide-react';
 
 interface OnboardingHintsProps {
     state: AgentState;
 }
 
 export const OnboardingHints: React.FC<OnboardingHintsProps> = ({ state }) => {
+    const [isVisible, setIsVisible] = useState(true);
+
     const getHint = () => {
         switch (state) {
             case 'INIT':
@@ -35,7 +37,7 @@ export const OnboardingHints: React.FC<OnboardingHintsProps> = ({ state }) => {
     };
 
     const hint = getHint();
-    if (!hint) return null;
+    if (!hint || !isVisible) return null;
 
     return (
         <div className="absolute bottom-6 right-6 max-w-sm bg-white p-4 rounded-xl shadow-lg border border-yellow-100 animate-fade-in z-10">
@@ -43,12 +45,15 @@ export const OnboardingHints: React.FC<OnboardingHintsProps> = ({ state }) => {
                 <div className="p-2 bg-yellow-100 rounded-lg text-yellow-600">
                     <Info className="w-5 h-5" />
                 </div>
-                <div>
+                <div className="flex-1">
                     <h3 className="font-semibold text-gray-900 text-sm mb-1">{hint.title}</h3>
                     <p className="text-xs text-gray-600 leading-relaxed">{hint.text}</p>
                 </div>
-                <button className="text-gray-400 hover:text-gray-600">
-                    <HelpCircle className="w-4 h-4" />
+                <button
+                    onClick={() => setIsVisible(false)}
+                    className="text-gray-400 hover:text-gray-600 p-1 hover:bg-gray-100 rounded-full transition-colors"
+                >
+                    <X className="w-4 h-4" />
                 </button>
             </div>
         </div>
