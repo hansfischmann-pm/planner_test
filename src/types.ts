@@ -18,6 +18,7 @@ export interface Brand {
     totalSpend?: number;
     budget?: number;
     activeCampaigns?: number;
+    campaigns: Campaign[];
 }
 
 export interface Flight {

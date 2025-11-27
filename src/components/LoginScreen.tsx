@@ -139,9 +139,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
 
                         <div className="mt-6 grid grid-cols-1 gap-3">
                             <button
-                                onClick={() => {
-                                    setEmail('agency_demo@fuseiq.ai');
-                                    setPassword('demo123');
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    const user = SAMPLE_USERS.find(u => u.email === 'agency_demo@fuseiq.ai');
+                                    if (user) onLogin(user);
                                 }}
                                 className="w-full inline-flex justify-center items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
                             >
@@ -149,9 +150,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
                                 Use Agency Demo (agency_demo@fuseiq.ai)
                             </button>
                             <button
-                                onClick={() => {
-                                    setEmail('brand_demo@fuseiq.ai');
-                                    setPassword('demo123');
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    const user = SAMPLE_USERS.find(u => u.email === 'brand_demo@fuseiq.ai');
+                                    if (user) onLogin(user);
                                 }}
                                 className="w-full inline-flex justify-center items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
                             >

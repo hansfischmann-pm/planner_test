@@ -365,12 +365,13 @@ export function generateLine(channel: 'Search' | 'Social' | 'Display' | 'TV' | '
 };
 
 export function calculatePlanMetrics(lines: Line[]): PlanMetrics {
-    const impressions = lines.reduce((sum, line) => sum + (line.performance?.impressions || 0), 0);
+    // Use forecast if performance is 0 (Planning mode)
+    const impressions = lines.reduce((sum, line) => sum + (line.performance?.impressions || line.forecast?.impressions || 0), 0);
     const totalCost = lines.reduce((sum, line) => sum + line.totalCost, 0);
 
     // Mock calculations for reach/frequency since we don't have real audience data
     const reach = Math.floor(impressions * 0.4); // Assume 40% unique reach
-    const frequency = impressions > 0 ? impressions / reach : 0;
+    const frequency = reach > 0 ? impressions / reach : 0;
     const cpm = impressions > 0 ? (totalCost / impressions) * 1000 : 0;
 
     return {
@@ -378,6 +379,44 @@ export function calculatePlanMetrics(lines: Line[]): PlanMetrics {
         reach,
         frequency,
         cpm
+    };
+}
+
+export function calculateFlightForecast(lines: Line[]): ForecastMetrics {
+    return {
+        impressions: lines.reduce((sum, line) => sum + (line.forecast?.impressions || 0), 0),
+        spend: lines.reduce((sum, line) => sum + (line.forecast?.spend || 0), 0),
+        reach: lines.reduce((sum, line) => sum + (line.forecast?.reach || 0), 0),
+        frequency: lines.reduce((sum, line) => sum + (line.forecast?.impressions || 0), 0) / Math.max(1, lines.reduce((sum, line) => sum + (line.forecast?.reach || 0), 0)),
+        source: 'Internal'
+    };
+}
+
+export function calculateFlightDelivery(lines: Line[]): DeliveryMetrics {
+    return {
+        actualImpressions: lines.reduce((sum, line) => sum + (line.delivery?.actualImpressions || 0), 0),
+        actualSpend: lines.reduce((sum, line) => sum + (line.delivery?.actualSpend || 0), 0),
+        pacing: Math.round(lines.reduce((sum, line) => sum + (line.delivery?.pacing || 100), 0) / Math.max(1, lines.length)),
+        status: 'ON_TRACK' // Simplified, could calculate based on pacing
+    };
+}
+
+export function calculateCampaignForecast(flights: Flight[]): ForecastMetrics {
+    return {
+        impressions: flights.reduce((sum, flight) => sum + (flight.forecast?.impressions || 0), 0),
+        spend: flights.reduce((sum, flight) => sum + (flight.forecast?.spend || 0), 0),
+        reach: flights.reduce((sum, flight) => sum + (flight.forecast?.reach || 0), 0),
+        frequency: flights.reduce((sum, flight) => sum + (flight.forecast?.impressions || 0), 0) / Math.max(1, flights.reduce((sum, flight) => sum + (flight.forecast?.reach || 0), 0)),
+        source: 'Internal'
+    };
+}
+
+export function calculateCampaignDelivery(flights: Flight[]): DeliveryMetrics {
+    return {
+        actualImpressions: flights.reduce((sum, flight) => sum + (flight.delivery?.actualImpressions || 0), 0),
+        actualSpend: flights.reduce((sum, flight) => sum + (flight.delivery?.actualSpend || 0), 0),
+        pacing: Math.round(flights.reduce((sum, flight) => sum + (flight.delivery?.pacing || 100), 0) / Math.max(1, flights.length)),
+        status: 'ON_TRACK'
     };
 }
 
@@ -411,19 +450,8 @@ export function generateFlight(campaignId: string, name: string, budget: number)
         budget,
         lines,
         status: 'ACTIVE',
-        forecast: {
-            impressions: lines.reduce((sum, line) => sum + (line.forecast?.impressions || 0), 0),
-            spend: lines.reduce((sum, line) => sum + (line.forecast?.spend || 0), 0),
-            reach: lines.reduce((sum, line) => sum + (line.forecast?.reach || 0), 0),
-            frequency: lines.reduce((sum, line) => sum + (line.forecast?.impressions || 0), 0) / Math.max(1, lines.reduce((sum, line) => sum + (line.forecast?.reach || 0), 0)),
-            source: 'Internal'
-        },
-        delivery: {
-            actualImpressions: lines.reduce((sum, line) => sum + (line.delivery?.actualImpressions || 0), 0),
-            actualSpend: lines.reduce((sum, line) => sum + (line.delivery?.actualSpend || 0), 0),
-            pacing: Math.round(lines.reduce((sum, line) => sum + (line.delivery?.pacing || 100), 0) / Math.max(1, lines.length)),
-            status: 'ON_TRACK' // Simplified, could calculate based on pacing
-        }
+        forecast: calculateFlightForecast(lines),
+        delivery: calculateFlightDelivery(lines)
     };
 }
 
@@ -435,6 +463,8 @@ export function generateCampaign(brand: Brand): Campaign {
     const flight1 = generateFlight(campaignId, 'Q1 Launch', budget * 0.4);
     const flight2 = generateFlight(campaignId, 'Q1 Sustain', budget * 0.6);
 
+    const flights = [flight1, flight2];
+
     return {
         id: campaignId,
         name: `${brand.name} Q1 2025 Campaign`,
@@ -444,21 +474,10 @@ export function generateCampaign(brand: Brand): Campaign {
         startDate: flight1.startDate,
         endDate: flight2.endDate,
         goals: ['Brand Awareness', 'Sales'],
-        flights: [flight1, flight2],
+        flights,
         status: 'ACTIVE',
-        forecast: {
-            impressions: [flight1, flight2].reduce((sum, flight) => sum + (flight.forecast?.impressions || 0), 0),
-            spend: [flight1, flight2].reduce((sum, flight) => sum + (flight.forecast?.spend || 0), 0),
-            reach: [flight1, flight2].reduce((sum, flight) => sum + (flight.forecast?.reach || 0), 0),
-            frequency: [flight1, flight2].reduce((sum, flight) => sum + (flight.forecast?.impressions || 0), 0) / Math.max(1, [flight1, flight2].reduce((sum, flight) => sum + (flight.forecast?.reach || 0), 0)),
-            source: 'Internal'
-        },
-        delivery: {
-            actualImpressions: [flight1, flight2].reduce((sum, flight) => sum + (flight.delivery?.actualImpressions || 0), 0),
-            actualSpend: [flight1, flight2].reduce((sum, flight) => sum + (flight.delivery?.actualSpend || 0), 0),
-            pacing: Math.round([flight1, flight2].reduce((sum, flight) => sum + (flight.delivery?.pacing || 100), 0) / 2),
-            status: 'ON_TRACK'
-        },
+        forecast: calculateCampaignForecast(flights),
+        delivery: calculateCampaignDelivery(flights),
         placements: [...flight1.lines, ...flight2.lines] // Legacy support
     };
 }

@@ -8,32 +8,54 @@ import { PlanMetricsSummary } from './PlanMetricsSummary';
 interface PlanVisualizerProps {
     mediaPlan: MediaPlan | null;
     onGroupingChange?: (mode: 'DETAILED' | 'CHANNEL_SUMMARY') => void;
+    onUpdatePlacement?: (placement: Placement) => void;
     onDeletePlacement?: (placementId: string) => void;
 }
 
-export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGroupingChange, onDeletePlacement }) => {
+export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGroupingChange, onUpdatePlacement, onDeletePlacement }) => {
     const [viewMode, setViewMode] = useState<'PLANNING' | 'PERFORMANCE'>('PLANNING');
     const [expandedChannels, setExpandedChannels] = useState<Set<string>>(new Set());
     const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
     const [selectedPlacementId, setSelectedPlacementId] = useState<string | null>(null);
+    const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
 
     const handlePlacementUpdate = (updatedPlacement: Placement) => {
         if (!mediaPlan) return;
-        const updatedPlacements = mediaPlan.campaign.placements?.map(p =>
-            p.id === updatedPlacement.id ? updatedPlacement : p
-        );
-        if (updatedPlacements) {
-            mediaPlan.campaign.placements = updatedPlacements;
+
+        // Notify parent to handle state update and metric recalculation
+        if (onUpdatePlacement) {
+            onUpdatePlacement(updatedPlacement);
         }
+
         if (onGroupingChange) onGroupingChange(mediaPlan.groupingMode || 'DETAILED');
     };
 
-    const handleDeletePlacement = (placementId: string, e: React.MouseEvent) => {
+    const handleDeletePlacement = async (placementId: string, e: React.MouseEvent) => {
+        console.log('[PlanVisualizer] Delete clicked for:', placementId);
         e.stopPropagation();
+        e.preventDefault();
+
+        if (deletingIds.has(placementId)) return;
+
+        setDeletingIds(prev => new Set(prev).add(placementId));
+
+        // Small delay to show the loading state (optional, but good for UX)
+        await new Promise(resolve => setTimeout(resolve, 300));
+
         if (!mediaPlan || !mediaPlan.campaign.placements) return;
-        mediaPlan.campaign.placements = mediaPlan.campaign.placements.filter(p => p.id !== placementId);
+
+        // Close detail panel if deleting the selected placement
         if (selectedPlacementId === placementId) setSelectedPlacementId(null);
-        if (onGroupingChange) onGroupingChange(mediaPlan.groupingMode || 'DETAILED');
+
+        // Notify parent to handle state update and metric recalculation
+        if (onDeletePlacement) {
+            console.log('[PlanVisualizer] Calling parent handler');
+            onDeletePlacement(placementId);
+        }
+
+        // We don't remove from deletingIds here because the component will likely re-render 
+        // with the item removed. If it fails, we might want to remove it from the set.
+        // For now, let's assume success or parent handles error.
     };
 
     if (!mediaPlan) {
@@ -148,9 +170,11 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
                         {viewMode === 'PLANNING' ? (
                             <>
                                 <td className="py-3 px-6 text-sm text-gray-500 tabular-nums">-</td>
+                                <td className="py-3 px-6 text-sm text-gray-600 text-right tabular-nums">{(group.placements.reduce((sum: number, p: any) => sum + (p.forecast?.impressions || 0), 0)).toLocaleString()}</td>
                                 <td className="py-3 px-6 text-sm text-gray-600 text-right tabular-nums">-</td>
                                 <td className="py-3 px-6 text-sm text-gray-600 text-right tabular-nums">-</td>
                                 <td className="py-3 px-6 text-sm font-bold text-gray-900 text-right tabular-nums">${group.totalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                <td className="py-3 px-6 text-sm text-gray-500 text-center">-</td>
                             </>
                         ) : (
                             <>
@@ -249,6 +273,7 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
             {viewMode === 'PLANNING' ? (
                 <>
                     <td className="py-3 px-6 text-sm text-gray-500 tabular-nums">{placement.startDate} — {placement.endDate}</td>
+                    <td className="py-3 px-6 text-sm text-gray-600 text-right tabular-nums">{(placement.forecast?.impressions || 0).toLocaleString()}</td>
                     <td className="py-3 px-6 text-sm text-gray-600 text-right tabular-nums">
                         ${placement.rate.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-xs text-gray-400">/{placement.costMethod}</span>
                     </td>
@@ -318,10 +343,20 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
             <td className="py-3 px-6 text-center">
                 <button
                     onClick={(e) => handleDeletePlacement(placement.id, e)}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 hover:bg-red-50 rounded-md text-gray-400 hover:text-red-600"
+                    disabled={deletingIds.has(placement.id)}
+                    className={clsx(
+                        "p-1.5 rounded-md transition-all",
+                        deletingIds.has(placement.id)
+                            ? "opacity-100 bg-red-50 text-red-500 cursor-wait"
+                            : "opacity-0 group-hover:opacity-100 hover:bg-red-50 text-gray-400 hover:text-red-600"
+                    )}
                     title="Delete placement"
                 >
-                    <Trash2 className="w-4 h-4" />
+                    {deletingIds.has(placement.id) ? (
+                        <div className="w-4 h-4 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                        <Trash2 className="w-4 h-4" />
+                    )}
                 </button>
             </td>
         </tr>
@@ -428,6 +463,7 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
                                 {viewMode === 'PLANNING' ? (
                                     <>
                                         <HeaderCell label="Flight Dates" />
+                                        <HeaderCell label="Forecasted Impressions" sortKey="forecast.impressions" align="right" />
                                         <HeaderCell label="Rate" align="right" />
                                         <HeaderCell label="Quantity" align="right" />
                                         <HeaderCell label="Total Cost" sortKey="totalCost" align="right" />

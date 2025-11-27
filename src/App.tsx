@@ -12,8 +12,46 @@ import { FlightList } from './components/FlightList';
 import { AgencyAnalyticsDashboard } from './components/AgencyAnalyticsDashboard';
 
 import { AgentBrain, AgentState } from './logic/agentBrain';
-import { AgentMessage, MediaPlan, User, Brand, Campaign, Flight, UserType, LayoutPosition } from './types';
-import { MOCK_DATA, SAMPLE_BRANDS, generateCampaign, generateFlight, generateId } from './logic/dummyData';
+import { AgentMessage, MediaPlan, User, Brand, Campaign, Flight, UserType, LayoutPosition, Placement } from './types';
+import {
+    MOCK_DATA,
+    SAMPLE_BRANDS,
+    generateCampaign,
+    generateFlight,
+    generateId,
+    calculateFlightForecast,
+    calculateFlightDelivery,
+    calculateCampaignForecast,
+    calculateCampaignDelivery,
+    calculatePlanMetrics
+} from './logic/dummyData';
+
+// Helper to recalculate metrics for a brand
+const updateBrandMetrics = (brand: Brand): Brand => {
+    const updatedCampaigns = brand.campaigns.map(campaign => {
+        const updatedFlights = campaign.flights.map(flight => {
+            // Recalculate flight metrics from lines
+            return {
+                ...flight,
+                forecast: calculateFlightForecast(flight.lines),
+                delivery: calculateFlightDelivery(flight.lines)
+            };
+        });
+
+        // Recalculate campaign metrics from flights
+        return {
+            ...campaign,
+            flights: updatedFlights,
+            forecast: calculateCampaignForecast(updatedFlights),
+            delivery: calculateCampaignDelivery(updatedFlights)
+        };
+    });
+
+    return {
+        ...brand,
+        campaigns: updatedCampaigns
+    };
+};
 
 import { generateMediaPlanPDF } from './utils/pdfGenerator';
 import { generateMediaPlanPPT } from './utils/pptGenerator';
@@ -141,13 +179,7 @@ function App() {
             version: 1,
             groupingMode: 'DETAILED',
             strategy: 'BALANCED',
-            // In a real app, we'd calculate these from lines
-            metrics: {
-                impressions: flight.lines.reduce((sum, line) => sum + (line.performance?.impressions || 0), 0),
-                reach: 0, // To be calculated
-                frequency: 0, // To be calculated
-                cpm: 0 // To be calculated
-            }
+            metrics: calculatePlanMetrics(flight.lines)
         };
 
         // Reset Brain with new context
@@ -297,6 +329,140 @@ function App() {
         handleSelectFlight(newFlight);
     };
 
+    const handleUpdatePlacement = (updatedPlacement: Placement) => {
+        if (!currentBrand || !currentCampaign || !currentFlight) return;
+
+        setBrands(prevBrands => {
+            return prevBrands.map(b => {
+                if (b.id === currentBrand.id) {
+                    // Create a deep copy of the brand with the updated placement
+                    const updatedBrand = {
+                        ...b,
+                        campaigns: (b as any).campaigns.map((c: Campaign) => {
+                            if (c.id === currentCampaign.id) {
+                                return {
+                                    ...c,
+                                    flights: c.flights.map(f => {
+                                        if (f.id === currentFlight.id) {
+                                            return {
+                                                ...f,
+                                                lines: f.lines.map(l => l.id === updatedPlacement.id ? updatedPlacement : l)
+                                            };
+                                        }
+                                        return f;
+                                    })
+                                };
+                            }
+                            return c;
+                        })
+                    };
+
+                    // Recalculate metrics
+                    const finalBrand = updateBrandMetrics(updatedBrand);
+
+                    // Update current references if needed (optional, but good for consistency)
+                    // Note: We rely on the view re-rendering with the new brand data
+
+                    return finalBrand;
+                }
+                return b;
+            });
+        });
+
+        // Also update the mediaPlan state to refresh the cards immediately
+        if (mediaPlan && mediaPlan.activeFlightId === currentFlight?.id) {
+            const updatedPlacements = mediaPlan.campaign.placements?.map(p =>
+                p.id === updatedPlacement.id ? updatedPlacement : p
+            ) || [];
+
+            const newMetrics = calculatePlanMetrics(updatedPlacements);
+
+            setMediaPlan({
+                ...mediaPlan,
+                campaign: {
+                    ...mediaPlan.campaign,
+                    placements: updatedPlacements
+                },
+                metrics: newMetrics,
+                totalSpend: updatedPlacements.reduce((sum, line) => sum + line.totalCost, 0),
+                remainingBudget: (currentFlight?.budget || 0) - updatedPlacements.reduce((sum, line) => sum + line.totalCost, 0)
+            });
+        }
+
+        // Also update currentFlight to reflect the change
+        if (currentFlight) {
+            setCurrentFlight({
+                ...currentFlight,
+                lines: currentFlight.lines.map(l => l.id === updatedPlacement.id ? updatedPlacement : l)
+            });
+        }
+    };
+
+    const handleDeletePlacement = (placementId: string) => {
+        if (!currentBrand || !currentCampaign || !currentFlight) {
+            return;
+        }
+
+        // 1. Update Brands State (Source of Truth)
+        setBrands(prevBrands => {
+            return prevBrands.map(b => {
+                if (b.id === currentBrand.id) {
+                    const updatedBrand = {
+                        ...b,
+                        campaigns: (b as any).campaigns.map((c: Campaign) => {
+                            if (c.id === currentCampaign.id) {
+                                return {
+                                    ...c,
+                                    flights: c.flights.map(f => {
+                                        if (f.id === currentFlight.id) {
+                                            return {
+                                                ...f,
+                                                lines: f.lines.filter(l => l.id !== placementId)
+                                            };
+                                        }
+                                        return f;
+                                    })
+                                };
+                            }
+                            return c;
+                        })
+                    };
+                    return updateBrandMetrics(updatedBrand);
+                }
+                return b;
+            });
+        });
+
+        // 2. Update Current Flight State
+        setCurrentFlight(prev => {
+            if (!prev) return null;
+            const newLines = prev.lines.filter(l => l.id !== placementId);
+            return {
+                ...prev,
+                lines: newLines
+            };
+        });
+
+        // 3. Update Media Plan State (Visualizer)
+        if (mediaPlan && mediaPlan.activeFlightId === currentFlight.id) {
+            const updatedPlacements = mediaPlan.campaign.placements?.filter(p => p.id !== placementId) || [];
+
+            const newMetrics = calculatePlanMetrics(updatedPlacements);
+
+            setMediaPlan({
+                ...mediaPlan,
+                campaign: {
+                    ...mediaPlan.campaign,
+                    placements: updatedPlacements
+                },
+                metrics: newMetrics,
+                totalSpend: updatedPlacements.reduce((sum, line) => sum + line.totalCost, 0),
+                remainingBudget: (currentFlight.budget || 0) - updatedPlacements.reduce((sum, line) => sum + line.totalCost, 0),
+                version: (mediaPlan.version || 0) + 1 // Force update
+            });
+        }
+    };
+
     // --- Agent Interaction ---
 
     const handleSendMessage = async (text: string) => {
@@ -323,14 +489,24 @@ function App() {
         setIsTyping(false);
 
         // Handle side effects
-        if (agentResponse.action === 'EXPORT_PDF' && ctx.mediaPlan) {
-            generateMediaPlanPDF(ctx.mediaPlan);
-        } else if (agentResponse.action === 'EXPORT_PPT' && ctx.mediaPlan) {
-            generateMediaPlanPPT(ctx.mediaPlan);
-        } else if (agentResponse.action?.startsWith('LAYOUT_')) {
-            // Handle layout changes from conversational commands
-            const newLayout = agentResponse.action.replace('LAYOUT_', '') as LayoutPosition;
-            handleLayoutChange(newLayout);
+        const action = agentResponse.action as any;
+        if (action) {
+            if (action === 'EXPORT_PDF' && ctx.mediaPlan) {
+                generateMediaPlanPDF(ctx.mediaPlan);
+            } else if (action === 'EXPORT_PPT' && ctx.mediaPlan) {
+                generateMediaPlanPPT(ctx.mediaPlan);
+            } else if (typeof action === 'string' && action.startsWith('LAYOUT_')) {
+                // Handle layout changes from conversational commands
+                const newLayout = action.replace('LAYOUT_', '') as LayoutPosition;
+                handleLayoutChange(newLayout);
+            } else if (typeof action === 'object') {
+                // Handle complex actions
+                if (action.type === 'CREATE_CAMPAIGN') {
+                    handleCreateCampaign(action.payload.name);
+                } else if (action.type === 'CREATE_FLIGHT') {
+                    handleCreateFlight(action.payload.name);
+                }
+            }
         }
     };
 
@@ -500,6 +676,8 @@ function App() {
                                         setMediaPlan({ ...brainRef.current!.getContext().mediaPlan! });
                                     }
                                 }}
+                                onUpdatePlacement={handleUpdatePlacement}
+                                onDeletePlacement={handleDeletePlacement}
                             />
                             <OnboardingHints state={agentState} />
                         </div>

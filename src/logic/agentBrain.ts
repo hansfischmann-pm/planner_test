@@ -280,6 +280,39 @@ export class AgentBrain {
             );
         }
 
+        // Handle Creation Commands
+        // Triggers: "create campaign [name]", "new campaign [name]"
+        const createCampaignMatch = input.match(/(?:create|new|add)\s+campaign\s+(?:for\s+)?(.+)/i);
+        if (createCampaignMatch) {
+            const campaignName = createCampaignMatch[1].trim();
+            console.log('[AgentBrain] Matched: Create Campaign', campaignName);
+
+            return {
+                id: Date.now().toString(),
+                role: 'agent',
+                content: `I'm creating a new campaign called "**${campaignName}**".`,
+                timestamp: Date.now(),
+                suggestedActions: ['Create flight for Q1', 'Set budget to $100k'],
+                action: { type: 'CREATE_CAMPAIGN', payload: { name: campaignName } } as any
+            };
+        }
+
+        // Triggers: "create flight [name]", "new flight [name]"
+        const createFlightMatch = input.match(/(?:create|new|add)\s+flight\s+(?:for\s+)?(.+)/i);
+        if (createFlightMatch) {
+            const flightName = createFlightMatch[1].trim();
+            console.log('[AgentBrain] Matched: Create Flight', flightName);
+
+            return {
+                id: Date.now().toString(),
+                role: 'agent',
+                content: `I'm creating a new flight called "**${flightName}**".`,
+                timestamp: Date.now(),
+                suggestedActions: ['Add TV placement', 'Set flight budget'],
+                action: { type: 'CREATE_FLIGHT', payload: { name: flightName } } as any
+            };
+        }
+
         // 1. Add Channel
         const addMatch = lowerInput.match(/add\s+(search|social|display|tv|radio|ooh|print|espn|cbs|nbc|abc|fox|cnn|msnbc|hgtv|discovery|tlc|bravo|tnt|netflix|hulu|amazon|disney|hbo|apple|paramount|peacock|youtube|roku|tubi|pluto|f1|dazn|sling)/i);
 
