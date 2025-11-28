@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { MediaPlan, Placement } from '../types';
-import { BarChart3, LayoutList, Rows, ArrowUp, ArrowDown, ArrowUpDown, ChevronDown, ChevronRight, Trash2 } from 'lucide-react';
+import { BarChart3, LayoutList, Rows, ArrowUp, ArrowDown, ArrowUpDown, ChevronDown, ChevronRight, Trash2, Download, Presentation } from 'lucide-react';
 import { clsx } from 'clsx';
 import { PlacementDetailPanel } from './PlacementDetailPanel';
 import { PlanMetricsSummary } from './PlanMetricsSummary';
+import { generateMediaPlanPDF } from '../utils/pdfGenerator';
+import { generateMediaPlanPPT } from '../utils/pptGenerator';
 
 interface PlanVisualizerProps {
     mediaPlan: MediaPlan | null;
@@ -30,6 +32,24 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
         if (onGroupingChange) onGroupingChange(mediaPlan.groupingMode || 'DETAILED');
     };
 
+    // Safety cleanup: If the placement is gone from the plan, remove it from deletingIds
+    React.useEffect(() => {
+        if (!mediaPlan || !mediaPlan.campaign.placements) return;
+
+        const currentIds = new Set(mediaPlan.campaign.placements.map(p => p.id));
+        setDeletingIds(prev => {
+            const next = new Set(prev);
+            let changed = false;
+            next.forEach(id => {
+                if (!currentIds.has(id)) {
+                    next.delete(id);
+                    changed = true;
+                }
+            });
+            return changed ? next : prev;
+        });
+    }, [mediaPlan]);
+
     const handleDeletePlacement = async (placementId: string, e: React.MouseEvent) => {
         console.log('[PlanVisualizer] Delete clicked for:', placementId);
         e.stopPropagation();
@@ -38,6 +58,18 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
         if (deletingIds.has(placementId)) return;
 
         setDeletingIds(prev => new Set(prev).add(placementId));
+
+        // Safety timeout: Clear the spinner after 5 seconds if deletion fails or hangs
+        setTimeout(() => {
+            setDeletingIds(prev => {
+                if (prev.has(placementId)) {
+                    const next = new Set(prev);
+                    next.delete(placementId);
+                    return next;
+                }
+                return prev;
+            });
+        }, 5000);
 
         // Small delay to show the loading state (optional, but good for UX)
         await new Promise(resolve => setTimeout(resolve, 300));
@@ -52,10 +84,6 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
             console.log('[PlanVisualizer] Calling parent handler');
             onDeletePlacement(placementId);
         }
-
-        // We don't remove from deletingIds here because the component will likely re-render 
-        // with the item removed. If it fails, we might want to remove it from the set.
-        // For now, let's assume success or parent handles error.
     };
 
     if (!mediaPlan) {
@@ -388,11 +416,31 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
         <div className="flex h-full overflow-hidden">
             <div className="flex-1 flex flex-col overflow-hidden">
                 <div className="bg-white border-b border-gray-100 px-6 py-4">
-                    {/* Campaign Header */}
+                    {/* Campaign Header with Export Buttons */}
                     <div className="flex justify-between items-start mb-4">
                         <div>
                             <h1 className="text-2xl font-bold text-gray-900">{campaign.name}</h1>
                             <p className="text-sm text-gray-500 mt-1">Client: {campaign.advertiser}</p>
+                        </div>
+
+                        {/* Export Buttons */}
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={() => generateMediaPlanPDF(mediaPlan)}
+                                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                                title="Export to PDF"
+                            >
+                                <Download className="w-4 h-4" />
+                                PDF
+                            </button>
+                            <button
+                                onClick={() => generateMediaPlanPPT(mediaPlan)}
+                                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-orange-600 rounded-md hover:bg-orange-700 transition-colors shadow-sm"
+                                title="Export to PowerPoint"
+                            >
+                                <Presentation className="w-4 h-4" />
+                                PPT
+                            </button>
                         </div>
                     </div>
 

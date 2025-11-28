@@ -359,10 +359,6 @@ function App() {
 
                     // Recalculate metrics
                     const finalBrand = updateBrandMetrics(updatedBrand);
-
-                    // Update current references if needed (optional, but good for consistency)
-                    // Note: We rely on the view re-rendering with the new brand data
-
                     return finalBrand;
                 }
                 return b;
@@ -377,7 +373,7 @@ function App() {
 
             const newMetrics = calculatePlanMetrics(updatedPlacements);
 
-            setMediaPlan({
+            const newMediaPlan = {
                 ...mediaPlan,
                 campaign: {
                     ...mediaPlan.campaign,
@@ -386,7 +382,16 @@ function App() {
                 metrics: newMetrics,
                 totalSpend: updatedPlacements.reduce((sum, line) => sum + line.totalCost, 0),
                 remainingBudget: (currentFlight?.budget || 0) - updatedPlacements.reduce((sum, line) => sum + line.totalCost, 0)
-            });
+            };
+            setMediaPlan(newMediaPlan);
+
+            // SYNC BRAIN CONTEXT
+            if (brainRef.current) {
+                const ctx = brainRef.current.getContext();
+                if (ctx.mediaPlan && ctx.mediaPlan.id === mediaPlan.id) {
+                    ctx.mediaPlan = newMediaPlan;
+                }
+            }
         }
 
         // Also update currentFlight to reflect the change
@@ -449,7 +454,7 @@ function App() {
 
             const newMetrics = calculatePlanMetrics(updatedPlacements);
 
-            setMediaPlan({
+            const newMediaPlan = {
                 ...mediaPlan,
                 campaign: {
                     ...mediaPlan.campaign,
@@ -459,7 +464,17 @@ function App() {
                 totalSpend: updatedPlacements.reduce((sum, line) => sum + line.totalCost, 0),
                 remainingBudget: (currentFlight.budget || 0) - updatedPlacements.reduce((sum, line) => sum + line.totalCost, 0),
                 version: (mediaPlan.version || 0) + 1 // Force update
-            });
+            };
+
+            setMediaPlan(newMediaPlan);
+
+            // SYNC BRAIN CONTEXT
+            if (brainRef.current) {
+                const ctx = brainRef.current.getContext();
+                if (ctx.mediaPlan && ctx.mediaPlan.id === mediaPlan.id) {
+                    ctx.mediaPlan = newMediaPlan;
+                }
+            }
         }
     };
 
@@ -651,6 +666,7 @@ function App() {
                                 currentView={view}
                                 agentState={agentState}
                                 hasPlan={mediaPlan !== null}
+                                layout={layout}
                             />
                         </div>
 

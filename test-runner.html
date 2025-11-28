@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent Intelligence Tests</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+
+        h1 {
+            color: #333;
+            border-bottom: 3px solid #0066CC;
+            padding-bottom: 10px;
+        }
+
+        .test-container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+
+        button {
+            background: #0066CC;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background: #0052A3;
+        }
+
+        button:disabled {
+            background: #999;
+            cursor: not-allowed;
+        }
+
+        #output {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            max-height: 600px;
+            overflow-y: auto;
+            margin-top: 20px;
+        }
+
+        /* Deuteranopia-accessible colors - use blue for pass, yellow for fail */
+        .success {
+            color: #4FC3F7;
+            /* Light blue instead of green */
+            font-weight: bold;
+        }
+
+        .error {
+            color: #FFD54F;
+            /* Yellow instead of red */
+            font-weight: bold;
+        }
+
+        .warning {
+            color: #FFA726;
+        }
+
+        .info {
+            color: #81C8F4;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="test-container">
+        <h1>🧪 Agent Intelligence Test Suite</h1>
+        <p>Test the enhanced agent capabilities including intent classification, entity extraction, context management,
+            and more.</p>
+
+        <button id="runTests" onclick="runTests()">Run All Tests</button>
+
+        <div id="output"></div>
+    </div>
+
+    <script type="module">
+        import { runAllTests } from '/src/tests/agentTests.ts';
+
+        window.runTests = function () {
+            const output = document.getElementById('output');
+            const button = document.getElementById('runTests');
+
+            // Disable button during test run
+            button.disabled = true;
+            button.textContent = 'Running Tests...';
+
+            // Clear output
+            output.innerHTML = '';
+
+            // Capture console output
+            const originalLog = console.log;
+            console.log = function (...args) {
+                const message = args.join(' ');
+
+                // Add color coding
+                let className = '';
+                if (message.includes('✓') || message.includes('passed')) {
+                    className = 'success';
+                } else if (message.includes('✗') || message.includes('failed')) {
+                    className = 'error';
+                } else if (message.includes('⚠️')) {
+                    className = 'warning';
+                } else if (message.includes('===') || message.includes('🧪')) {
+                    className = 'info';
+                }
+
+                const line = document.createElement('div');
+                line.className = className;
+                line.textContent = message;
+                output.appendChild(line);
+
+                // Also log to real console
+                originalLog.apply(console, args);
+            };
+
+            try {
+                // Run the tests
+                runAllTests();
+
+                // Re-enable button
+                setTimeout(() => {
+                    button.disabled = false;
+                    button.textContent = 'Run All Tests Again';
+                }, 1000);
+            } catch (error) {
+                console.log('❌ Test execution error: ' + error.message);
+                button.disabled = false;
+                button.textContent = 'Run All Tests';
+            } finally {
+                // Restore console.log
+                console.log = originalLog;
+            }
+        };
+
+        // Auto-run tests on load
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                document.getElementById('runTests').click();
+            }, 500);
+        });
+    </script>
+</body>
+
+</html>

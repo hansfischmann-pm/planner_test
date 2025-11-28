@@ -13,14 +13,34 @@ export const AgencyAnalyticsDashboard: React.FC<AgencyAnalyticsDashboardProps> =
     const totalBudget = brands.reduce((sum, brand) => sum + (brand.budget || 0), 0);
     const activeCampaigns = brands.reduce((sum, brand) => sum + (brand.activeCampaigns || 0), 0);
 
-    // Mock channel distribution
-    const channelSpend = [
-        { channel: 'Search', amount: totalSpend * 0.35, color: 'bg-blue-500' },
-        { channel: 'Social', amount: totalSpend * 0.25, color: 'bg-purple-500' },
-        { channel: 'Display', amount: totalSpend * 0.15, color: 'bg-green-500' },
-        { channel: 'TV', amount: totalSpend * 0.20, color: 'bg-orange-500' },
-        { channel: 'OOH', amount: totalSpend * 0.05, color: 'bg-red-500' },
-    ];
+    // Calculate real channel distribution
+    const channelMap = new Map<string, number>();
+    brands.forEach(brand => {
+        // We need to access the full campaign/flight/line structure
+        // Since the Brand type in the props might be a summary, we'll assume for this mock
+        // that it contains the full structure or we'd need to fetch it.
+        // Given the App.tsx structure, 'brands' state contains everything.
+        if ((brand as any).campaigns) {
+            (brand as any).campaigns.forEach((campaign: any) => {
+                campaign.flights.forEach((flight: any) => {
+                    flight.lines.forEach((line: any) => {
+                        const current = channelMap.get(line.channel) || 0;
+                        channelMap.set(line.channel, current + line.totalCost);
+                    });
+                });
+            });
+        }
+    });
+
+    const colors = ['bg-blue-500', 'bg-purple-500', 'bg-green-500', 'bg-orange-500', 'bg-red-500', 'bg-yellow-500', 'bg-indigo-500', 'bg-pink-500'];
+
+    const channelSpend = Array.from(channelMap.entries())
+        .map(([channel, amount], index) => ({
+            channel,
+            amount,
+            color: colors[index % colors.length]
+        }))
+        .sort((a, b) => b.amount - a.amount); // Sort by spend descending
 
     const handleExport = () => {
         // Simulate .xls export

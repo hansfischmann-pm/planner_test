@@ -138,7 +138,10 @@ export interface PerformanceMetrics {
     cvr: number;
     cpc: number;
     cpa: number;
+    cpm?: number; // Cost per thousand impressions
     roas: number;
+    frequency?: number; // Average frequency
+    pacing?: number; // Delivery pacing percentage
     status: 'ACTIVE' | 'PAUSED';
 }
 

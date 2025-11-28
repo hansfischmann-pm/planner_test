@@ -10,9 +10,10 @@ interface ChatInterfaceProps {
   currentView?: 'LOGIN' | 'CLIENT_SELECTION' | 'CAMPAIGN_LIST' | 'FLIGHT_LIST' | 'MEDIA_PLAN' | 'AGENCY_ANALYTICS';
   agentState?: 'IDLE' | 'WORKING' | 'WAITING';
   hasPlan?: boolean;
+  layout?: 'LEFT' | 'RIGHT' | 'BOTTOM';
 }
 
-export const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, onSendMessage, isTyping, currentView, agentState, hasPlan }) => {
+export const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, onSendMessage, isTyping, currentView, agentState, hasPlan, layout = 'LEFT' }) => {
   const [input, setInput] = useState('');
   const [expandedAgents, setExpandedAgents] = useState<Set<string>>(new Set());
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -330,10 +331,13 @@ class AudienceOptimizer {
         {messages.map((msg) => (
           <div
             key={msg.id}
-            className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+            className={`flex ${msg.role === 'user' ?
+              `justify-end ${layout === 'BOTTOM' ? 'mr-[24%]' : ''}` :
+              `justify-start ${layout === 'BOTTOM' ? 'ml-[25%]' : ''}`
+              }`}
           >
             <div
-              className={`max-w-[85%] rounded-2xl p-4 ${msg.role === 'user'
+              className={`max-w-[65%] rounded-2xl p-4 ${msg.role === 'user'
                 ? 'bg-purple-600 text-white rounded-br-none'
                 : 'bg-gray-100 text-gray-800 rounded-bl-none'
                 }`}
@@ -402,33 +406,74 @@ class AudienceOptimizer {
       </div>
 
       <div className="p-4 border-t border-gray-100 bg-white">
-        {/* Contextual Help - Above Input */}
-        <div className="mb-3">
-          <ContextualHelp
-            state={agentState || 'IDLE'}
-            currentView={currentView}
-            hasPlan={hasPlan}
-            onSendPrompt={onSendMessage}
-          />
-        </div>
+        {layout === 'BOTTOM' ? (
+          /* BOTTOM LAYOUT - Horizontal: suggestions left, input center, help right */
+          <div className="flex items-center gap-3 mx-[25%]">
+            {/* Left: Suggestions placeholder */}
+            <div className="flex-none w-32">
+              {/* This space reserved for suggestion chips */}
+            </div>
 
-        {/* Input Area */}
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-            placeholder="Type your instruction..."
-            className="flex-1 px-4 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-          />
-          <button
-            onClick={handleSend}
-            className="p-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors"
-          >
-            <Send className="w-5 h-5" />
-          </button>
-        </div>
+            {/* Center: Input field and send button */}
+            <div className="flex-1 flex gap-2">
+              <input
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                placeholder="Type your instruction..."
+                className="flex-1 px-4 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              />
+              <button
+                onClick={handleSend}
+                className="p-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors flex-shrink-0"
+              >
+                <Send className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Right: Contextual Help */}
+            <div className="flex-none w-32">
+              <ContextualHelp
+                state={agentState || 'IDLE'}
+                currentView={currentView}
+                hasPlan={hasPlan}
+                onSendPrompt={onSendMessage}
+              />
+            </div>
+          </div>
+        ) : (
+          /* LEFT/RIGHT LAYOUT - Vertical: help above, centered input below */
+          <div className="space-y-3">
+            {/* Contextual Help - Above input */}
+            <div className="px-4">
+              <ContextualHelp
+                state={agentState || 'IDLE'}
+                currentView={currentView}
+                hasPlan={hasPlan}
+                onSendPrompt={onSendMessage}
+              />
+            </div>
+
+            {/* Input field and send button - Centered, responsive to panel width */}
+            <div className="flex gap-2 px-4">
+              <input
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                placeholder="Type your instruction..."
+                className="flex-1 px-4 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              />
+              <button
+                onClick={handleSend}
+                className="p-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors flex-shrink-0"
+              >
+                <Send className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

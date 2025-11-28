@@ -3,6 +3,16 @@ import { Campaign, MediaPlan, AgentMessage, Placement, Brand, AgentInfo, AgentEx
 import { generateCampaign, generateLine, calculatePlanMetrics, SAMPLE_AGENTS, generateId } from './dummyData';
 import { DMA_DATA, getDMAByCity } from './dmaData';
 
+// Enhanced Agent Intelligence Modules
+import { classifyIntent, IntentCategory } from './intentClassifier';
+import { extractAllEntities, extractBudget, extractChannels } from './entityExtractor';
+import { contextManager } from './contextManager';
+import { recommendBudgetAllocation, analyzeBudgetUsage, suggestOptimizations } from '../utils/budgetOptimizer';
+import { generateBatchPlacements } from '../utils/placementGenerator';
+import { actionHistory } from '../utils/actionHistory';
+import { generateOptimizationReport, formatOptimizationReport } from '../utils/optimizationEngine';
+import { analyzePlan, getAnalysisSummary } from '../utils/performanceAnalyzer';
+
 export type AgentState = 'INIT' | 'BUDGETING' | 'CHANNEL_SELECTION' | 'REFINEMENT' | 'OPTIMIZATION' | 'FINISHED';
 
 interface AgentContext {
@@ -15,8 +25,10 @@ interface AgentContext {
 
 export class AgentBrain {
     private context: AgentContext;
+    private sessionId: string; // Session ID for context manager
 
     constructor() {
+        this.sessionId = 'session-' + Date.now();
         this.context = {
             state: 'INIT',
             mediaPlan: null,
@@ -45,6 +57,18 @@ export class AgentBrain {
         };
         this.context.history.push(userMsg);
 
+        // ===== ENHANCED AGENT INTELLIGENCE =====
+        // 1. Classify intent
+        const intent = classifyIntent(input);
+        console.log('[AgentBrain] Intent detected:', intent);
+
+        // 2. Extract entities
+        const entities = extractAllEntities(input);
+        console.log('[AgentBrain] Entities extracted:', entities);
+
+        // 3. Add to context manager
+        contextManager.addMessage(this.sessionId, 'user', input, intent, entities);
+
         let responseContent = '';
         let suggestedActions: string[] = [];
         let agentMsg: AgentMessage | null = null;
@@ -61,9 +85,10 @@ export class AgentBrain {
                 content: responseContent,
                 timestamp: Date.now(),
                 suggestedActions,
-                action: `LAYOUT_${position} ` as any
+                action: `LAYOUT_${position}` as any
             };
             this.context.history.push(agentMsg);
+            contextManager.addMessage(this.sessionId, 'assistant', responseContent);
             return agentMsg;
         }
 
@@ -72,6 +97,7 @@ export class AgentBrain {
             agentMsg = this.handleGlobalCommands(input);
             if (agentMsg) {
                 this.context.history.push(agentMsg);
+                contextManager.addMessage(this.sessionId, 'assistant', agentMsg.content);
                 return agentMsg;
             }
         }
@@ -236,6 +262,315 @@ export class AgentBrain {
             return this.provideSuggestions();
         }
 
+        // =================================================================
+        // UNDO/REDO COMMANDS (NEW - Phase 4)
+        // =================================================================
+        // Patterns: "undo", "undo last 3", "undo add NFL", "show history"
+        if (lowerInput.includes('undo') || lowerInput.includes('revert') || lowerInput.includes('go back')) {
+            console.log('[AgentBrain] Matched: Undo command');
+
+            // Check for count-based undo: "undo last 3"
+            const countMatch = input.match(/undo.*last\s+(\d+)/i);
+            if (countMatch) {
+                const count = parseInt(countMatch[1]);
+                const actions = actionHistory.getLastNActions(count);
+
+                if (actions.length === 0) {
+                    return this.createAgentMessage(
+                        "No recent actions to undo.",
+                        []
+                    );
+                }
+
+                // Mark actions as undone
+                actions.forEach(a => actionHistory.markAsUndone(a.id));
+
+                return this.createAgentMessage(
+                    `⏮️ Undid last ${actions.length} action(s):\\n` +
+                    actions.map((a: any) => `• ${a.description}`).join('\\n') +
+                    '\\n\\n💡 **Note**: Undo tracking is active. Changes will take effect when you refresh.',
+                    ['Show history']
+                );
+            }
+
+            // Check for keyword-based undo: "undo add NFL"
+            const keywordMatch = input.match(/undo\s+(.+)/i);
+            if (keywordMatch && keywordMatch[1] !== 'last') {
+                const keyword = keywordMatch[1].trim();
+                const action = actionHistory.findLastActionByKeyword(keyword);
+
+                if (action) {
+                    actionHistory.markAsUndone(action.id);
+                    return this.createAgentMessage(
+                        `⏮️ Undid: **${action.description}**\\n\\n💡 **Note**: Undo tracking is active. Changes will take effect when you refresh.`,
+                        ['Show history']
+                    );
+                } else {
+                    return this.createAgentMessage(
+                        `I couldn't find an action matching "${keyword}". Try "show history" to see recent actions.`,
+                        ['Show history']
+                    );
+                }
+            }
+
+            // Simple undo - undo last action
+            const lastAction = actionHistory.getLastAction();
+            if (lastAction) {
+                actionHistory.markAsUndone(lastAction.id);
+                return this.createAgentMessage(
+                    `⏮️ Undid: **${lastAction.description}**\\n\\n💡 **Note**: Undo tracking is active. Changes will take effect when you refresh.`,
+                    ['Show history']
+                );
+            } else {
+                return this.createAgentMessage(
+                    "Nothing to undo - no recent actions found.",
+                    []
+                );
+            }
+        }
+
+        // Redo command
+        if (lowerInput.includes('redo')) {
+            console.log('[AgentBrain] Matched: Redo command');
+
+            const lastUndone = actionHistory.getLastUndoneAction();
+            if (lastUndone) {
+                actionHistory.markAsRedone(lastUndone.id);
+                return this.createAgentMessage(
+                    `⏭️ Redid: **${lastUndone.description}**\\n\\n💡 **Note**: Redo tracking is active. Changes will take effect when you refresh.`,
+                    ['Show history']
+                );
+            } else {
+                return this.createAgentMessage(
+                    "Nothing to redo.",
+                    []
+                );
+            }
+        }
+
+        // Show action history
+        if (lowerInput.includes('show history') || lowerInput.includes('action history') || lowerInput.includes('recent actions')) {
+            console.log('[AgentBrain] Matched: Show history query');
+
+            const recent = actionHistory.getRecentActions(10);
+            if (recent.length === 0) {
+                return this.createAgentMessage(
+                    "No recent actions to show.",
+                    []
+                );
+            }
+
+            let responseContent = `**📜 Recent Actions:**\\n\\n`;
+            recent.forEach((action: any, idx: number) => {
+                const canUndo = action.canUndo ? '✓' : '✗';
+                responseContent += `${idx + 1}. [${canUndo}] ${action.description}\\n`;
+            });
+            responseContent += `\\n💡 Use "undo" to revert the last action.`;
+
+            return this.createAgentMessage(
+                responseContent,
+                ['Undo last action']
+            );
+        }
+
+        // =================================================================
+        // OPTIMIZATION COMMANDS (NEW - Phase 5.1)
+        // =================================================================
+
+        // Handle specific optimization views (suggested actions)
+        if (lowerInput.includes('quick win')) {
+            console.log('[AgentBrain] Matched: Quick wins query');
+
+            const plan = this.context.mediaPlan;
+            if (!plan || !plan.campaign.placements || plan.campaign.placements.length === 0) {
+                return this.createAgentMessage(
+                    "I can't show quick wins yet - there are no placements to analyze.",
+                    ['Add placements first']
+                );
+            }
+
+            const flightBudget = 100000;
+            const report = generateOptimizationReport(plan.campaign.placements, flightBudget);
+
+            if (report.quickWins.length === 0) {
+                return this.createAgentMessage(
+                    "🎉 No quick wins needed - your plan is well-optimized!\n\nTry 'optimize my plan' for a full analysis.",
+                    ['Optimize my plan']
+                );
+            }
+
+            let responseContent = `💡 **Quick Wins** (${report.quickWins.length} easy, high-impact actions)\n\n`;
+            report.quickWins.forEach((rec, idx) => {
+                const impact = rec.estimatedImpact > 0
+                    ? `Save $${Math.round(rec.estimatedImpact).toLocaleString('en-US')}`
+                    : `Gain $${Math.round(Math.abs(rec.estimatedImpact)).toLocaleString('en-US')}`;
+                responseContent += `${idx + 1}. ${rec.description}\n`;
+                responseContent += `   ${rec.specificAction}\n`;
+                responseContent += `   💰 ${impact}\n\n`;
+            });
+
+            return this.createAgentMessage(responseContent, ['Optimize my plan']);
+        }
+
+        if (lowerInput.includes('critical issue')) {
+            console.log('[AgentBrain] Matched: Critical issues query');
+
+            const plan = this.context.mediaPlan;
+            if (!plan || !plan.campaign.placements || plan.campaign.placements.length === 0) {
+                return this.createAgentMessage(
+                    "I can't show critical issues yet - there are no placements to analyze.",
+                    ['Add placements first']
+                );
+            }
+
+            const flightBudget = 100000;
+            const report = generateOptimizationReport(plan.campaign.placements, flightBudget);
+            const critical = report.recommendations.filter(r => r.priority === 'HIGH');
+
+            if (critical.length === 0) {
+                return this.createAgentMessage(
+                    "✅ No critical issues found - great job!\n\nYour plan is in good shape.",
+                    ['Show full report']
+                );
+            }
+
+            let responseContent = `🚨 **Critical Issues** (${critical.length})\n\n`;
+            critical.forEach((rec, idx) => {
+                const impact = rec.estimatedImpact > 0
+                    ? `Save $${Math.round(rec.estimatedImpact).toLocaleString('en-US')}`
+                    : `Gain $${Math.round(Math.abs(rec.estimatedImpact)).toLocaleString('en-US')}`;
+                responseContent += `${idx + 1}. **${rec.placementName}**\n`;
+                responseContent += `   Issue: ${rec.description}\n`;
+                responseContent += `   Action: ${rec.specificAction}\n`;
+                responseContent += `   💰 ${impact}\n\n`;
+            });
+
+            return this.createAgentMessage(responseContent, ['Show full report', 'Show quick wins']);
+        }
+
+        if (lowerInput.includes('growth opportunit') || lowerInput.includes('scale') && lowerInput.includes('winner')) {
+            console.log('[AgentBrain] Matched: Growth opportunities query');
+
+            const plan = this.context.mediaPlan;
+            if (!plan || !plan.campaign.placements || plan.campaign.placements.length === 0) {
+                return this.createAgentMessage(
+                    "I can't show growth opportunities yet - there are no placements to analyze.",
+                    ['Add placements first']
+                );
+            }
+
+            const flightBudget = 100000;
+            const report = generateOptimizationReport(plan.campaign.placements, flightBudget);
+            const opportunities = report.recommendations.filter(r => r.estimatedImpact < 0);
+
+            if (opportunities.length === 0) {
+                return this.createAgentMessage(
+                    "📊 No major growth opportunities identified right now.\n\nYour high performers are already well-funded.",
+                    ['Show full report']
+                );
+            }
+
+            let responseContent = `✨ **Growth Opportunities** (${opportunities.length})\n\n`;
+            responseContent += `Scale these high-performers to maximize returns:\n\n`;
+            opportunities.forEach((rec, idx) => {
+                const gain = Math.abs(rec.estimatedImpact);
+                responseContent += `${idx + 1}. **${rec.placementName}**\n`;
+                responseContent += `   ${rec.currentMetric}\n`;
+                responseContent += `   Action: ${rec.specificAction}\n`;
+                responseContent += `   💰 Potential gain: $${Math.round(gain).toLocaleString('en-US')}\n\n`;
+            });
+
+            return this.createAgentMessage(responseContent, ['Show full report']);
+        }
+
+        if (lowerInput.includes('detailed report') || lowerInput.includes('full report')) {
+            console.log('[AgentBrain] Matched: Detailed/Full report query');
+            // This will fall through to the main optimize command below
+            // Replace the input to trigger the main handler
+            input = 'optimize my plan';
+        }
+
+        // Patterns: "optimize my plan", "optimize plan", "what's wrong with my plan"
+        if (lowerInput.includes('optimize') ||
+            (lowerInput.includes('what') && (lowerInput.includes('wrong') || lowerInput.includes('issue'))) ||
+            lowerInput.includes('improvement') ||
+            lowerInput.includes('opportunities')) {
+            console.log('[AgentBrain] Matched: Optimization query');
+
+            const plan = this.context.mediaPlan;
+            if (!plan || !plan.campaign.placements || plan.campaign.placements.length === 0) {
+                return this.createAgentMessage(
+                    "I can't analyze your plan yet because there are no placements. Try adding some placements first!",
+                    ['Add 3 social placements', 'How should I allocate $50k?']
+                );
+            }
+
+            // Get flight budget
+            const flightBudget = 100000; // Default, would ideally get from activeFlightId
+
+            // Generate optimization report
+            const report = generateOptimizationReport(plan.campaign.placements, flightBudget);
+
+            // Format the report
+            const formattedReport = formatOptimizationReport(report);
+
+            // Add suggested actions based on quick wins
+            const suggestedActions: string[] = [];
+            if (report.quickWins.length > 0) {
+                suggestedActions.push('Show quick wins');
+            }
+            if (report.recommendations.some(r => r.action === 'PAUSE')) {
+                suggestedActions.push('Show critical issues only');
+            }
+            if (report.totalGains > 0) {
+                suggestedActions.push('Show growth opportunities');
+            }
+
+            return this.createAgentMessage(
+                formattedReport,
+                suggestedActions.slice(0, 3)
+            );
+        }
+
+        // Show plan analysis/score
+        // Must check for "plan" + "score"/"health"/"grade" to avoid conflicts with other commands
+        if ((lowerInput.includes('plan') && (lowerInput.includes('score') || lowerInput.includes('health') || lowerInput.includes('grade'))) ||
+            lowerInput.includes('plan score') ||
+            lowerInput.includes('plan health')) {
+            console.log('[AgentBrain] Matched: Plan score query');
+
+            const plan = this.context.mediaPlan;
+            if (!plan || !plan.campaign.placements || plan.campaign.placements.length === 0) {
+                return this.createAgentMessage(
+                    "I can't score your plan yet - there are no placements to analyze.",
+                    ['Add placements first']
+                );
+            }
+
+            const flightBudget = 100000;
+            const analysis = analyzePlan(plan.campaign.placements, flightBudget);
+            const summary = getAnalysisSummary(analysis);
+
+            let responseContent = `**📊 Plan Health Check**\n\n${summary}\n\n`;
+
+            if (analysis.criticalCount > 0) {
+                responseContent += `You have **${analysis.criticalCount} critical issue${analysis.criticalCount > 1 ? 's' : ''}** that need immediate attention.\n\n`;
+            }
+
+            if (analysis.overallScore < 70) {
+                responseContent += `Your plan could benefit from optimization. Would you like me to show you specific recommendations?`;
+            } else if (analysis.overallScore < 85) {
+                responseContent += `Your plan is in good shape! There are a few minor optimizations that could improve performance.`;
+            } else {
+                responseContent += `Excellent work! Your plan is well-optimized. Keep monitoring for any changes.`;
+            }
+
+            return this.createAgentMessage(
+                responseContent,
+                ['Optimize my plan', 'Show detailed report']
+            );
+        }
+
         // Handle inventory questions
         // Triggers: "what available", "what avail", "what inventory"
         if (lowerInput.includes('what') && (lowerInput.includes('available') || lowerInput.includes('avail') || lowerInput.includes('inventory'))) {
@@ -280,6 +615,77 @@ export class AgentBrain {
             );
         }
 
+        // =================================================================
+        // BUDGET ALLOCATION RECOMMENDATIONS (NEW - Phase 4)
+        // =================================================================
+        // Patterns: "how should I allocate", "split budget", "distribute $X"
+        const budgetAllocMatch = lowerInput.match(/(?:how.*allocate|split|distribute|spread).*(?:\$?([\d,]+(?:k|m)?)|budget)/i);
+
+        if (budgetAllocMatch && (lowerInput.includes('allocate') || lowerInput.includes('split') || lowerInput.includes('distribute'))) {
+            console.log('[AgentBrain] Matched: Budget allocation query');
+
+            // Extract budget from input or use campaign budget
+            const budgetStr = budgetAllocMatch[1];
+            let budget = this.context.mediaPlan?.campaign.budget || 100000;
+
+            if (budgetStr) {
+                const extractedBudget = extractBudget(input);
+                if (extractedBudget) {
+                    budget = extractedBudget;
+                }
+            }
+
+            // Detect objective from context or default to 'awareness'
+            let objective: 'awareness' | 'consideration' | 'conversion' = 'awareness';
+            if (lowerInput.includes('conversion') || lowerInput.includes('sales') || lowerInput.includes('purchase')) {
+                objective = 'conversion';
+            } else if (lowerInput.includes('consideration') || lowerInput.includes('engagement')) {
+                objective = 'consideration';
+            }
+
+            // Extract requested channels if specified
+            const channels = extractChannels(input);
+
+            // Get recommendation
+            const recommendation = recommendBudgetAllocation(
+                budget,
+                objective,
+                channels.length > 0 ? channels : undefined
+            );
+
+            // Format response
+            let responseContent = `**💰 Smart Budget Allocation for ${objective.charAt(0).toUpperCase() + objective.slice(1)}**\n\n`;
+            responseContent += `Total Budget: **$${(budget / 1000).toFixed(0)}k**\n\n`;
+
+            recommendation.channels.forEach((ch, idx) => {
+                const emoji = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '•';
+                responseContent += `${emoji} **${ch.channel}**: $${(ch.allocatedBudget / 1000).toFixed(1)}k (${ch.percentage.toFixed(0)}%)\n`;
+                responseContent += `   ${ch.reasoning}\n`;
+                if (ch.expectedROAS) {
+                    responseContent += `   Expected ROAS: ${ch.expectedROAS.toFixed(2)}x\n`;
+                }
+                responseContent += `\n`;
+            });
+
+            if (recommendation.assumptions.length > 0) {
+                responseContent += `**Assumptions:**\n`;
+                recommendation.assumptions.forEach(a => {
+                    responseContent += `• ${a}\n`;
+                });
+            }
+
+            const suggestedActions = recommendation.channels.slice(0, 2).map(ch =>
+                `Add ${ch.channel} placements`
+            );
+            suggestedActions.push('Modify allocation');
+
+            return this.createAgentMessage(responseContent, suggestedActions);
+        }
+
+        // Handle Forecast/Delivery questions (moved down to not conflict)
+        if (false) {  // Disabled - handled above
+        }
+
         // Handle Creation Commands
         // Triggers: "create campaign [name]", "new campaign [name]"
         const createCampaignMatch = input.match(/(?:create|new|add)\s+campaign\s+(?:for\s+)?(.+)/i);
@@ -313,8 +719,118 @@ export class AgentBrain {
             };
         }
 
+        // =================================================================
+        // BATCH PLACEMENT GENERATION (NEW - Phase 4)
+        // =================================================================
+        // Pattern: "add 5 social placements", "create 3 TV spots on ESPN"
+        const batchMatch = lowerInput.match(/(?:add|create|make|generate)\s+(\d+)\s+(social|display|tv|ctv|connected tv|linear tv|search|audio|video|native)/i);
+
+        if (batchMatch) {
+            const count = parseInt(batchMatch[1]);
+            let channelInput = batchMatch[2];
+
+            // Normalize channel names
+            const channelMap: Record<string, string> = {
+                'ctv': 'Connected TV',
+                'connected tv': 'Connected TV',
+                'linear tv': 'Linear TV',
+                'tv': 'Connected TV',  // Default TV to CTV
+                'social': 'Social',
+                'display': 'Display',
+                'search': 'Search',
+                'audio': 'Audio',
+                'video': 'Video',
+                'native': 'Native'
+            };
+
+            const channel = channelMap[channelInput.toLowerCase()] || channelInput;
+
+            // Extract network if specified (e.g., "on ESPN")
+            const networkMatch = input.match(/on\s+([a-z]+)/i);
+            const network = networkMatch ? networkMatch[1] : undefined;
+
+            // Validate count
+            if (count < 1 || count > 10) {
+                return this.createAgentMessage(
+                    `I can create between 1 and 10 placements at a time. You requested ${count}.`,
+                    [`Add ${Math.min(count, 10)} ${channel} placements`]
+                );
+            }
+
+            // Generate batch placements
+            const activeFlightId = this.context.mediaPlan!.activeFlightId;
+            const activeFlight = this.context.mediaPlan!.campaign.flights?.find(f => f.id === activeFlightId);
+
+            if (!activeFlight) {
+                return this.createAgentMessage(
+                    "I need to be in a flight to add placements. Please select or create a flight first.",
+                    ['Create new flight']
+                );
+            }
+
+            const placements = generateBatchPlacements({
+                channel,
+                network,
+                count,
+                variation: 'diverse'  // Always use diverse for batch generation
+            }, activeFlight);
+
+            // Add all placements to campaign
+            if (!this.context.mediaPlan!.campaign.placements) {
+                this.context.mediaPlan!.campaign.placements = [];
+            }
+
+            let totalCost = 0;
+            placements.forEach(p => {
+                this.context.mediaPlan!.campaign.placements!.push(p);
+                totalCost += p.totalCost;
+            });
+
+            // Update plan totals
+            this.context.mediaPlan!.totalSpend += totalCost;
+            this.context.mediaPlan!.remainingBudget = this.context.mediaPlan!.campaign.budget - this.context.mediaPlan!.totalSpend;
+            this.context.mediaPlan!.metrics = calculatePlanMetrics(this.context.mediaPlan!.campaign.placements);
+
+            // Record action for undo
+            actionHistory.recordAction({
+                id: `batch-${Date.now()}`,
+                type: 'add_placement',
+                description: `Added ${count} ${channel} placements`,
+                userCommand: input,
+                stateBefore: { placementCount: this.context.mediaPlan!.campaign.placements!.length - count },
+                stateAfter: { placementCount: this.context.mediaPlan!.campaign.placements!.length },
+                canUndo: true
+            });
+
+            // Generate summary
+            const placementSummary = placements.slice(0, 3).map(p =>
+                `• ${p.vendor} - ${p.adUnit} ($${(p.totalCost / 1000).toFixed(1)}k)`
+            ).join('\\n');
+
+            const moreText = count > 3 ? `\\n...and ${count - 3} more` : '';
+
+            responseContent = `✅ Created **${count} ${channel} placements** for **$${(totalCost / 1000).toFixed(1)}k**:\\n\\n${placementSummary}${moreText}\\n\\n` +
+                `**Total Spend:** $${(this.context.mediaPlan!.totalSpend / 1000).toFixed(1)}k of $${(this.context.mediaPlan!.campaign.budget / 1000).toFixed(1)}k`;
+
+            // Check budget usage and warn if high
+            const budgetUsed = (this.context.mediaPlan!.totalSpend / this.context.mediaPlan!.campaign.budget) * 100;
+            if (budgetUsed > 80) {
+                responseContent += `\\n\\n⚠️ **${budgetUsed.toFixed(0)}% of budget allocated** - limited budget remaining.`;
+            }
+
+            suggestedActions = ['Add more placements', 'Optimize plan', 'Export PDF'];
+
+            // Add to context manager
+            contextManager.addMessage(this.sessionId, 'assistant', responseContent);
+
+            return this.createAgentMessage(responseContent, suggestedActions);
+        }
+
+        // =================================================================
+        // SINGLE PLACEMENT (Existing logic)
+        // =================================================================
         // 1. Add Channel
-        const addMatch = lowerInput.match(/add\s+(search|social|display|tv|radio|ooh|print|espn|cbs|nbc|abc|fox|cnn|msnbc|hgtv|discovery|tlc|bravo|tnt|netflix|hulu|amazon|disney|hbo|apple|paramount|peacock|youtube|roku|tubi|pluto|f1|dazn|sling)/i);
+        const addMatch = lowerInput.match(/add\s+(search|social|display|tv|radio|ooh|print|espn|cbs|nbc|abc|fox|cnn|msnbc|hgtv|discovery|tlc|bravo|tnt|netflix|hulu|amazon|disney|hbo|apple|paramount|peacock|youtube|roku|tubi|pluto|f1|dazn|sling|nfl|nba|mlb|nhl)/i);
 
         if (addMatch) {
             console.log('[AgentBrain] Matched: Add channel/placement', addMatch[1]);
@@ -323,11 +839,17 @@ export class AgentBrain {
             let networkName: string | undefined;
             let programName: string | undefined;
 
-            const tvNetworks = ['espn', 'espn2', 'cbs', 'nbc', 'abc', 'fox', 'cnn', 'msnbc', 'hgtv', 'discovery', 'tlc', 'bravo', 'tnt', 'netflix', 'hulu', 'amazon', 'disney', 'hbo', 'apple', 'paramount', 'peacock', 'youtube', 'roku', 'tubi', 'pluto', 'f1', 'dazn', 'sling'];
+            const tvNetworks = ['espn', 'espn2', 'cbs', 'nbc', 'abc', 'fox', 'cnn', 'msnbc', 'hgtv', 'discovery', 'tlc', 'bravo', 'tnt', 'netflix', 'hulu', 'amazon', 'disney', 'hbo', 'apple', 'paramount', 'peacock', 'youtube', 'roku', 'tubi', 'pluto', 'f1', 'dazn', 'sling', 'nfl', 'nba', 'mlb', 'nhl'];
 
             if (tvNetworks.includes(channelStr)) {
                 channel = 'TV';
-                networkName = channelStr;
+                // Special handling for sports leagues to be more descriptive
+                if (['nfl', 'nba', 'mlb', 'nhl', 'f1'].includes(channelStr)) {
+                    networkName = 'Sports Network';
+                    programName = channelStr.toUpperCase();
+                } else {
+                    networkName = channelStr;
+                }
 
                 const networkPattern = new RegExp(`add\\s+${channelStr}\\s+(.+)`, 'i');
                 const programMatch = input.match(networkPattern);
