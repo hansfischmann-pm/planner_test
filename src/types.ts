@@ -21,6 +21,21 @@ export interface Brand {
     campaigns: Campaign[];
 }
 
+export interface Creative {
+    id: string;
+    name: string;
+    type: 'IMAGE' | 'VIDEO' | 'HTML5';
+    url: string;
+    dimensions: string; // e.g. "300x250"
+    metrics?: {
+        ctr: number;
+        conversions: number;
+    };
+}
+
+export type Channel = 'Search' | 'Social' | 'Display' | 'TV' | 'Radio' | 'OOH' | 'Print';
+
+
 export interface Flight {
     id: string;
     name: string;
@@ -28,7 +43,7 @@ export interface Flight {
     startDate: string;
     endDate: string;
     budget: number;
-    lines: Line[];
+    lines: Placement[]; // Changed from Line[] to Placement[]
     status: 'DRAFT' | 'ACTIVE' | 'COMPLETED';
     forecast?: ForecastMetrics;
     delivery?: DeliveryMetrics;
@@ -102,7 +117,13 @@ export interface Campaign {
     budget: number;
     startDate: string;
     endDate: string;
-    goals: string[];
+    goals: string[]; // Text descriptions like "Brand Awareness"
+    numericGoals?: { // Numeric goal targets
+        impressions?: number;
+        reach?: number;
+        conversions?: number;
+        clicks?: number;
+    };
     flights: Flight[];
     status: 'PLANNING' | 'ACTIVE' | 'COMPLETED';
     forecast?: ForecastMetrics;
@@ -168,7 +189,11 @@ export interface Line {
     buyingType?: 'Auction' | 'PMP' | 'Direct';
     dealId?: string;
     ioNumber?: string;
-    creative?: CreativeAsset;
+
+    // Creative Management
+    creatives?: Creative[];
+    rotationMode?: 'EVEN' | 'WEIGHTED' | 'OPTIMIZED';
+    creative?: CreativeAsset; // Legacy
 }
 
 export type Placement = Line; // Alias for backward compatibility
@@ -188,4 +213,5 @@ export interface AgentMessage {
     suggestedActions?: string[];
     action?: 'EXPORT_PDF' | 'EXPORT_PPT' | string; // Allow other action types
     agentsInvoked?: string[]; // Names of agents being used for this action
+    updatedMediaPlan?: MediaPlan; // Optional plan update to sync state
 }

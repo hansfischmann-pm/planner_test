@@ -478,6 +478,14 @@ function App() {
         }
     };
 
+    // Sync media plan to brain whenever it changes
+    // (Force reload for AgentBrain updates)
+    useEffect(() => {
+        if (brainRef.current) {
+            brainRef.current.setMediaPlan(mediaPlan);
+        }
+    }, [mediaPlan]);
+
     // --- Agent Interaction ---
 
     const handleSendMessage = async (text: string) => {
@@ -499,7 +507,17 @@ function App() {
         // Update state
         const ctx = brainRef.current.getContext();
         setMessages([...ctx.history]);
-        setMediaPlan(ctx.mediaPlan ? { ...ctx.mediaPlan } : null);
+
+        // Handle explicit plan updates from agent (e.g. goal setting)
+        if (agentResponse.updatedMediaPlan) {
+            setMediaPlan(agentResponse.updatedMediaPlan);
+            // Also update the brain's context immediately to keep in sync
+            brainRef.current.setMediaPlan(agentResponse.updatedMediaPlan);
+        } else {
+            // Otherwise sync from context if available
+            setMediaPlan(ctx.mediaPlan ? { ...ctx.mediaPlan } : null);
+        }
+
         setAgentState(ctx.state);
         setIsTyping(false);
 

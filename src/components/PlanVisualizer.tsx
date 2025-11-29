@@ -444,8 +444,15 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
                         </div>
                     </div>
 
-                    {/* Plan Metrics Summary */}
-                    {mediaPlan.metrics && <PlanMetricsSummary metrics={mediaPlan.metrics} />}
+                    {/* Plan Metrics Summary  */}
+                    {mediaPlan.metrics && (
+                        <PlanMetricsSummary
+                            metrics={mediaPlan.metrics}
+                            budget={campaign.budget}
+                            totalSpend={mediaPlan.totalSpend}
+                            goals={campaign.numericGoals}
+                        />
+                    )}
 
                     {/* Controls */}
                     <div className="flex justify-between items-center mt-4">

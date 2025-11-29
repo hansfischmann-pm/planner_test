@@ -1,5 +1,5 @@
 
-import { Campaign, MediaPlan, AgentMessage, Placement, Brand, AgentInfo, AgentExecution } from '../types';
+import { Campaign, MediaPlan, AgentMessage, Placement, Brand, AgentInfo, AgentExecution, Creative } from '../types';
 import { generateCampaign, generateLine, calculatePlanMetrics, SAMPLE_AGENTS, generateId } from './dummyData';
 import { DMA_DATA, getDMAByCity } from './dmaData';
 
@@ -12,6 +12,7 @@ import { generateBatchPlacements } from '../utils/placementGenerator';
 import { actionHistory } from '../utils/actionHistory';
 import { generateOptimizationReport, formatOptimizationReport } from '../utils/optimizationEngine';
 import { analyzePlan, getAnalysisSummary } from '../utils/performanceAnalyzer';
+import { forecastCampaign, formatForecastResult, calculateAudienceOverlap } from '../utils/forecastingEngine';
 
 export type AgentState = 'INIT' | 'BUDGETING' | 'CHANNEL_SELECTION' | 'REFINEMENT' | 'OPTIMIZATION' | 'FINISHED';
 
@@ -44,8 +45,12 @@ export class AgentBrain {
         };
     }
 
-    getContext() {
+    getContext(): AgentContext {
         return this.context;
+    }
+
+    setMediaPlan(plan: MediaPlan | null) {
+        this.context.mediaPlan = plan;
     }
 
     processInput(input: string): AgentMessage {
@@ -102,6 +107,238 @@ export class AgentBrain {
             }
         }
 
+        // =================================================================
+        // GOAL SETTING COMMANDS (Global - Overrides State)
+        // =================================================================
+        // Patterns: "set goal impressions 1M", "update goal conversions 500", "show goals"
+        const lowerInput = input.toLowerCase();
+        if (lowerInput.includes('goal') && (lowerInput.includes('set') || lowerInput.includes('show') || lowerInput.includes('update') || lowerInput.includes('change') || lowerInput.includes('list') || lowerInput.includes('what are'))) {
+            try {
+                const plan = this.context.mediaPlan;
+                if (!plan) {
+                    const response = this.createAgentMessage(
+                        "I need an active media plan to manage goals. Please create or select a campaign first.",
+                        ['Create new campaign']
+                    );
+                    this.context.history.push(response);
+                    contextManager.addMessage(this.sessionId, 'assistant', response.content);
+                    return response;
+                }
+
+                // Handle "Show Goals"
+                if (lowerInput.includes('show') || lowerInput.includes('list') || lowerInput.includes('what are')) {
+                    console.log('[AgentBrain] Matched: Show goals');
+                    const goals = plan.campaign.numericGoals || {};
+                    const hasGoals = Object.keys(goals).length > 0;
+
+                    if (!hasGoals) {
+                        const response = this.createAgentMessage(
+                            "You haven't set any numeric goals yet.",
+                            ['Set goal impressions 1M', 'Set goal conversions 500']
+                        );
+                        this.context.history.push(response);
+                        contextManager.addMessage(this.sessionId, 'assistant', response.content);
+                        return response;
+                    }
+
+                    let responseContent = "**🎯 Current Campaign Goals**\n\n";
+                    if (goals.impressions) responseContent += `• **Impressions:** ${goals.impressions.toLocaleString()}\n`;
+                    if (goals.reach) responseContent += `• **Reach:** ${goals.reach.toLocaleString()}\n`;
+                    if (goals.conversions) responseContent += `• **Conversions:** ${goals.conversions.toLocaleString()}\n`;
+                    if (goals.clicks) responseContent += `• **Clicks:** ${goals.clicks.toLocaleString()}\n`;
+
+                    const response = this.createAgentMessage(responseContent, ['Forecast this campaign']);
+                    this.context.history.push(response);
+                    contextManager.addMessage(this.sessionId, 'assistant', responseContent);
+                    return response;
+                }
+
+                // Handle "Set/Update Goal"
+                if (lowerInput.includes('set') || lowerInput.includes('update') || lowerInput.includes('change') || lowerInput.includes('add')) {
+                    console.log('[AgentBrain] Matched: Set goal');
+
+                    // Parse metric
+                    let metric: 'impressions' | 'reach' | 'conversions' | 'clicks' | null = null;
+                    if (lowerInput.includes('impression')) metric = 'impressions';
+                    else if (lowerInput.includes('reach')) metric = 'reach';
+                    else if (lowerInput.includes('conversion')) metric = 'conversions';
+                    else if (lowerInput.includes('click')) metric = 'clicks';
+
+                    if (!metric) {
+                        const response = this.createAgentMessage(
+                            "Which goal would you like to set? I support Impressions, Reach, Conversions, and Clicks.",
+                            ['Set goal impressions 1M', 'Set goal conversions 500']
+                        );
+                        this.context.history.push(response);
+                        contextManager.addMessage(this.sessionId, 'assistant', response.content);
+                        return response;
+                    }
+
+                    // Parse value - look for number after the metric keyword
+                    // This ensures we get "100" from "set goal impressions 100M" not just any first number
+                    const metricIndex = lowerInput.indexOf(metric);
+                    const afterMetric = metricIndex >= 0 ? lowerInput.substring(metricIndex + metric.length) : lowerInput;
+                    const valueMatch = afterMetric.match(/(\d+(?:\.\d+)?)\s*([kKmMbB])?/);
+
+                    if (!valueMatch) {
+                        const response = this.createAgentMessage(
+                            `I couldn't understand the value for ${metric}. Try saying something like "Set goal ${metric} 1.5M" or "Set goal ${metric} 5000".`,
+                            [`Set goal ${metric} 100k`]
+                        );
+                        this.context.history.push(response);
+                        contextManager.addMessage(this.sessionId, 'assistant', response.content);
+                        return response;
+                    }
+
+                    let value = parseFloat(valueMatch[1]);
+                    const suffix = valueMatch[2]?.toLowerCase();
+
+                    if (suffix === 'k') value *= 1000;
+                    else if (suffix === 'm') value *= 1000000;
+                    else if (suffix === 'b') value *= 1000000000;
+
+                    // Update plan with deep copy to avoid state corruption
+                    if (!plan.campaign.numericGoals) {
+                        plan.campaign.numericGoals = {};
+                    }
+                    plan.campaign.numericGoals[metric] = Math.floor(value);
+
+                    // Return updated plan in response - create a proper deep copy
+                    const response = this.createAgentMessage(
+                        `✅ **Goal Updated!**\n\nI've set your **${metric}** goal to **${Math.floor(value).toLocaleString()}**.\n\nThe goal tracking card in your plan view has been updated.`,
+                        ['Show goals', 'Forecast this campaign']
+                    );
+
+                    // Important: Attach updated plan to trigger UI update
+                    // Create a deep copy to prevent state mutations from affecting the display
+                    response.updatedMediaPlan = JSON.parse(JSON.stringify(plan));
+                    this.context.history.push(response);
+                    contextManager.addMessage(this.sessionId, 'assistant', response.content);
+                    return response;
+                }
+            } catch (e: any) {
+                console.error("Error in goal logic:", e);
+                const response = this.createAgentMessage(
+                    "I encountered an error while processing your goal command: " + (e.message || String(e)),
+                    ['Show goals']
+                );
+                this.context.history.push(response);
+                contextManager.addMessage(this.sessionId, 'assistant', response.content);
+                return response;
+            }
+        }
+
+        // =================================================================
+        // CREATIVE MANAGEMENT COMMANDS (NEW - Phase 5.3)
+        // =================================================================
+        if (input.toLowerCase().includes('creative') || input.toLowerCase().includes('upload') || input.toLowerCase().includes('assign')) {
+            try {
+                const lowerInput = input.toLowerCase();
+                const plan = this.context.mediaPlan;
+                if (!plan) {
+                    return this.createAgentMessage(
+                        "I need an active media plan to manage creatives.",
+                        ['Create new campaign']
+                    );
+                }
+
+                // 1. Upload Creative
+                if (lowerInput.includes('upload')) {
+                    const nameMatch = input.match(/upload\s+(?:creative\s+)?["']?([^"']+)["']?/i);
+                    const name = nameMatch ? nameMatch[1] : `New Creative ${Date.now()}`;
+
+                    // Mock upload
+                    // In a real app, we'd add this to a global library. 
+                    // For now, we'll just confirm it's ready to be assigned.
+                    return this.createAgentMessage(
+                        `✅ **Creative Uploaded!**\n\nI've added "**${name}**" to your library.\n\nYou can now assign it to a placement.`,
+                        ['Assign to all display placements']
+                    );
+                }
+
+                // 2. Assign Creative
+                if (lowerInput.includes('assign')) {
+                    // Logic to find placement and assign
+                    // Simplified: Assign to first matching placement or all
+                    const target = lowerInput.includes('all') ? 'all' : 'first';
+
+                    let count = 0;
+                    plan.campaign.placements?.forEach(p => {
+                        if (p.channel === 'Display' || p.channel === 'Social') {
+                            const newCreative: Creative = {
+                                id: generateId(),
+                                name: `Assigned Creative ${count + 1}`,
+                                type: 'IMAGE',
+                                url: `https://picsum.photos/seed/${Math.random()}/400/300`,
+                                dimensions: '300x250',
+                                metrics: { ctr: 0, conversions: 0 }
+                            };
+                            p.creatives = [...(p.creatives || []), newCreative];
+                            // Sync legacy
+                            p.creative = {
+                                id: newCreative.id,
+                                name: newCreative.name,
+                                type: 'image',
+                                url: newCreative.url
+                            };
+                            count++;
+                        }
+                    });
+
+                    if (count > 0) {
+                        const response = this.createAgentMessage(
+                            `✅ **Creatives Assigned!**\n\nI've assigned new creatives to ${count} placements.`,
+                            ['Check performance']
+                        );
+                        response.updatedMediaPlan = { ...plan };
+                        return response;
+                    } else {
+                        return this.createAgentMessage(
+                            "I couldn't find any suitable placements to assign creatives to.",
+                            ['Add display placement']
+                        );
+                    }
+                }
+
+                // 3. Performance Analysis
+                if (lowerInput.includes('winning') || lowerInput.includes('best performing')) {
+                    // Find best creative across all placements
+                    let bestCreative: Creative | null = null;
+                    let bestCtr = -1;
+                    let bestPlacementName = '';
+
+                    plan.campaign.placements?.forEach(p => {
+                        p.creatives?.forEach(c => {
+                            if ((c.metrics?.ctr || 0) > bestCtr) {
+                                bestCtr = c.metrics?.ctr || 0;
+                                bestCreative = c;
+                                bestPlacementName = p.name;
+                            }
+                        });
+                    });
+
+                    if (bestCreative) {
+                        return this.createAgentMessage(
+                            `🏆 **Winning Creative Found!**\n\n**${(bestCreative as Creative).name}** is your top performer.\n\n• **CTR:** ${((bestCtr) * 100).toFixed(2)}%\n• **Placement:** ${bestPlacementName}`,
+                            ['Optimize rotation']
+                        );
+                    } else {
+                        return this.createAgentMessage(
+                            "I don't have enough performance data yet to determine a winner.",
+                            ['Wait for data']
+                        );
+                    }
+                }
+
+            } catch (e: any) {
+                console.error("Error in creative logic:", e);
+                return this.createAgentMessage(
+                    "I encountered an error managing creatives.",
+                    []
+                );
+            }
+        }
+
         // 2. STATE-SPECIFIC LOGIC
         switch (this.context.state) {
             case 'INIT':
@@ -139,7 +376,8 @@ export class AgentBrain {
                     agencyId: 'temp_agency',
                     budget: budget,
                     totalSpend: 0,
-                    activeCampaigns: 1
+                    activeCampaigns: 1,
+                    campaigns: []
                 };
 
                 const newCampaign = generateCampaign(tempBrand);
@@ -569,6 +807,133 @@ export class AgentBrain {
                 responseContent,
                 ['Optimize my plan', 'Show detailed report']
             );
+        }
+
+
+        // =================================================================
+        // FORECASTING COMMANDS (NEW - Phase 5.2)
+        // =================================================================
+        // Patterns: "forecast this campaign", "what's the seasonal impact", "audience overlap"
+        if (lowerInput.includes('forecast') ||
+            (lowerInput.includes('predict') && (lowerInput.includes('performance') || lowerInput.includes('campaign'))) ||
+            lowerInput.includes('will we hit')) {
+            console.log('[AgentBrain] Matched: Forecast query');
+
+            const plan = this.context.mediaPlan;
+            if (!plan || !plan.campaign.placements || plan.campaign.placements.length === 0) {
+                return this.createAgentMessage(
+                    "I can't forecast yet - there are no placements to analyze. Add some placements first!",
+                    ['Add 3 social placements', 'How should I allocate $50k?']
+                );
+            }
+
+            // Get campaign date range
+            const campaign = plan.campaign;
+            const startDate = campaign.startDate || new Date().toISOString();
+            const endDate = campaign.endDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+            // Generate forecast
+            const forecast = forecastCampaign(plan.campaign.placements, startDate, endDate);
+            const formattedForecast = formatForecastResult(forecast);
+
+            return this.createAgentMessage(
+                formattedForecast,
+                ['Show seasonal impact', 'Check audience overlap', 'Optimize my plan']
+            );
+        }
+
+        // Seasonal impact query
+        if (lowerInput.includes('seasonal') && (lowerInput.includes('impact') || lowerInput.includes('factor'))) {
+            console.log('[AgentBrain] Matched: Seasonal impact query');
+
+            const plan = this.context.mediaPlan;
+            if (!plan || !plan.campaign.placements || plan.campaign.placements.length === 0) {
+                return this.createAgentMessage(
+                    "I can't analyze seasonal impact yet - add placements first.",
+                    ['Add placements']
+                );
+            }
+
+            const campaign = plan.campaign;
+            const startDate = new Date(campaign.startDate || Date.now());
+            const month = startDate.getMonth();
+            const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+                'July', 'August', 'September', 'October', 'November', 'December'];
+
+            let responseContent = `🌡️ **Seasonal Impact Analysis**\n\n`;
+            responseContent += `**Campaign Month:** ${monthNames[month]}\n\n`;
+
+            // Import seasonality factors (would ideally come from forecastingEngine)
+            const seasonalFactors: Record<number, string> = {
+                0: 'Post-holiday slump - 10-15% lower CPMs',
+                1: 'Valentine\'s/Presidents Day - slightly elevated',
+                2: 'Spring awakening - baseline CPMs',
+                3: 'Spring growth - moderately elevated (5-10%)',
+                4: 'Summer prep - elevated (10-15%)',
+                5: 'Summer begins - moderately elevated',
+                6: 'Summer slump - 5-10% lower CPMs',
+                7: 'Back to school prep - lower competition (10-15% cheaper)',
+                8: 'Fall activation - back to baseline',
+                9: 'Q4 buildup - elevated (5-10%)',
+                10: 'Holiday peak - VERY HIGH (15-20% premium)',
+                11: 'Holiday peak continues - HIGHEST (15-25% premium)'
+            };
+
+            responseContent += `**${monthNames[month]} Trends:**\n`;
+            responseContent += `• ${seasonalFactors[month] || 'Normal seasonal patterns'}\n\n`;
+
+            responseContent += `**Recommendations:**\n`;
+            if (month === 10 || month === 11) {
+                responseContent += `• Book inventory early - high demand period\n`;
+                responseContent += `• Expect 15-20% higher CPMs than average\n`;
+                responseContent += `• Consider expanding to less competitive channels\n`;
+            } else if (month === 6 || month === 7) {
+                responseContent += `• Great opportunity for efficient spend\n`;
+                responseContent += `• CPMs 10-15% below average\n`;
+                responseContent += `• Good time to test new channels/tactics\n`;
+            } else {
+                responseContent += `• Normal competitive levels expected\n`;
+                responseContent += `• Good balance of efficiency and reach\n`;
+            }
+
+            return this.createAgentMessage(responseContent, ['Forecast campaign', 'Optimize my plan']);
+        }
+
+        // Audience overlap query
+        if (lowerInput.includes('audience overlap') ||
+            (lowerInput.includes('overlap') && lowerInput.includes('reach'))) {
+            console.log('[AgentBrain] Matched: Audience overlap query');
+
+            const plan = this.context.mediaPlan;
+            if (!plan || !plan.campaign.placements || plan.campaign.placements.length === 0) {
+                return this.createAgentMessage(
+                    "I can't calculate audience overlap yet - add placements first.",
+                    ['Add placements']
+                );
+            }
+
+            const overlap = calculateAudienceOverlap(plan.campaign.placements);
+
+            let responseContent = `👥 **Audience Overlap Analysis**\n\n`;
+            responseContent += `**Total Reach (Uncorrected):** ${Math.round(overlap.totalReach).toLocaleString()}\n`;
+            responseContent += `**Overlap Amount:** ${Math.round(overlap.overlapAmount).toLocaleString()} (${overlap.overlapPercentage.toFixed(1)}%)\n`;
+            responseContent += `**Adjusted Unique Reach:** ${Math.round(overlap.adjustedReach).toLocaleString()}\n\n`;
+
+            if (overlap.overlapPercentage > 40) {
+                responseContent += `⚠️ **High Overlap Detected**\n`;
+                responseContent += `Your channels have significant audience overlap (${overlap.overlapPercentage.toFixed(0)}%). This means:\n`;
+                responseContent += `• You're reaching fewer unique people than raw numbers suggest\n`;
+                responseContent += `• Consider diversifying to different audience segments\n`;
+                responseContent += `• Frequency may be higher than optimal\n`;
+            } else if (overlap.overlapPercentage > 25) {
+                responseContent += `📊 **Moderate Overlap**\n`;
+                responseContent += `Your channels have typical overlap (${overlap.overlapPercentage.toFixed(0)}%). This is normal for multi-channel campaigns.\n`;
+            } else {
+                responseContent += `✅ **Low Overlap**\n`;
+                responseContent += `Great! Your channels reach relatively distinct audiences (${overlap.overlapPercentage.toFixed(0)}% overlap).\n`;
+            }
+
+            return this.createAgentMessage(responseContent, ['Forecast campaign', 'Optimize my plan']);
         }
 
         // Handle inventory questions

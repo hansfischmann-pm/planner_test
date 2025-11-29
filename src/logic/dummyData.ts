@@ -1,4 +1,4 @@
-import { Campaign, Line, CostMethod, Brand, User, Flight, MediaPlan, AgentInfo, AgentExecution, PlanMetrics, ForecastMetrics, DeliveryMetrics, ForecastSource } from '../types';
+import { Campaign, Line, CostMethod, Brand, User, Flight, MediaPlan, AgentInfo, AgentExecution, PlanMetrics, ForecastMetrics, DeliveryMetrics, ForecastSource, Creative } from '../types';
 
 export const generateId = () => Math.random().toString(36).substr(2, 9);
 
@@ -85,7 +85,8 @@ export const SAMPLE_BRANDS: Brand[] = [
         agencyId: 'agency_1',
         totalSpend: 45000000,
         budget: 50000000,
-        activeCampaigns: 3
+        activeCampaigns: 3,
+        campaigns: []
     },
     {
         id: 'brand_gm',
@@ -94,7 +95,8 @@ export const SAMPLE_BRANDS: Brand[] = [
         agencyId: 'agency_1',
         totalSpend: 82000000,
         budget: 90000000,
-        activeCampaigns: 5
+        activeCampaigns: 5,
+        campaigns: []
     },
     {
         id: 'brand_pg',
@@ -103,7 +105,8 @@ export const SAMPLE_BRANDS: Brand[] = [
         agencyId: 'agency_1',
         totalSpend: 120000000,
         budget: 125000000,
-        activeCampaigns: 8
+        activeCampaigns: 8,
+        campaigns: []
     },
     {
         id: 'brand_pepsi',
@@ -112,7 +115,8 @@ export const SAMPLE_BRANDS: Brand[] = [
         agencyId: 'agency_1',
         totalSpend: 38000000,
         budget: 42000000,
-        activeCampaigns: 2
+        activeCampaigns: 2,
+        campaigns: []
     }
 ];
 
@@ -314,17 +318,36 @@ export function generateLine(channel: 'Search' | 'Social' | 'Display' | 'TV' | '
     if (buyingType === 'PMP') dealId = `PMP-${Math.floor(Math.random() * 100000)}`;
     if (buyingType === 'Direct') ioNumber = `IO-${new Date().getFullYear()}-${Math.floor(Math.random() * 1000)}`;
 
-    const isVideo = channel === 'TV' || channel === 'Social' && (adUnit.includes('Video') || adUnit.includes('Reel') || adUnit.includes('Story'));
-    const videoUrls = [
-        'https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_1MB.mp4',
-        'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4'
-    ];
+    // Generate Creatives
+    const numCreatives = Math.floor(Math.random() * 3) + 1; // 1-3 creatives
+    const creatives: Creative[] = [];
 
+    for (let i = 0; i < numCreatives; i++) {
+        const isVideo = channel === 'TV' || channel === 'Social' && (adUnit.includes('Video') || adUnit.includes('Reel') || adUnit.includes('Story'));
+        const videoUrls = [
+            'https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_1MB.mp4',
+            'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4'
+        ];
+
+        creatives.push({
+            id: Math.random().toString(36).substr(2, 9),
+            name: `${vendor} ${channel} ${isVideo ? 'Spot' : 'Banner'} v${i + 1}`,
+            type: isVideo ? 'VIDEO' : 'IMAGE',
+            url: isVideo ? videoUrls[Math.floor(Math.random() * videoUrls.length)] : `https://picsum.photos/seed/${Math.random()}/400/300`,
+            dimensions: isVideo ? '1920x1080' : '300x250',
+            metrics: {
+                ctr: ctr * (0.8 + Math.random() * 0.4), // Variation around placement CTR
+                conversions: Math.floor(conversions / numCreatives * (0.8 + Math.random() * 0.4))
+            }
+        });
+    }
+
+    // Legacy single creative
     const creative = {
-        id: Math.random().toString(36).substr(2, 9),
-        name: `${vendor} ${channel} ${isVideo ? 'Spot' : 'Banner'} v${Math.floor(Math.random() * 5) + 1}`,
-        type: isVideo ? 'video' as const : 'image' as const,
-        url: isVideo ? videoUrls[Math.floor(Math.random() * videoUrls.length)] : `https://picsum.photos/seed/${Math.random()}/400/300`
+        id: creatives[0].id,
+        name: creatives[0].name,
+        type: creatives[0].type === 'VIDEO' ? 'video' : 'image',
+        url: creatives[0].url
     };
 
     // Generate Forecast & Delivery Data
@@ -360,7 +383,9 @@ export function generateLine(channel: 'Search' | 'Social' | 'Display' | 'TV' | '
         buyingType,
         dealId,
         ioNumber,
-        creative
+        creative: creative as any, // Cast to any to match legacy type
+        creatives: creatives,
+        rotationMode: 'OPTIMIZED'
     };
 };
 
@@ -474,6 +499,11 @@ export function generateCampaign(brand: Brand): Campaign {
         startDate: flight1.startDate,
         endDate: flight2.endDate,
         goals: ['Brand Awareness', 'Sales'],
+        numericGoals: {
+            impressions: Math.floor(budget * 50), // Goal: 50 impressions per dollar
+            reach: Math.floor(budget * 20), // Goal: 20 unique reach per dollar
+            conversions: Math.floor(budget * 0.05) // Goal: 5 conversions per $100
+        },
         flights,
         status: 'ACTIVE',
         forecast: calculateCampaignForecast(flights),

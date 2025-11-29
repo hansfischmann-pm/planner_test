@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Placement } from '../types';
+import { Placement, Creative } from '../types';
 import { X, Image as ImageIcon, Film, Upload } from 'lucide-react';
 import { clsx } from 'clsx';
+import { CreativePerformanceCard } from './CreativePerformanceCard';
 
 interface PlacementDetailPanelProps {
     placement: Placement | null;
@@ -37,15 +38,61 @@ export const PlacementDetailPanel: React.FC<PlacementDetailPanelProps> = ({ plac
     const handleSimulateUpload = () => {
         setIsUploading(true);
         setTimeout(() => {
-            const newCreative = {
+            const isVideo = placement.channel === 'TV' || placement.channel === 'Social';
+            const videoUrls = [
+                'https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_1MB.mp4',
+                'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4'
+            ];
+
+            const newCreative: Creative = {
                 id: Math.random().toString(36).substr(2, 9),
-                name: `Uploaded Asset ${Math.floor(Math.random() * 100)}.jpg`,
-                type: 'image' as const,
-                url: `https://picsum.photos/seed/${Math.random()}/400/300`
+                name: `Uploaded ${isVideo ? 'Video' : 'Asset'} ${Math.floor(Math.random() * 100)}.${isVideo ? 'mp4' : 'jpg'}`,
+                type: isVideo ? 'VIDEO' : 'IMAGE',
+                url: isVideo ? videoUrls[Math.floor(Math.random() * videoUrls.length)] : `https://picsum.photos/seed/${Math.random()}/400/300`,
+                dimensions: isVideo ? '1920x1080' : '300x250',
+                metrics: { ctr: 0, conversions: 0 }
             };
-            onUpdate({ ...placement, creative: newCreative });
+
+            const updatedCreatives = [...(placement.creatives || []), newCreative];
+            onUpdate({
+                ...placement,
+                creatives: updatedCreatives,
+                creative: { // Keep legacy sync
+                    id: updatedCreatives[0].id,
+                    name: updatedCreatives[0].name,
+                    type: updatedCreatives[0].type === 'VIDEO' ? 'video' : 'image',
+                    url: updatedCreatives[0].url
+                }
+            });
             setIsUploading(false);
         }, 1500);
+    };
+
+    const handleDeleteCreative = (creativeId: string) => {
+        const updatedCreatives = (placement.creatives || []).filter(c => c.id !== creativeId);
+
+        // If we deleted the "active" legacy creative, update it
+        let legacyCreative = placement.creative;
+        if (placement.creative?.id === creativeId) {
+            if (updatedCreatives.length > 0) {
+                // Fallback to first available
+                const next = updatedCreatives[0];
+                legacyCreative = {
+                    id: next.id,
+                    name: next.name,
+                    type: next.type === 'VIDEO' ? 'video' : 'image',
+                    url: next.url
+                };
+            } else {
+                legacyCreative = undefined;
+            }
+        }
+
+        onUpdate({
+            ...placement,
+            creatives: updatedCreatives,
+            creative: legacyCreative
+        });
     };
 
     return (
@@ -131,40 +178,34 @@ export const PlacementDetailPanel: React.FC<PlacementDetailPanelProps> = ({ plac
                 {/* Creative Section */}
                 <section>
                     <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">Creative Asset</h3>
+                        <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">Creative Assets</h3>
                         <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
                             {placement.channel === 'TV' || placement.channel === 'Social' ? 'Video Required' : 'Image Required'}
                         </span>
                     </div>
 
-                    <div className="bg-gray-50 rounded-xl border-2 border-dashed border-gray-200 p-6 text-center group hover:border-blue-300 transition-colors relative overflow-hidden">
-                        {placement.creative ? (
-                            <div className="relative">
-                                {placement.creative.type === 'video' ? (
-                                    <div className="aspect-video bg-black rounded-lg flex items-center justify-center relative overflow-hidden">
-                                        <video src={placement.creative.url} controls className="w-full h-full object-cover" />
-                                    </div>
-                                ) : (
-                                    <img
-                                        src={placement.creative.url}
-                                        alt={placement.creative.name}
-                                        className="w-full h-48 object-cover rounded-lg shadow-sm"
-                                    />
+                    {placement.creatives && placement.creatives.length > 0 ? (
+                        <div className="space-y-4">
+                            <CreativePerformanceCard
+                                placement={placement}
+                                onDelete={handleDeleteCreative}
+                            />
+
+                            <button
+                                onClick={handleSimulateUpload}
+                                disabled={isUploading}
+                                className="w-full py-2 border-2 border-dashed border-gray-200 rounded-lg text-sm font-medium text-gray-500 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50 transition-all flex items-center justify-center gap-2"
+                            >
+                                {isUploading ? 'Uploading...' : (
+                                    <>
+                                        <Upload className="w-4 h-4" />
+                                        Add Another Creative
+                                    </>
                                 )}
-                                <div className="mt-3 flex items-center justify-between text-left">
-                                    <div>
-                                        <p className="text-sm font-medium text-gray-900 truncate max-w-[200px]">{placement.creative.name}</p>
-                                        <p className="text-xs text-gray-500 uppercase">{placement.creative.type}</p>
-                                    </div>
-                                    <button
-                                        onClick={() => onUpdate({ ...placement, creative: undefined })}
-                                        className="text-red-500 text-xs hover:underline"
-                                    >
-                                        Remove
-                                    </button>
-                                </div>
-                            </div>
-                        ) : (
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="bg-gray-50 rounded-xl border-2 border-dashed border-gray-200 p-6 text-center group hover:border-blue-300 transition-colors relative overflow-hidden">
                             <div className="py-8">
                                 <div className="w-12 h-12 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
                                     {placement.channel === 'TV' ? <Film className="w-6 h-6" /> : <ImageIcon className="w-6 h-6" />}
@@ -185,8 +226,8 @@ export const PlacementDetailPanel: React.FC<PlacementDetailPanelProps> = ({ plac
                                     )}
                                 </button>
                             </div>
-                        )}
-                    </div>
+                        </div>
+                    )}
                 </section>
 
                 <hr className="border-gray-100" />

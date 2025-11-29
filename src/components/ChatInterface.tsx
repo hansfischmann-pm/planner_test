@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { AgentMessage } from '../types';
 import { Send, Cpu, ChevronDown, ChevronRight } from 'lucide-react';
 import { ContextualHelp } from './ContextualHelp';
+import { ForecastCards, ForecastCardData } from './ForecastCards';
 
 interface ChatInterfaceProps {
   messages: AgentMessage[];
@@ -378,7 +379,25 @@ class AudienceOptimizer {
                   })}
                 </div>
               )}
-              <div className="whitespace-pre-wrap text-sm">{msg.content}</div>
+              {/* Render message content - detect special formats */}
+              {(() => {
+                const content = msg.content;
+
+                // Check for forecast cards
+                const forecastMatch = content.match(/\[FORECAST_CARDS\](.*?)\[\/FORECAST_CARDS\]/s);
+                if (forecastMatch) {
+                  try {
+                    const cardData: ForecastCardData = JSON.parse(forecastMatch[1]);
+                    return <ForecastCards data={cardData} />;
+                  } catch (e) {
+                    console.error('Failed to parse forecast cards:', e);
+                    return <div className="whitespace-pre-wrap text-sm">{content}</div>;
+                  }
+                }
+
+                // Default: plain text
+                return <div className="whitespace-pre-wrap text-sm">{content}</div>;
+              })()}
               {msg.suggestedActions && (
                 <div className="mt-3 flex flex-wrap gap-2">
                   {msg.suggestedActions.map((action) => (
