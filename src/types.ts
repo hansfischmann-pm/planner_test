@@ -130,6 +130,69 @@ export interface Campaign {
     delivery?: DeliveryMetrics;
     // Legacy support (optional, or computed)
     placements?: Line[];
+    // Template tracking
+    templateId?: string;
+    customizations?: string[]; // List of what was changed from the template
+}
+
+export type IntegrationType = 'DSP' | 'DMP' | 'ANALYTICS';
+export type IntegrationStatus = 'CONNECTED' | 'DISCONNECTED' | 'ERROR' | 'SYNCING';
+
+export interface Integration {
+    id: string;
+    name: string;
+    provider: string;
+    type: IntegrationType;
+    status: IntegrationStatus;
+    icon: string; // Emoji or URL
+    lastSync?: string;
+    connectedSince?: string;
+    description: string;
+}
+// Campaign Template Types
+export type TemplateCategory = 'retail' | 'b2b' | 'brand' | 'performance' | 'seasonal';
+export type TemplateComplexity = 'simple' | 'moderate' | 'complex';
+
+export interface CampaignTemplate {
+    id: string;
+    name: string;
+    description: string;
+    category: TemplateCategory;
+    icon: string;
+
+    // Budget recommendations
+    recommendedBudget: {
+        min: number;
+        max: number;
+        optimal: number;
+    };
+
+    // Channel mix (percentages)
+    channelMix: {
+        channel: Channel;
+        percentage: number;
+        rationale: string;
+    }[];
+
+    // Pre-configured goals
+    defaultGoals: {
+        impressions?: number;
+        reach?: number;
+        conversions?: number;
+        clicks?: number;
+    };
+
+    // Flight structure
+    flightStructure: {
+        name: string;
+        budgetPercentage: number;
+        durationDays: number;
+    }[];
+
+    // Metadata
+    tags: string[];
+    industry: string[];
+    complexity: TemplateComplexity;
 }
 
 export type CostMethod = 'CPM' | 'CPC' | 'Flat' | 'Spot';
@@ -166,11 +229,14 @@ export interface PerformanceMetrics {
     status: 'ACTIVE' | 'PAUSED';
 }
 
+export type PlacementStatus = 'PLANNING' | 'ACTIVE' | 'COMPLETED' | 'PAUSED';
+
 // Renamed from Placement to Line, keeping alias for backward compatibility
 export interface Line {
     id: string;
     name: string;
     channel: 'Search' | 'Social' | 'Display' | 'TV' | 'Radio' | 'OOH' | 'Print';
+    status: PlacementStatus;
     vendor: string;
     adUnit: string;
     segment?: string;
@@ -180,6 +246,12 @@ export interface Line {
     endDate: string;
     quantity: number;
     totalCost: number;
+
+    targeting?: {
+        geo: string[];
+        demographics: string[];
+        devices: string[];
+    };
 
     // New Forecasting & Delivery Fields
     forecast?: ForecastMetrics;

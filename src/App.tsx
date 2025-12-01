@@ -10,6 +10,8 @@ import { ContextualHelp } from './components/ContextualHelp';
 import { CampaignList } from './components/CampaignList';
 import { FlightList } from './components/FlightList';
 import { AgencyAnalyticsDashboard } from './components/AgencyAnalyticsDashboard';
+import { IntegrationDashboard } from './components/IntegrationDashboard';
+import { GlobalShortcuts } from './components/GlobalShortcuts';
 
 import { AgentBrain, AgentState } from './logic/agentBrain';
 import { AgentMessage, MediaPlan, User, Brand, Campaign, Flight, UserType, LayoutPosition, Placement } from './types';
@@ -55,9 +57,9 @@ const updateBrandMetrics = (brand: Brand): Brand => {
 
 import { generateMediaPlanPDF } from './utils/pdfGenerator';
 import { generateMediaPlanPPT } from './utils/pptGenerator';
-import { ArrowLeft } from 'lucide-react';
+import { Layout, LogOut, MessageSquare, PieChart, Settings, Users, Moon, Sun, BarChart2, ChevronLeft, ChevronRight } from 'lucide-react';
 
-type ViewState = 'LOGIN' | 'CLIENT_SELECTION' | 'CAMPAIGN_LIST' | 'FLIGHT_LIST' | 'MEDIA_PLAN' | 'AGENCY_ANALYTICS';
+type ViewState = 'LOGIN' | 'CLIENT_SELECTION' | 'CAMPAIGN_LIST' | 'FLIGHT_LIST' | 'MEDIA_PLAN' | 'AGENCY_ANALYTICS' | 'INTEGRATIONS';
 
 function App() {
     // Mutable Data State
@@ -91,6 +93,45 @@ function App() {
     const [agentState, setAgentState] = useState<AgentState>('INIT');
     const [isTyping, setIsTyping] = useState(false);
 
+    // Theme State
+    const [theme, setTheme] = useState<'light' | 'dark'>('light');
+
+    useEffect(() => {
+        if (theme === 'dark') {
+            document.documentElement.classList.add('dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+        }
+    }, [theme]);
+
+    const toggleTheme = () => {
+        setTheme(prev => prev === 'light' ? 'dark' : 'light');
+    };
+
+    // Sidebar State
+    const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+        const saved = localStorage.getItem('fuseiq-sidebar-collapsed');
+        return saved ? JSON.parse(saved) : true; // Default to collapsed
+    });
+
+    // Persist sidebar state
+    const toggleSidebar = () => {
+        const newState = !sidebarCollapsed;
+        setSidebarCollapsed(newState);
+        localStorage.setItem('fuseiq-sidebar-collapsed', JSON.stringify(newState));
+    };
+
+    // Logout handler
+    const handleLogout = () => {
+        setCurrentUser(null);
+        setCurrentBrand(null);
+        setCurrentCampaign(null);
+        setCurrentFlight(null);
+        setMediaPlan(null);
+        setMessages([]);
+        setView('LOGIN');
+    };
+
     // Persist layout changes
     const handleLayoutChange = (newLayout: LayoutPosition) => {
         setLayout(newLayout);
@@ -102,9 +143,17 @@ function App() {
     };
 
     // Handle resize
+    const [resizeStartPos, setResizeStartPos] = useState({ x: 0, y: 0, size: 0 });
+
     const handleMouseDown = (e: React.MouseEvent) => {
         e.preventDefault();
         setIsResizing(true);
+        // Capture the starting position and current size
+        setResizeStartPos({
+            x: e.clientX,
+            y: e.clientY,
+            size: chatSize
+        });
     };
 
     useEffect(() => {
@@ -113,11 +162,16 @@ function App() {
 
             let newSize: number;
             if (layout === 'LEFT') {
-                newSize = Math.max(250, Math.min(800, e.clientX));
+                // Calculate delta from start position
+                const delta = e.clientX - resizeStartPos.x;
+                newSize = Math.max(250, Math.min(800, resizeStartPos.size + delta));
             } else if (layout === 'RIGHT') {
-                newSize = Math.max(250, Math.min(800, window.innerWidth - e.clientX));
+                // For RIGHT layout, calculate from the right edge
+                const delta = resizeStartPos.x - e.clientX;
+                newSize = Math.max(250, Math.min(800, resizeStartPos.size + delta));
             } else { // BOTTOM
-                newSize = Math.max(200, Math.min(600, window.innerHeight - e.clientY));
+                const delta = resizeStartPos.y - e.clientY;
+                newSize = Math.max(200, Math.min(600, resizeStartPos.size + delta));
             }
 
             setChatSize(newSize);
@@ -157,7 +211,9 @@ function App() {
     };
 
     const handleSelectBrand = (brand: Brand) => {
-        setCurrentBrand(brand);
+        // Find the brand from the current brands state to get the latest data
+        const currentBrandData = brands.find(b => b.id === brand.id) || brand;
+        setCurrentBrand(currentBrandData);
         setView('CAMPAIGN_LIST');
     };
 
@@ -251,19 +307,48 @@ function App() {
 
         // Update brands state
         setBrands((prevBrands: Brand[]) => {
-            return prevBrands.map((b: Brand) => {
+            const updatedBrands = prevBrands.map((b: Brand) => {
                 if (b.id === currentBrand.id) {
-                    return {
+                    const updatedBrand = {
                         ...b,
                         campaigns: [...(b as any).campaigns, newCampaign]
                     };
+                    // Update currentBrand to reflect the new campaign
+                    setCurrentBrand(updatedBrand);
+                    return updatedBrand;
                 }
                 return b;
             });
+            return updatedBrands;
         });
 
         // Select the new campaign and navigate to flight list
         setCurrentCampaign(newCampaign);
+        setView('FLIGHT_LIST');
+    };
+
+    const handleCreateCampaignFromTemplate = (campaign: Campaign) => {
+        if (!currentBrand) return;
+
+        // Update brands state with the new campaign from template
+        setBrands((prevBrands: Brand[]) => {
+            const updatedBrands = prevBrands.map((b: Brand) => {
+                if (b.id === currentBrand.id) {
+                    const updatedBrand = {
+                        ...b,
+                        campaigns: [...(b as any).campaigns, campaign]
+                    };
+                    // Update currentBrand to reflect the new campaign
+                    setCurrentBrand(updatedBrand);
+                    return updatedBrand;
+                }
+                return b;
+            });
+            return updatedBrands;
+        });
+
+        // Select the new campaign and navigate to flight list
+        setCurrentCampaign(campaign);
         setView('FLIGHT_LIST');
     };
 
@@ -327,6 +412,131 @@ function App() {
 
         // Select the new flight and navigate to media plan
         handleSelectFlight(newFlight);
+    };
+
+    const handleActivateFlight = (flightId: string) => {
+        if (!currentBrand || !currentCampaign) return;
+
+        // Update brands state
+        setBrands(prevBrands => {
+            return prevBrands.map(b => {
+                if (b.id === currentBrand.id) {
+                    return {
+                        ...b,
+                        campaigns: (b as any).campaigns.map((c: Campaign) => {
+                            if (c.id === currentCampaign.id) {
+                                return {
+                                    ...c,
+                                    flights: c.flights.map(f => {
+                                        if (f.id === flightId) {
+                                            return { ...f, status: 'ACTIVE' };
+                                        }
+                                        return f;
+                                    })
+                                };
+                            }
+                            return c;
+                        })
+                    };
+                }
+                return b;
+            });
+        });
+
+        // Update current campaign reference
+        setCurrentCampaign(prev => {
+            if (!prev) return prev;
+            return {
+                ...prev,
+                flights: prev.flights.map(f => {
+                    if (f.id === flightId) {
+                        return { ...f, status: 'ACTIVE' };
+                    }
+                    return f;
+                })
+            };
+        });
+    };
+
+    const handlePauseFlight = (flightId: string) => {
+        if (!currentBrand || !currentCampaign) return;
+
+        // Update brands state
+        setBrands(prevBrands => {
+            return prevBrands.map(b => {
+                if (b.id === currentBrand.id) {
+                    return {
+                        ...b,
+                        campaigns: (b as any).campaigns.map((c: Campaign) => {
+                            if (c.id === currentCampaign.id) {
+                                return {
+                                    ...c,
+                                    flights: c.flights.map(f => {
+                                        if (f.id === flightId) {
+                                            return { ...f, status: 'DRAFT' };
+                                        }
+                                        return f;
+                                    })
+                                };
+                            }
+                            return c;
+                        })
+                    };
+                }
+                return b;
+            });
+        });
+
+        // Update current campaign reference
+        setCurrentCampaign(prev => {
+            if (!prev) return prev;
+            return {
+                ...prev,
+                flights: prev.flights.map(f => {
+                    if (f.id === flightId) {
+                        return { ...f, status: 'DRAFT' };
+                    }
+                    return f;
+                })
+            };
+        });
+    };
+
+    const handleAddFlightFromTemplate = (flight: Flight) => {
+        if (!currentBrand || !currentCampaign) return;
+
+        // Update brands state
+        setBrands(prevBrands => {
+            return prevBrands.map(b => {
+                if (b.id === currentBrand.id) {
+                    return {
+                        ...b,
+                        campaigns: (b as any).campaigns.map((c: Campaign) => {
+                            if (c.id === currentCampaign.id) {
+                                return {
+                                    ...c,
+                                    flights: [...c.flights, flight]
+                                };
+                            }
+                            return c;
+                        })
+                    };
+                }
+                return b;
+            });
+        });
+
+        // Update current campaign reference
+        setCurrentCampaign(prev => {
+            if (!prev) return prev;
+            return {
+                ...prev,
+                flights: [...prev.flights, flight]
+            };
+        });
+
+        // Select the new flight
+        handleSelectFlight(flight);
     };
 
     const handleUpdatePlacement = (updatedPlacement: Placement) => {
@@ -555,6 +765,7 @@ function App() {
                 brands={SAMPLE_BRANDS}
                 onSelectBrand={handleSelectBrand}
                 onViewAnalytics={() => setView('AGENCY_ANALYTICS')}
+                onViewIntegrations={() => setView('INTEGRATIONS')}
             />
         );
     }
@@ -568,111 +779,210 @@ function App() {
         );
     }
 
+    if (view === 'INTEGRATIONS') {
+        return (
+            <IntegrationDashboard
+                onBack={() => setView('CLIENT_SELECTION')}
+            />
+        );
+    }
+
     // Common Layout for Campaign/Flight/Plan views
     return (
-        <div className="flex flex-col h-screen bg-gray-50">
-            {/* Header */}
-            <header className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between shrink-0">
-                <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2">
-                        <div className="bg-purple-600 p-1.5 rounded-lg">
-                            <img src="/adroll-logo.png" alt="FuseIQ" className="h-5 w-auto brightness-0 invert" />
+        <div className="flex h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
+            {/* Sidebar */}
+            <div className={`${sidebarCollapsed ? 'w-16' : 'w-64'} bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col flex-shrink-0 transition-all duration-200`}>
+                <div className={`p-4 border-b border-gray-200 dark:border-gray-700 flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'} gap-2`}>
+                    {!sidebarCollapsed && (
+                        <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center">
+                                <Layout className="w-5 h-5 text-white" />
+                            </div>
+                            <span className="font-bold text-gray-900 dark:text-white">FuseIQ</span>
                         </div>
-                        <span className="font-bold text-gray-900 text-lg">FuseIQ</span>
+                    )}
+                    <button
+                        onClick={toggleSidebar}
+                        className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors flex-shrink-0"
+                        title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                    >
+                        {sidebarCollapsed ? <ChevronRight className="w-4 h-4 text-gray-600 dark:text-gray-400" /> : <ChevronLeft className="w-4 h-4 text-gray-600 dark:text-gray-400" />}
+                    </button>
+                </div>
+
+                <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+                    <div className="mb-6">
+                        {!sidebarCollapsed && (
+                            <div className="px-2 mb-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                Campaigns
+                            </div>
+                        )}
+                        {currentBrand?.campaigns.map((campaign) => (
+                            <button
+                                key={campaign.id}
+                                onClick={() => {
+                                    setCurrentCampaign(campaign);
+                                    setView('FLIGHT_LIST');
+                                }}
+                                className={`w-full flex items-center gap-2 px-2 py-2 text-sm font-medium rounded-lg transition-colors ${currentCampaign?.id === campaign.id && view !== 'CAMPAIGN_LIST'
+                                    ? 'bg-purple-50 text-purple-700 dark:bg-purple-900/20 dark:text-purple-300'
+                                    : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
+                                    }`}
+                                title={sidebarCollapsed ? campaign.name : undefined}
+                            >
+                                <PieChart className="w-4 h-4 flex-shrink-0" />
+                                {!sidebarCollapsed && <span className="truncate">{campaign.name}</span>}
+                            </button>
+                        ))}
+                        <button
+                            onClick={() => setView('CAMPAIGN_LIST')}
+                            className={`w-full flex items-center gap-2 px-2 py-2 text-sm font-medium rounded-lg transition-colors ${view === 'CAMPAIGN_LIST'
+                                ? 'bg-purple-50 text-purple-700 dark:bg-purple-900/20 dark:text-purple-300'
+                                : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
+                                }`}
+                            title={sidebarCollapsed ? 'All Campaigns' : undefined}
+                        >
+                            <Layout className="w-4 h-4 flex-shrink-0" />
+                            {!sidebarCollapsed && 'All Campaigns'}
+                        </button>
                     </div>
 
-                    <div className="h-6 w-px bg-gray-200 mx-2"></div>
+                    <div>
+                        {!sidebarCollapsed && (
+                            <div className="px-2 mb-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                Agency
+                            </div>
+                        )}
+                        <button
+                            onClick={() => setView('AGENCY_ANALYTICS')}
+                            className={`w-full flex items-center gap-2 px-2 py-2 text-sm font-medium rounded-lg transition-colors ${view === 'AGENCY_ANALYTICS'
+                                ? 'bg-purple-50 text-purple-700 dark:bg-purple-900/20 dark:text-purple-300'
+                                : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
+                                }`}
+                            title={sidebarCollapsed ? 'Analytics' : undefined}
+                        >
+                            <BarChart2 className="w-4 h-4 flex-shrink-0" />
+                            {!sidebarCollapsed && 'Analytics'}
+                        </button>
+                        <button
+                            onClick={() => alert('Team management coming soon!')}
+                            className="w-full flex items-center gap-2 px-2 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                            title={sidebarCollapsed ? 'Team' : undefined}
+                        >
+                            <Users className="w-4 h-4 flex-shrink-0" />
+                            {!sidebarCollapsed && 'Team'}
+                        </button>
+                        <button
+                            onClick={() => alert('Settings coming soon!')}
+                            className="w-full flex items-center gap-2 px-2 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                            title={sidebarCollapsed ? 'Settings' : undefined}
+                        >
+                            <Settings className="w-4 h-4 flex-shrink-0" />
+                            {!sidebarCollapsed && 'Settings'}
+                        </button>
+                    </div>
+                </nav>
 
-                    {/* Client Switcher (Agency Only) */}
-                    {currentUser?.type === 'AGENCY' && currentBrand && (
-                        <ClientSwitcher
-                            currentBrand={currentBrand}
-                            allBrands={SAMPLE_BRANDS}
-                            onSwitchBrand={handleSwitchBrand}
-                        />
-                    )}
+                <div className="p-4 border-t border-gray-200 dark:border-gray-700">
+                    <button
+                        onClick={toggleTheme}
+                        className="w-full flex items-center gap-2 px-2 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                        title={sidebarCollapsed ? (theme === 'light' ? 'Dark Mode' : 'Light Mode') : undefined}
+                    >
+                        {theme === 'light' ? (
+                            <>
+                                <Moon className="w-4 h-4 flex-shrink-0" />
+                                {!sidebarCollapsed && 'Dark Mode'}
+                            </>
+                        ) : (
+                            <>
+                                <Sun className="w-4 h-4 flex-shrink-0" />
+                                {!sidebarCollapsed && 'Light Mode'}
+                            </>
+                        )}
+                    </button>
+                </div>
+            </div>
 
-                    {/* Breadcrumbs */}
-                    {currentBrand && (
-                        <div className="flex items-center text-sm text-gray-500">
-                            {currentUser?.type === 'BRAND' && <span className="font-medium text-gray-900">{currentBrand.name}</span>}
-
-                            {currentCampaign && (
-                                <>
-                                    <span className="mx-2">/</span>
-                                    <button
-                                        onClick={() => setView('CAMPAIGN_LIST')}
-                                        className="hover:text-purple-600 transition-colors"
-                                    >
-                                        Campaigns
-                                    </button>
-                                </>
-                            )}
-
-                            {currentFlight && (
-                                <>
-                                    <span className="mx-2">/</span>
-                                    <button
-                                        onClick={() => setView('FLIGHT_LIST')}
-                                        className="hover:text-purple-600 transition-colors"
-                                    >
+            {/* Main Content */}
+            <div className="flex-1 flex flex-col min-w-0 bg-white dark:bg-gray-900 transition-colors duration-200">
+                {/* Header */}
+                <header className="h-16 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex items-center justify-between px-6 flex-shrink-0 transition-colors duration-200">
+                    <div className="flex items-center gap-4">
+                        <h1 className="text-xl font-semibold text-gray-900 dark:text-white">
+                            {view === 'CAMPAIGN_LIST' && 'Campaigns'}
+                            {view === 'FLIGHT_LIST' && currentCampaign?.name}
+                            {view === 'MEDIA_PLAN' && (
+                                <div className="flex items-center gap-2">
+                                    <span className="text-gray-500 dark:text-gray-400 font-normal cursor-pointer hover:text-purple-600" onClick={() => setView('FLIGHT_LIST')}>
                                         {currentCampaign?.name}
-                                    </button>
-                                    <span className="mx-2">/</span>
-                                    <span className="font-medium text-gray-900">{currentFlight.name}</span>
-                                </>
+                                    </span>
+                                    <span className="text-gray-300 dark:text-gray-600">/</span>
+                                    <span>{currentFlight?.name}</span>
+                                </div>
                             )}
+                            {view === 'AGENCY_ANALYTICS' && 'Agency Analytics'}
+                        </h1>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                        {/* Layout Controls - only show in media plan view */}
+                        {view === 'MEDIA_PLAN' && (
+                            <LayoutControls currentLayout={layout} onLayoutChange={handleLayoutChange} />
+                        )}
+                        <div className="flex flex-col items-end">
+                            <span className="text-sm font-medium text-gray-900 dark:text-white">{currentUser?.name}</span>
+                            <span className="text-xs text-gray-500 dark:text-gray-400">{currentUser?.type === 'AGENCY' ? 'Agency Admin' : 'Brand Manager'}</span>
                         </div>
-                    )}
-                </div>
-
-                <div className="flex items-center gap-3">
-                    {/* Layout Controls - only show in media plan view */}
-                    {view === 'MEDIA_PLAN' && (
-                        <LayoutControls currentLayout={layout} onLayoutChange={handleLayoutChange} />
-                    )}
-                    <div className="flex flex-col items-end">
-                        <span className="text-sm font-medium text-gray-900">{currentUser?.name}</span>
-                        <span className="text-xs text-gray-500">{currentUser?.type === 'AGENCY' ? 'Agency Admin' : 'Brand Manager'}</span>
+                        <img src={currentUser?.avatarUrl} alt="" className="h-8 w-8 rounded-full bg-gray-200" />
+                        <button
+                            onClick={handleLogout}
+                            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                            title="Logout"
+                        >
+                            <LogOut className="w-4 h-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" />
+                        </button>
                     </div>
-                    <img src={currentUser?.avatarUrl} alt="" className="h-8 w-8 rounded-full bg-gray-200" />
-                </div>
-            </header>
+                </header>
 
-            {/* Main Content Area */}
-            <div className="flex-1 overflow-hidden">
-                {view === 'CAMPAIGN_LIST' && currentBrand && (
-                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 h-full overflow-y-auto">
-                        <CampaignList
-                            campaigns={brands.find((b: Brand) => b.id === currentBrand.id)?.campaigns || []}
-                            onSelectCampaign={handleSelectCampaign}
-                            onCreateCampaign={handleCreateCampaign}
-                        />
-                    </div>
+                {/* View Content */}
+                {view === 'CAMPAIGN_LIST' && (
+                    <CampaignList
+                        campaigns={currentBrand?.campaigns || []}
+                        onSelectCampaign={handleSelectCampaign}
+                        onCreateCampaign={handleCreateCampaign}
+                        onCreateFromTemplate={handleCreateCampaignFromTemplate}
+                        brandId={currentBrand?.id}
+                        brandName={currentBrand?.name}
+                    />
                 )}
 
                 {view === 'FLIGHT_LIST' && currentCampaign && (
-                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 h-full overflow-y-auto">
-                        <FlightList
-                            flights={currentCampaign.flights}
-                            onSelectFlight={handleSelectFlight}
-                            onBack={() => setView('CAMPAIGN_LIST')}
-                            onCreateFlight={handleCreateFlight}
-                        />
-                    </div>
+                    <FlightList
+                        flights={currentCampaign.flights}
+                        onSelectFlight={handleSelectFlight}
+                        onBack={() => setView('CAMPAIGN_LIST')}
+                        onCreateFlight={handleCreateFlight}
+                        onActivateFlight={handleActivateFlight}
+                        onPauseFlight={handlePauseFlight}
+                        onAddFlightFromTemplate={handleAddFlightFromTemplate}
+                        brandId={currentBrand?.id || ''}
+                        brandName={currentBrand?.name || ''}
+                    />
                 )}
 
                 {view === 'MEDIA_PLAN' && (
-                    <div className={`h-full ${layout === 'BOTTOM' ? 'flex flex-col' : 'flex flex-row'
-                        }`}>
+                    <div className={`h-full flex ${layout === 'BOTTOM' ? 'flex-col' : 'flex-row'}`}>
                         {/* Chat Panel */}
                         <div
-                            className={`bg-white flex flex-col ${layout === 'LEFT' ? 'border-r border-gray-200 order-1' :
-                                layout === 'RIGHT' ? 'border-l border-gray-200 order-3' :
-                                    'border-t border-gray-200 order-3'
+                            className={`bg-white dark:bg-gray-800 flex flex-col border-gray-200 dark:border-gray-700 transition-colors duration-200 ${layout === 'BOTTOM'
+                                ? 'border-t order-2'
+                                : layout === 'RIGHT'
+                                    ? 'border-l order-3'
+                                    : 'border-r order-1'
                                 }`}
                             style={{
-                                width: layout !== 'BOTTOM' ? `${chatSize}px` : '100%',
+                                width: layout === 'BOTTOM' ? '100%' : `${chatSize}px`,
                                 height: layout === 'BOTTOM' ? `${chatSize}px` : '100%',
                                 flexShrink: 0
                             }}
@@ -691,17 +1001,33 @@ function App() {
                         {/* Resize Handle */}
                         <div
                             onMouseDown={handleMouseDown}
-                            className={`bg-gray-200 hover:bg-purple-400 transition-colors ${isResizing ? 'bg-purple-500' : ''
-                                } ${layout === 'BOTTOM' ? 'h-1 cursor-ns-resize w-full order-2' : 'w-1 cursor-ew-resize h-full order-2'
+                            className={`bg-gray-200 dark:bg-gray-700 hover:bg-purple-400 transition-colors ${isResizing ? 'bg-purple-500' : ''
+                                } ${layout === 'BOTTOM'
+                                    ? 'h-1 cursor-ns-resize w-full order-1'
+                                    : layout === 'RIGHT'
+                                        ? 'w-1 cursor-ew-resize h-full order-2'
+                                        : 'w-1 cursor-ew-resize h-full order-2'
                                 }`}
                             style={{ userSelect: 'none' }}
                         />
 
                         {/* Visualizer Panel */}
-                        <div className={`flex-1 flex flex-col overflow-hidden relative bg-gray-50 ${layout === 'LEFT' ? 'order-3' :
-                            layout === 'RIGHT' ? 'order-1' :
-                                'order-1'
+                        <div className={`flex-1 flex flex-col overflow-hidden relative bg-gray-50 dark:bg-gray-900 transition-colors duration-200 ${layout === 'BOTTOM' ? 'order-1' : layout === 'RIGHT' ? 'order-1' : 'order-3'
                             }`}>
+                            <GlobalShortcuts
+                                onSave={() => {
+                                    // Simulate save
+                                    const toast = document.createElement('div');
+                                    toast.className = 'fixed bottom-4 right-4 bg-gray-900 dark:bg-white text-white dark:text-gray-900 px-4 py-2 rounded-lg shadow-lg z-50 animate-in fade-in slide-in-from-bottom-4';
+                                    toast.innerHTML = '<div class="flex items-center gap-2"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg> Plan Saved Successfully</div>';
+                                    document.body.appendChild(toast);
+                                    setTimeout(() => toast.remove(), 3000);
+                                }}
+                                onFocusChat={() => {
+                                    // Dispatch custom event that ChatInterface listens to
+                                    window.dispatchEvent(new CustomEvent('focus-chat'));
+                                }}
+                            />
                             <PlanVisualizer
                                 mediaPlan={mediaPlan}
                                 onGroupingChange={(mode) => {

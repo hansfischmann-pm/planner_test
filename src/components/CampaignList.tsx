@@ -1,19 +1,28 @@
 import React, { useState } from 'react';
-import { Campaign } from '../types';
-import { Calendar, DollarSign, ArrowRight, Plus, MessageSquare, Send } from 'lucide-react';
+import { Campaign, CampaignTemplate } from '../types';
+import { Calendar, DollarSign, ArrowRight, Plus, MessageSquare, Send, Sparkles } from 'lucide-react';
+import { TemplateLibrary } from './TemplateLibrary';
+import { TemplateWizard } from './TemplateWizard';
 
 interface CampaignListProps {
     campaigns: Campaign[];
     onSelectCampaign: (campaign: Campaign) => void;
     onCreateCampaign?: (name: string, budget?: number, startDate?: string, endDate?: string) => void;
+    onCreateFromTemplate?: (campaign: Campaign) => void;
+    brandId?: string;
+    brandName?: string;
 }
 
-export const CampaignList: React.FC<CampaignListProps> = ({ campaigns, onSelectCampaign, onCreateCampaign }) => {
+export const CampaignList: React.FC<CampaignListProps> = ({ campaigns, onSelectCampaign, onCreateCampaign, onCreateFromTemplate, brandId, brandName }) => {
     const [showNewCampaign, setShowNewCampaign] = useState(false);
     const [campaignName, setCampaignName] = useState('');
     const [campaignBudget, setCampaignBudget] = useState('');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
+
+    // Template state
+    const [showTemplateLibrary, setShowTemplateLibrary] = useState(false);
+    const [selectedTemplate, setSelectedTemplate] = useState<CampaignTemplate | null>(null);
 
     const handleCreate = () => {
         if (campaignName.trim() && onCreateCampaign) {
@@ -32,16 +41,24 @@ export const CampaignList: React.FC<CampaignListProps> = ({ campaigns, onSelectC
     };
 
     return (
-        <div className="space-y-6">
+        <div className="p-6 space-y-6">
             <div className="flex items-center justify-between">
-                <h2 className="text-xl font-bold text-gray-900">Campaigns</h2>
-                <button
-                    onClick={() => setShowNewCampaign(!showNewCampaign)}
-                    className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors flex items-center gap-2"
-                >
-                    <Plus className="h-4 w-4" />
-                    New Campaign
-                </button>
+                <div className="flex gap-2">
+                    <button
+                        onClick={() => setShowTemplateLibrary(true)}
+                        className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg text-sm font-medium hover:from-purple-700 hover:to-pink-700 transition-all flex items-center gap-2 shadow-sm"
+                    >
+                        <Sparkles className="h-4 w-4" />
+                        Use Template
+                    </button>
+                    <button
+                        onClick={() => setShowNewCampaign(!showNewCampaign)}
+                        className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors flex items-center gap-2"
+                    >
+                        <Plus className="h-4 w-4" />
+                        New Campaign
+                    </button>
+                </div>
             </div>
 
             {/* Campaign Creation Input */}
@@ -234,6 +251,33 @@ export const CampaignList: React.FC<CampaignListProps> = ({ campaigns, onSelectC
                     </div>
                 ))}
             </div>
+
+            {/* Template Library Modal */}
+            {showTemplateLibrary && (
+                <TemplateLibrary
+                    onSelectTemplate={(template) => {
+                        setSelectedTemplate(template);
+                        setShowTemplateLibrary(false);
+                    }}
+                    onClose={() => setShowTemplateLibrary(false)}
+                />
+            )}
+
+            {/* Template Wizard Modal */}
+            {selectedTemplate && (
+                <TemplateWizard
+                    template={selectedTemplate}
+                    brandId={brandId || 'default-brand'}
+                    brandName={brandName || 'Brand'}
+                    onComplete={(campaign) => {
+                        if (onCreateFromTemplate) {
+                            onCreateFromTemplate(campaign);
+                        }
+                        setSelectedTemplate(null);
+                    }}
+                    onCancel={() => setSelectedTemplate(null)}
+                />
+            )}
         </div>
     );
 };

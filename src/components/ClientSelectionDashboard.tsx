@@ -1,14 +1,15 @@
 import React from 'react';
 import { Brand } from '../types';
-import { Building2, TrendingUp, Wallet, ArrowRight } from 'lucide-react';
+import { Building2, TrendingUp, Wallet, ArrowRight, Link2 } from 'lucide-react';
 
 interface ClientSelectionDashboardProps {
     brands: Brand[];
     onSelectBrand: (brand: Brand) => void;
     onViewAnalytics: () => void;
+    onViewIntegrations: () => void;
 }
 
-export const ClientSelectionDashboard: React.FC<ClientSelectionDashboardProps> = ({ brands, onSelectBrand, onViewAnalytics }) => {
+export const ClientSelectionDashboard: React.FC<ClientSelectionDashboardProps> = ({ brands, onSelectBrand, onViewAnalytics, onViewIntegrations }) => {
     return (
         <div className="min-h-screen bg-gray-50">
             <header className="bg-white shadow-sm border-b border-gray-200">
@@ -20,6 +21,13 @@ export const ClientSelectionDashboard: React.FC<ClientSelectionDashboardProps> =
                         <h1 className="text-xl font-bold text-gray-900">Agency Workspace</h1>
                     </div>
                     <div className="flex items-center gap-4">
+                        <button
+                            onClick={onViewIntegrations}
+                            className="text-sm font-medium text-gray-600 hover:text-blue-600 flex items-center gap-2"
+                        >
+                            <Link2 className="h-4 w-4" />
+                            Integrations
+                        </button>
                         <button
                             onClick={onViewAnalytics}
                             className="text-sm font-medium text-gray-600 hover:text-purple-600 flex items-center gap-2"

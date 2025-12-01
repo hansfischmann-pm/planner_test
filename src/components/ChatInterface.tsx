@@ -18,10 +18,19 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, onSendMe
   const [input, setInput] = useState('');
   const [expandedAgents, setExpandedAgents] = useState<Set<string>>(new Set());
   const bottomRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  useEffect(() => {
+    const handleFocus = () => {
+      inputRef.current?.focus();
+    };
+    window.addEventListener('focus-chat', handleFocus);
+    return () => window.removeEventListener('focus-chat', handleFocus);
+  }, []);
 
   const handleSend = () => {
     if (!input.trim()) return;
@@ -338,9 +347,9 @@ class AudienceOptimizer {
               }`}
           >
             <div
-              className={`max-w-[65%] rounded-2xl p-4 ${msg.role === 'user'
-                ? 'bg-purple-600 text-white rounded-br-none'
-                : 'bg-gray-100 text-gray-800 rounded-bl-none'
+              className={`rounded-2xl p-4 ${msg.role === 'user'
+                ? `bg-purple-600 text-white rounded-br-none ${layout === 'BOTTOM' ? 'max-w-[65%]' : 'max-w-[90%]'}`
+                : `bg-gray-100 text-gray-800 rounded-bl-none ${layout === 'BOTTOM' ? 'max-w-[65%]' : 'max-w-[90%]'}`
                 }`}
             >
               {msg.agentsInvoked && msg.agentsInvoked.length > 0 && (
@@ -436,6 +445,7 @@ class AudienceOptimizer {
             {/* Center: Input field and send button */}
             <div className="flex-1 flex gap-2">
               <input
+                ref={inputRef}
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -477,6 +487,7 @@ class AudienceOptimizer {
             {/* Input field and send button - Centered, responsive to panel width */}
             <div className="flex gap-2 px-4">
               <input
+                ref={inputRef}
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}

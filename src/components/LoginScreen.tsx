@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { User, UserType } from '../types';
 import { SAMPLE_USERS } from '../logic/dummyData';
-import { Mail, Lock, ArrowRight, AlertCircle } from 'lucide-react';
+import { Mail, Lock, AlertCircle, Layout } from 'lucide-react';
 
 interface LoginScreenProps {
     onLogin: (user: User) => void;
@@ -37,26 +37,33 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
     };
 
     return (
-        <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-            <div className="sm:mx-auto sm:w-full sm:max-w-md">
-                <div className="flex justify-center">
-                    <div className="bg-purple-600 p-3 rounded-xl shadow-lg">
-                        <img src="/adroll-logo.png" alt="FuseIQ" className="h-8 w-auto brightness-0 invert" />
+        <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-50 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-4">
+            <div className="w-full max-w-md space-y-6">
+                {/* Logo Card */}
+                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8">
+                    <div className="text-center">
+                        <div className="flex items-center justify-center gap-3 mb-4">
+                            <div className="w-12 h-12 bg-purple-600 rounded-lg flex items-center justify-center">
+                                <Layout className="w-7 h-7 text-white" />
+                            </div>
+                            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">FuseIQ</h1>
+                        </div>
+                        <p className="text-gray-600 dark:text-gray-400">AI-Powered Media Planning Platform</p>
                     </div>
                 </div>
-                <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-                    Sign in to FuseIQ
-                </h2>
-                <p className="mt-2 text-center text-sm text-gray-600">
-                    Or use the demo credentials below
-                </p>
-            </div>
 
-            <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-                <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
+                {/* Login Form Card */}
+                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8">
+                    <h2 className="text-center text-2xl font-bold text-gray-900 dark:text-white mb-2">
+                        Sign in to FuseIQ
+                    </h2>
+                    <p className="text-center text-sm text-gray-600 dark:text-gray-400 mb-6">
+                        Or use the demo credentials below
+                    </p>
+
                     <form className="space-y-6" onSubmit={handleSubmit}>
                         <div>
-                            <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                            <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                                 Email address
                             </label>
                             <div className="mt-1 relative rounded-md shadow-sm">
@@ -71,14 +78,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
                                     required
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
-                                    className="focus:ring-purple-500 focus:border-purple-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md py-2 border"
+                                    className="focus:ring-purple-500 focus:border-purple-500 block w-full pl-10 sm:text-sm border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md py-2 border"
                                     placeholder="you@example.com"
                                 />
                             </div>
                         </div>
 
                         <div>
-                            <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+                            <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                                 Password
                             </label>
                             <div className="mt-1 relative rounded-md shadow-sm">
@@ -93,20 +100,20 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
                                     required
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
-                                    className="focus:ring-purple-500 focus:border-purple-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md py-2 border"
+                                    className="focus:ring-purple-500 focus:border-purple-500 block w-full pl-10 sm:text-sm border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md py-2 border"
                                     placeholder="••••••••"
                                 />
                             </div>
                         </div>
 
                         {error && (
-                            <div className="rounded-md bg-red-50 p-4">
+                            <div className="rounded-md bg-red-50 dark:bg-red-900/20 p-4">
                                 <div className="flex">
                                     <div className="flex-shrink-0">
                                         <AlertCircle className="h-5 w-5 text-red-400" />
                                     </div>
                                     <div className="ml-3">
-                                        <h3 className="text-sm font-medium text-red-800">
+                                        <h3 className="text-sm font-medium text-red-800 dark:text-red-200">
                                             {error}
                                         </h3>
                                     </div>
@@ -128,10 +135,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
                     <div className="mt-6">
                         <div className="relative">
                             <div className="absolute inset-0 flex items-center">
-                                <div className="w-full border-t border-gray-300" />
+                                <div className="w-full border-t border-gray-300 dark:border-gray-600" />
                             </div>
                             <div className="relative flex justify-center text-sm">
-                                <span className="px-2 bg-white text-gray-500">
+                                <span className="px-2 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400">
                                     Demo Credentials
                                 </span>
                             </div>
@@ -144,9 +151,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
                                     const user = SAMPLE_USERS.find(u => u.email === 'agency_demo@fuseiq.ai');
                                     if (user) onLogin(user);
                                 }}
-                                className="w-full inline-flex justify-center items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+                                className="w-full inline-flex justify-center items-center px-4 py-2 border border-gray-300 dark:border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600"
                             >
-                                <span className="sr-only">Use Agency Demo</span>
                                 Use Agency Demo (agency_demo@fuseiq.ai)
                             </button>
                             <button
@@ -155,9 +161,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
                                     const user = SAMPLE_USERS.find(u => u.email === 'brand_demo@fuseiq.ai');
                                     if (user) onLogin(user);
                                 }}
-                                className="w-full inline-flex justify-center items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+                                className="w-full inline-flex justify-center items-center px-4 py-2 border border-gray-300 dark:border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600"
                             >
-                                <span className="sr-only">Use Brand Demo</span>
                                 Use Brand Demo (brand_demo@fuseiq.ai)
                             </button>
                         </div>

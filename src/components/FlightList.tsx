@@ -1,21 +1,41 @@
 import React, { useState } from 'react';
-import { Flight } from '../types';
-import { Calendar, DollarSign, ArrowRight, Layers, Pause, Plus, Send } from 'lucide-react';
+import { Flight, CampaignTemplate } from '../types';
+import { Calendar, DollarSign, ArrowRight, Layers, Pause, Plus, Send, Rocket, Sparkles, ExternalLink } from 'lucide-react';
+import { TemplateLibrary } from './TemplateLibrary';
+import { TemplateWizard } from './TemplateWizard';
 
 interface FlightListProps {
     flights: Flight[];
     onSelectFlight: (flight: Flight) => void;
     onBack: () => void;
     onPauseFlight?: (flightId: string) => void;
+    onActivateFlight?: (flightId: string) => void;
     onCreateFlight?: (name: string, budget?: number, startDate?: string, endDate?: string) => void;
+    onAddFlightFromTemplate?: (flight: Flight) => void;
+    brandId?: string;
+    brandName?: string;
 }
 
-export const FlightList: React.FC<FlightListProps> = ({ flights, onSelectFlight, onBack, onPauseFlight, onCreateFlight }) => {
+export const FlightList: React.FC<FlightListProps> = ({
+    flights,
+    onSelectFlight,
+    onBack,
+    onPauseFlight,
+    onActivateFlight,
+    onCreateFlight,
+    onAddFlightFromTemplate,
+    brandId = 'brand-123', // Fallback
+    brandName = 'Brand' // Fallback
+}) => {
     const [showNewFlight, setShowNewFlight] = useState(false);
+    const [showTemplateLibrary, setShowTemplateLibrary] = useState(false);
+    const [selectedTemplate, setSelectedTemplate] = useState<CampaignTemplate | null>(null);
+
     const [flightName, setFlightName] = useState('');
     const [flightBudget, setFlightBudget] = useState('');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
+
     const handlePause = (e: React.MouseEvent, flightId: string) => {
         e.stopPropagation(); // Prevent flight selection
         if (onPauseFlight) {
@@ -23,26 +43,82 @@ export const FlightList: React.FC<FlightListProps> = ({ flights, onSelectFlight,
         }
     };
 
+    if (selectedTemplate) {
+        return (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div className="p-4 border-b border-gray-200 flex items-center gap-2">
+                    <button
+                        onClick={() => setSelectedTemplate(null)}
+                        className="text-gray-500 hover:text-gray-700"
+                    >
+                        ← Back
+                    </button>
+                    <h2 className="text-lg font-semibold">New Flight from Template</h2>
+                </div>
+                <TemplateWizard
+                    template={selectedTemplate}
+                    brandId={brandId}
+                    brandName={brandName}
+                    mode="FLIGHT"
+                    onCompleteFlight={(flight) => {
+                        if (onAddFlightFromTemplate) {
+                            onAddFlightFromTemplate(flight);
+                        }
+                        setSelectedTemplate(null);
+                        setShowTemplateLibrary(false);
+                    }}
+                    onCancel={() => setSelectedTemplate(null)}
+                />
+            </div>
+        );
+    }
+
+    if (showTemplateLibrary) {
+        return (
+            <div className="space-y-6">
+                <div className="flex items-center gap-4 mb-6">
+                    <button
+                        onClick={() => setShowTemplateLibrary(false)}
+                        className="text-sm text-gray-500 hover:text-gray-900 flex items-center gap-1"
+                    >
+                        ← Back to Flights
+                    </button>
+                </div>
+                <TemplateLibrary
+                    onSelectTemplate={setSelectedTemplate}
+                    onClose={() => setShowTemplateLibrary(false)}
+                />
+            </div>
+        );
+    }
+
     return (
-        <div className="space-y-6">
-            <div className="flex items-center gap-4 mb-6">
+        <div className="p-6 space-y-6">
+            <div className="flex items-center justify-between">
                 <button
                     onClick={onBack}
-                    className="text-sm text-gray-500 hover:text-gray-900 flex items-center gap-1"
+                    className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
                 >
                     ← Back to Campaigns
                 </button>
-            </div>
-
-            <div className="flex items-center justify-between">
-                <h2 className="text-xl font-bold text-gray-900">Campaign Flights</h2>
-                <button
-                    onClick={() => setShowNewFlight(!showNewFlight)}
-                    className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors flex items-center gap-2"
-                >
-                    <Plus className="h-4 w-4" />
-                    Add Flight
-                </button>
+                <div className="flex gap-2">
+                    {onAddFlightFromTemplate && (
+                        <button
+                            onClick={() => setShowTemplateLibrary(true)}
+                            className="px-4 py-2 bg-white border border-purple-200 text-purple-700 rounded-lg text-sm font-medium hover:bg-purple-50 transition-colors flex items-center gap-2"
+                        >
+                            <Sparkles className="h-4 w-4" />
+                            Use Template
+                        </button>
+                    )}
+                    <button
+                        onClick={() => setShowNewFlight(!showNewFlight)}
+                        className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors flex items-center gap-2"
+                    >
+                        <Plus className="h-4 w-4" />
+                        Add Flight
+                    </button>
+                </div>
             </div>
 
             {/* Flight Creation Input */}
@@ -180,12 +256,37 @@ export const FlightList: React.FC<FlightListProps> = ({ flights, onSelectFlight,
                                     </div>
                                 </div>
                                 {flight.status === 'ACTIVE' && onPauseFlight && (
+                                    <div className="flex gap-1">
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                // Simulate push to DSP
+                                                alert(`Pushing flight "${flight.name}" to The Trade Desk...`);
+                                            }}
+                                            className="p-2 rounded-lg hover:bg-blue-100 text-blue-600 hover:text-blue-700 transition-colors"
+                                            title="Push to DSP"
+                                        >
+                                            <ExternalLink className="h-4 w-4" />
+                                        </button>
+                                        <button
+                                            onClick={(e) => handlePause(e, flight.id)}
+                                            className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+                                            title="Pause flight"
+                                        >
+                                            <Pause className="h-4 w-4" />
+                                        </button>
+                                    </div>
+                                )}
+                                {flight.status === 'DRAFT' && onActivateFlight && (
                                     <button
-                                        onClick={(e) => handlePause(e, flight.id)}
-                                        className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
-                                        title="Pause flight"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onActivateFlight(flight.id);
+                                        }}
+                                        className="p-2 rounded-lg hover:bg-green-100 text-green-600 hover:text-green-700 transition-colors"
+                                        title="Launch flight"
                                     >
-                                        <Pause className="h-4 w-4" />
+                                        <Rocket className="h-4 w-4" />
                                     </button>
                                 )}
                                 <ArrowRight className="h-5 w-5 text-gray-300 group-hover:text-purple-500 transition-colors" />

@@ -14,6 +14,79 @@ interface PlanVisualizerProps {
     onDeletePlacement?: (placementId: string) => void;
 }
 
+interface EditableCellProps {
+    value: string | number;
+    onSave: (value: string) => void;
+    type?: 'text' | 'number' | 'currency';
+    align?: 'left' | 'right' | 'center';
+}
+
+const EditableCell: React.FC<EditableCellProps> = ({ value, onSave, type = 'text', align = 'left' }) => {
+    const [isEditing, setIsEditing] = useState(false);
+    const [tempValue, setTempValue] = useState(value.toString());
+
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter') {
+            onSave(tempValue);
+            setIsEditing(false);
+        } else if (e.key === 'Escape') {
+            setTempValue(value.toString());
+            setIsEditing(false);
+        }
+    };
+
+    const handleBlur = () => {
+        onSave(tempValue);
+        setIsEditing(false);
+    };
+
+    const inputRef = React.useRef<HTMLInputElement>(null);
+
+    React.useEffect(() => {
+        if (isEditing && inputRef.current) {
+            inputRef.current.select();
+        }
+    }, [isEditing]);
+
+    if (isEditing) {
+        return (
+            <input
+                ref={inputRef}
+                autoFocus
+                value={tempValue}
+                onChange={(e) => setTempValue(e.target.value)}
+                onKeyDown={handleKeyDown}
+                onBlur={handleBlur}
+                onClick={(e) => e.stopPropagation()}
+                className={clsx(
+                    "w-full bg-white border border-blue-500 rounded px-1 py-0.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500",
+                    align === 'right' && "text-right",
+                    align === 'center' && "text-center"
+                )}
+            />
+        );
+    }
+
+    return (
+        <div
+            onClick={(e) => {
+                e.stopPropagation();
+                setIsEditing(true);
+                setTempValue(value.toString());
+            }}
+            className={clsx(
+                "cursor-text hover:bg-gray-100 rounded px-1 -mx-1 border border-transparent hover:border-gray-200 transition-colors",
+                align === 'right' && "text-right",
+                align === 'center' && "text-center"
+            )}
+        >
+            {type === 'currency'
+                ? `$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                : value}
+        </div>
+    );
+};
+
 export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGroupingChange, onUpdatePlacement, onDeletePlacement }) => {
     const [viewMode, setViewMode] = useState<'PLANNING' | 'PERFORMANCE'>('PLANNING');
     const [expandedChannels, setExpandedChannels] = useState<Set<string>>(new Set());
@@ -300,13 +373,31 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
 
             {viewMode === 'PLANNING' ? (
                 <>
-                    <td className="py-3 px-6 text-sm text-gray-500 tabular-nums">{placement.startDate} — {placement.endDate}</td>
+                    <td className="py-3 px-6 text-sm text-gray-500 tabular-nums">
+                        <EditableCell
+                            value={`${placement.startDate} — ${placement.endDate}`}
+                            onSave={(val) => {
+                                const [start, end] = val.split('—').map(s => s.trim());
+                                if (start && end) {
+                                    handlePlacementUpdate({ ...placement, startDate: start, endDate: end });
+                                }
+                            }}
+                            type="text"
+                        />
+                    </td>
                     <td className="py-3 px-6 text-sm text-gray-600 text-right tabular-nums">{(placement.forecast?.impressions || 0).toLocaleString()}</td>
                     <td className="py-3 px-6 text-sm text-gray-600 text-right tabular-nums">
                         ${placement.rate.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-xs text-gray-400">/{placement.costMethod}</span>
                     </td>
                     <td className="py-3 px-6 text-sm text-gray-600 text-right tabular-nums">{placement.quantity.toLocaleString()}</td>
-                    <td className="py-3 px-6 text-sm font-medium text-gray-900 text-right tabular-nums">${placement.totalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    <td className="py-3 px-6 text-sm font-medium text-gray-900 text-right tabular-nums">
+                        <EditableCell
+                            value={placement.totalCost}
+                            onSave={(val) => handlePlacementUpdate({ ...placement, totalCost: Number(val) })}
+                            type="currency"
+                            align="right"
+                        />
+                    </td>
                     <td className="py-3 px-6 text-sm text-gray-400 text-center text-xs">{placement.forecast?.source || 'Internal'}</td>
                 </>
             ) : (
@@ -508,7 +599,7 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
 
                 {/* Scrollable Table Area */}
                 <div className="flex-1 overflow-auto">
-                    <table className="w-full">
+                    <table className="w-full min-w-[1000px] lg:min-w-0">
                         <thead className="bg-gray-50 sticky top-0 z-10">
                             <tr>
                                 <HeaderCell label="#" />

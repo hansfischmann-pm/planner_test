@@ -10,6 +10,7 @@ import { contextManager } from './contextManager';
 import { recommendBudgetAllocation, analyzeBudgetUsage, suggestOptimizations } from '../utils/budgetOptimizer';
 import { generateBatchPlacements } from '../utils/placementGenerator';
 import { actionHistory } from '../utils/actionHistory';
+import { CAMPAIGN_TEMPLATES } from './campaignTemplates';
 import { generateOptimizationReport, formatOptimizationReport } from '../utils/optimizationEngine';
 import { analyzePlan, getAnalysisSummary } from '../utils/performanceAnalyzer';
 import { forecastCampaign, formatForecastResult, calculateAudienceOverlap } from '../utils/forecastingEngine';
@@ -110,9 +111,13 @@ export class AgentBrain {
         // =================================================================
         // GOAL SETTING COMMANDS (Global - Overrides State)
         // =================================================================
-        // Patterns: "set goal impressions 1M", "update goal conversions 500", "show goals"
+        // Patterns: "set goal impressions 1M", "update goal conversions 500", "show goals", "increase reach to 1M"
         const lowerInput = input.toLowerCase();
-        if (lowerInput.includes('goal') && (lowerInput.includes('set') || lowerInput.includes('show') || lowerInput.includes('update') || lowerInput.includes('change') || lowerInput.includes('list') || lowerInput.includes('what are'))) {
+        const hasGoalKeyword = lowerInput.includes('goal') ||
+            (lowerInput.includes('increase') && (lowerInput.includes('reach') || lowerInput.includes('impression') || lowerInput.includes('conversion') || lowerInput.includes('click'))) ||
+            (lowerInput.includes('set') && (lowerInput.includes('reach') || lowerInput.includes('impression') || lowerInput.includes('conversion') || lowerInput.includes('click')));
+
+        if (hasGoalKeyword && (lowerInput.includes('set') || lowerInput.includes('show') || lowerInput.includes('update') || lowerInput.includes('change') || lowerInput.includes('list') || lowerInput.includes('what are') || lowerInput.includes('increase'))) {
             try {
                 const plan = this.context.mediaPlan;
                 if (!plan) {
@@ -153,9 +158,9 @@ export class AgentBrain {
                     return response;
                 }
 
-                // Handle "Set/Update Goal"
-                if (lowerInput.includes('set') || lowerInput.includes('update') || lowerInput.includes('change') || lowerInput.includes('add')) {
-                    console.log('[AgentBrain] Matched: Set goal');
+                // Handle "Set/Update/Increase Goal"
+                if (lowerInput.includes('set') || lowerInput.includes('update') || lowerInput.includes('change') || lowerInput.includes('add') || lowerInput.includes('increase')) {
+                    console.log('[AgentBrain] Matched: Set/Update/Increase goal');
 
                     // Parse metric
                     let metric: 'impressions' | 'reach' | 'conversions' | 'clicks' | null = null;
@@ -197,21 +202,27 @@ export class AgentBrain {
                     else if (suffix === 'm') value *= 1000000;
                     else if (suffix === 'b') value *= 1000000000;
 
-                    // Update plan with deep copy to avoid state corruption
+                    // Update plan with goal - preserve all existing data
                     if (!plan.campaign.numericGoals) {
                         plan.campaign.numericGoals = {};
                     }
                     plan.campaign.numericGoals[metric] = Math.floor(value);
 
-                    // Return updated plan in response - create a proper deep copy
+                    // Return updated plan in response - preserve all existing data
                     const response = this.createAgentMessage(
                         `✅ **Goal Updated!**\n\nI've set your **${metric}** goal to **${Math.floor(value).toLocaleString()}**.\n\nThe goal tracking card in your plan view has been updated.`,
                         ['Show goals', 'Forecast this campaign']
                     );
 
                     // Important: Attach updated plan to trigger UI update
-                    // Create a deep copy to prevent state mutations from affecting the display
-                    response.updatedMediaPlan = JSON.parse(JSON.stringify(plan));
+                    // Use shallow copy to preserve all references (especially placements)
+                    response.updatedMediaPlan = {
+                        ...plan,
+                        campaign: {
+                            ...plan.campaign,
+                            numericGoals: { ...plan.campaign.numericGoals }
+                        }
+                    };
                     this.context.history.push(response);
                     contextManager.addMessage(this.sessionId, 'assistant', response.content);
                     return response;
@@ -221,6 +232,96 @@ export class AgentBrain {
                 const response = this.createAgentMessage(
                     "I encountered an error while processing your goal command: " + (e.message || String(e)),
                     ['Show goals']
+                );
+                this.context.history.push(response);
+                contextManager.addMessage(this.sessionId, 'assistant', response.content);
+                return response;
+            }
+        }
+
+        // =================================================================
+        // CAMPAIGN TEMPLATE COMMANDS (Phase 5.4)
+        // =================================================================
+        if (lowerInput.includes('template')) {
+            try {
+                // "Show me templates" or "List templates"
+                if (lowerInput.includes('show') || lowerInput.includes('list') || lowerInput.includes('browse') || lowerInput.includes('what') || lowerInput.includes('available')) {
+                    let responseContent = "**📋 Campaign Templates**\n\nI have 6 pre-configured templates to help you get started quickly:\n\n";
+
+                    CAMPAIGN_TEMPLATES.forEach(template => {
+                        responseContent += `${template.icon} **${template.name}**\n`;
+                        responseContent += `   ${template.description}\n`;
+                        responseContent += `   • Budget: $${(template.recommendedBudget.optimal / 1000).toFixed(0)}k (optimal)\n`;
+                        responseContent += `   • Channels: ${template.channelMix.map(m => m.channel).join(', ')}\n\n`;
+                    });
+
+                    responseContent += "To use a template, click the **Use Template** button in the campaign list or say \"create campaign from [template name]\".";
+
+                    const response = this.createAgentMessage(responseContent, [
+                        'Use Template',
+                        'Tell me about the Retail Holiday template',
+                        'What\'s best for B2B?'
+                    ]);
+                    this.context.history.push(response);
+                    contextManager.addMessage(this.sessionId, 'assistant', responseContent);
+                    return response;
+                }
+
+                // "Tell me about [template]" or "What's the [template] template?"
+                const templateNames = ['retail holiday', 'b2b lead gen', 'brand launch', 'performance max', 'local store', 'mobile app'];
+                const matchedTemplate = CAMPAIGN_TEMPLATES.find(t =>
+                    templateNames.some(name => lowerInput.includes(name)) && lowerInput.includes(t.name.toLowerCase().split(' ')[0])
+                );
+
+                if (matchedTemplate) {
+                    let responseContent = `**${matchedTemplate.icon} ${matchedTemplate.name}**\n\n`;
+                    responseContent += `${matchedTemplate.description}\n\n`;
+                    responseContent += `**📊 Recommended Budget:** $${(matchedTemplate.recommendedBudget.min / 1000).toFixed(0)}k - $${(matchedTemplate.recommendedBudget.max / 1000).toFixed(0)}k (optimal: $${(matchedTemplate.recommendedBudget.optimal / 1000).toFixed(0)}k)\n\n`;
+                    responseContent += `**📺 Channel Mix:**\n`;
+                    matchedTemplate.channelMix.forEach(mix => {
+                        responseContent += `• ${mix.channel} (${mix.percentage}%): ${mix.rationale}\n`;
+                    });
+                    responseContent += `\n**🎯 Default Goals:**\n`;
+                    if (matchedTemplate.defaultGoals.impressions) responseContent += `• Impressions: ${matchedTemplate.defaultGoals.impressions.toLocaleString()}\n`;
+                    if (matchedTemplate.defaultGoals.reach) responseContent += `• Reach: ${matchedTemplate.defaultGoals.reach.toLocaleString()}\n`;
+                    if (matchedTemplate.defaultGoals.conversions) responseContent += `• Conversions: ${matchedTemplate.defaultGoals.conversions.toLocaleString()}\n`;
+
+                    const response = this.createAgentMessage(responseContent, ['Use this template', 'Show all templates']);
+                    this.context.history.push(response);
+                    contextManager.addMessage(this.sessionId, 'assistant', responseContent);
+                    return response;
+                }
+
+                // "What's best for [industry/goal]?"
+                if (lowerInput.includes('best for') || lowerInput.includes('recommend')) {
+                    let recommendation = null;
+
+                    if (lowerInput.includes('b2b') || lowerInput.includes('lead')) {
+                        recommendation = CAMPAIGN_TEMPLATES.find(t => t.id === 'b2b-lead-gen');
+                    } else if (lowerInput.includes('retail') || lowerInput.includes('ecommerce') || lowerInput.includes('store')) {
+                        recommendation = CAMPAIGN_TEMPLATES.find(t => t.id === 'retail-holiday');
+                    } else if (lowerInput.includes('brand') || lowerInput.includes('awareness') || lowerInput.includes('launch')) {
+                        recommendation = CAMPAIGN_TEMPLATES.find(t => t.id === 'brand-launch');
+                    } else if (lowerInput.includes('performance') || lowerInput.includes('conversion') || lowerInput.includes('roi')) {
+                        recommendation = CAMPAIGN_TEMPLATES.find(t => t.id === 'performance-max');
+                    } else if (lowerInput.includes('app') || lowerInput.includes('mobile')) {
+                        recommendation = CAMPAIGN_TEMPLATES.find(t => t.id === 'mobile-app-launch');
+                    }
+
+                    if (recommendation) {
+                        const responseContent = `Based on your requirements, I recommend the **${recommendation.icon} ${recommendation.name}** template.\n\n${recommendation.description}\n\nThis template is optimized with:\n• ${recommendation.channelMix.length} channels including ${recommendation.channelMix.slice(0, 3).map(m => m.channel).join(', ')}\n• Recommended budget: $${(recommendation.recommendedBudget.optimal / 1000).toFixed(0)}k\n• Complexity: ${recommendation.complexity}\n\nClick **Use Template** in the campaign list to get started!`;
+                        const response = this.createAgentMessage(responseContent, ['Use Template', 'Show all templates']);
+                        this.context.history.push(response);
+                        contextManager.addMessage(this.sessionId, 'assistant', responseContent);
+                        return response;
+                    }
+                }
+
+            } catch (e: any) {
+                console.error("Error in template logic:", e);
+                const response = this.createAgentMessage(
+                    "I encountered an error while processing template commands: " + (e.message || String(e)),
+                    ['Show campaigns']
                 );
                 this.context.history.push(response);
                 contextManager.addMessage(this.sessionId, 'assistant', response.content);
