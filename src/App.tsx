@@ -4,9 +4,7 @@ import { PlanVisualizer } from './components/PlanVisualizer';
 import { OnboardingHints } from './components/OnboardingHints';
 import { LoginScreen } from './components/LoginScreen';
 import { ClientSelectionDashboard } from './components/ClientSelectionDashboard';
-import { ClientSwitcher } from './components/ClientSwitcher';
 import { LayoutControls } from './components/LayoutControls';
-import { ContextualHelp } from './components/ContextualHelp';
 import { CampaignList } from './components/CampaignList';
 import { FlightList } from './components/FlightList';
 import { AgencyAnalyticsDashboard } from './components/AgencyAnalyticsDashboard';
@@ -14,11 +12,9 @@ import { IntegrationDashboard } from './components/IntegrationDashboard';
 import { GlobalShortcuts } from './components/GlobalShortcuts';
 
 import { AgentBrain, AgentState } from './logic/agentBrain';
-import { AgentMessage, MediaPlan, User, Brand, Campaign, Flight, UserType, LayoutPosition, Placement } from './types';
+import { AgentMessage, MediaPlan, User, Brand, Campaign, Flight, LayoutPosition, Placement } from './types';
+import { generateLargeScaleData } from './data/largeScaleData';
 import {
-    MOCK_DATA,
-    SAMPLE_BRANDS,
-    generateCampaign,
     generateFlight,
     generateId,
     calculateFlightForecast,
@@ -57,15 +53,15 @@ const updateBrandMetrics = (brand: Brand): Brand => {
 
 import { generateMediaPlanPDF } from './utils/pdfGenerator';
 import { generateMediaPlanPPT } from './utils/pptGenerator';
-import { Layout, LogOut, MessageSquare, PieChart, Settings, Users, Moon, Sun, BarChart2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Layout, LogOut, PieChart, Settings, Users, Moon, Sun, BarChart2, ChevronLeft, ChevronRight } from 'lucide-react';
 
 type ViewState = 'LOGIN' | 'CLIENT_SELECTION' | 'CAMPAIGN_LIST' | 'FLIGHT_LIST' | 'MEDIA_PLAN' | 'AGENCY_ANALYTICS' | 'INTEGRATIONS';
 
 function App() {
     // Mutable Data State
     const [brands, setBrands] = useState(() => {
-        // Deep copy MOCK_DATA.brands to allow mutations
-        return JSON.parse(JSON.stringify(MOCK_DATA.brands));
+        // Use large scale data generator
+        return generateLargeScaleData();
     });
 
     // Navigation & Context State
@@ -107,6 +103,13 @@ function App() {
     const toggleTheme = () => {
         setTheme(prev => prev === 'light' ? 'dark' : 'light');
     };
+
+    // Sync current brand with AgentBrain
+    useEffect(() => {
+        if (brainRef.current) {
+            brainRef.current.setBrand(currentBrand);
+        }
+    }, [currentBrand]);
 
     // Sidebar State
     const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
@@ -201,8 +204,8 @@ function App() {
         if (user.type === 'AGENCY') {
             setView('CLIENT_SELECTION');
         } else {
-            // For brand user, find their brand
-            const brand = SAMPLE_BRANDS.find(b => b.id === user.brandId);
+            // For brand user, find their brand from the brands state
+            const brand = brands.find(b => b.id === user.brandId);
             if (brand) {
                 setCurrentBrand(brand);
                 setView('CAMPAIGN_LIST');
@@ -225,11 +228,10 @@ function App() {
     const handleSelectFlight = (flight: Flight) => {
         setCurrentFlight(flight);
 
-        // Initialize Media Plan from Flight Data
+        // Create initial media plan from flight
         const initialPlan: MediaPlan = {
-            id: flight.id,
+            id: generateId(),
             campaign: currentCampaign!,
-            activeFlightId: flight.id,
             totalSpend: flight.lines.reduce((sum, line) => sum + line.totalCost, 0),
             remainingBudget: flight.budget - flight.lines.reduce((sum, line) => sum + line.totalCost, 0),
             version: 1,
@@ -238,37 +240,29 @@ function App() {
             metrics: calculatePlanMetrics(flight.lines)
         };
 
-        // Reset Brain with new context
-        brainRef.current = new AgentBrain();
-        // Note: In a real app, we'd pass the initialPlan to the brain here
-        // For now, we'll manually set the context in the brain if needed, 
-        // or just rely on the visualizer to show the plan.
-        // Since AgentBrain manages state internally, we might need a method to load a plan.
-        // For this mock, we'll just set the local state.
-
-        // HACK: We need to inject this plan into the brain so it knows about it
-        const ctx = brainRef.current.getContext();
-        ctx.mediaPlan = initialPlan;
-        ctx.mediaPlan.campaign.placements = flight.lines; // Legacy support for brain logic
+        // Don't reset the brain - preserve existing state and history
+        // Just update the media plan in the existing brain
+        if (brainRef.current) {
+            const ctx = brainRef.current.getContext();
+            ctx.mediaPlan = initialPlan;
+            ctx.mediaPlan.campaign.placements = flight.lines; // Legacy support for brain logic
+        }
 
         setMediaPlan(initialPlan);
         setMessages([{
-            id: 'welcome',
+            id: 'init',
             role: 'agent',
-            content: `Welcome to the media plan for **${flight.name}**. I've loaded the current lines. How can I help you optimize this flight?`,
-            timestamp: Date.now()
+            content: `I've loaded the **${flight.name}** flight. You have ${flight.lines.length} placements totaling **$${flight.budget.toLocaleString()}**. How can I help optimize this plan?`,
+            timestamp: Date.now(),
+            suggestedActions: ['Show performance', 'Optimize plan', 'Add placement']
         }]);
-        setAgentState('IDLE');
-
+        setAgentState('REFINEMENT' as AgentState);
         setView('MEDIA_PLAN');
     };
 
-    const handleSwitchBrand = (brand: Brand) => {
-        setCurrentBrand(brand);
-        setCurrentCampaign(null);
-        setCurrentFlight(null);
-        setView('CAMPAIGN_LIST');
-    };
+
+
+
 
     const handleCreateCampaign = (name: string, budget?: number, startDate?: string, endDate?: string) => {
         if (!currentBrand) return;
@@ -288,7 +282,8 @@ function App() {
             endDate: endDate || in90Days,
             goals: ['Brand Awareness'],
             flights: [], // Start with zero flights
-            status: 'PLANNING',
+            status: 'DRAFT',
+            tags: [],
             forecast: {
                 impressions: 0,
                 spend: 0,
@@ -368,6 +363,7 @@ function App() {
             endDate: endDate || baseFlight.endDate,
             lines: [], // Start with zero lines
             status: 'DRAFT', // New flights start as draft
+            tags: [],
             forecast: {
                 impressions: 0,
                 spend: 0,
@@ -762,7 +758,7 @@ function App() {
     if (view === 'CLIENT_SELECTION') {
         return (
             <ClientSelectionDashboard
-                brands={SAMPLE_BRANDS}
+                brands={brands}
                 onSelectBrand={handleSelectBrand}
                 onViewAnalytics={() => setView('AGENCY_ANALYTICS')}
                 onViewIntegrations={() => setView('INTEGRATIONS')}
@@ -773,7 +769,7 @@ function App() {
     if (view === 'AGENCY_ANALYTICS') {
         return (
             <AgencyAnalyticsDashboard
-                brands={SAMPLE_BRANDS}
+                brands={brands}
                 onBack={() => setView('CLIENT_SELECTION')}
             />
         );
@@ -976,7 +972,7 @@ function App() {
                         {/* Chat Panel */}
                         <div
                             className={`bg-white dark:bg-gray-800 flex flex-col border-gray-200 dark:border-gray-700 transition-colors duration-200 ${layout === 'BOTTOM'
-                                ? 'border-t order-2'
+                                ? 'border-t order-3'
                                 : layout === 'RIGHT'
                                     ? 'border-l order-3'
                                     : 'border-r order-1'
@@ -1003,7 +999,7 @@ function App() {
                             onMouseDown={handleMouseDown}
                             className={`bg-gray-200 dark:bg-gray-700 hover:bg-purple-400 transition-colors ${isResizing ? 'bg-purple-500' : ''
                                 } ${layout === 'BOTTOM'
-                                    ? 'h-1 cursor-ns-resize w-full order-1'
+                                    ? 'h-1 cursor-ns-resize w-full order-2'
                                     : layout === 'RIGHT'
                                         ? 'w-1 cursor-ew-resize h-full order-2'
                                         : 'w-1 cursor-ew-resize h-full order-2'

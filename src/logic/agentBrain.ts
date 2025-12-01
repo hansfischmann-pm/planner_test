@@ -20,6 +20,7 @@ export type AgentState = 'INIT' | 'BUDGETING' | 'CHANNEL_SELECTION' | 'REFINEMEN
 interface AgentContext {
     state: AgentState;
     mediaPlan: MediaPlan | null;
+    brand?: Brand | null;
     history: AgentMessage[];
     agents: AgentInfo[];
     executions: AgentExecution[];
@@ -54,6 +55,10 @@ export class AgentBrain {
         this.context.mediaPlan = plan;
     }
 
+    setBrand(brand: Brand | null) {
+        this.context.brand = brand;
+    }
+
     processInput(input: string): AgentMessage {
         const userMsg: AgentMessage = {
             id: Date.now().toString(),
@@ -80,7 +85,9 @@ export class AgentBrain {
         let agentMsg: AgentMessage | null = null;
 
         // GLOBAL: Layout Commands (work regardless of media plan state)
-        const layoutMatch = input.toLowerCase().match(/(?:switch to|change to|set layout to|layout)\s+(left|right|bottom)/i);
+        // Enhanced pattern matching to handle typos and variations
+        // Matches: "switch left", "swtich left", "change left", "move to left", etc.
+        const layoutMatch = input.toLowerCase().match(/(?:sw[it]+ch|change|set|move|go)(?:\s+to)?\s+(left|right|bottom)/i);
         if (layoutMatch) {
             const position = layoutMatch[1].toUpperCase() as 'LEFT' | 'RIGHT' | 'BOTTOM';
             responseContent = "I've switched the layout to **" + layoutMatch[1] + "** position.";
@@ -443,6 +450,39 @@ export class AgentBrain {
         // 2. STATE-SPECIFIC LOGIC
         switch (this.context.state) {
             case 'INIT':
+                // SAFEGUARD: If a media plan already exists, don't accidentally create a new one
+                // unless the user explicitly says "new campaign" or "create campaign"
+                if (this.context.mediaPlan &&
+                    !lowerInput.includes('new campaign') &&
+                    !lowerInput.includes('create campaign') &&
+                    !lowerInput.includes('start over') &&
+                    !lowerInput.includes('reset')) {
+
+                    // Check if this looks like an accidental trigger (has numbers but unclear intent)
+                    const hasNumbers = /\d/.test(input);
+                    if (hasNumbers) {
+                        return this.createAgentMessage(
+                            "⚠️ **Wait!** You already have an active campaign.\n\n" +
+                            "Did you mean to:\n" +
+                            "• Modify the existing campaign?\n" +
+                            "• Create a brand new campaign? (say 'create new campaign')\n\n" +
+                            "I want to make sure I don't accidentally overwrite your work!",
+                            ['Continue with existing campaign', 'Create new campaign']
+                        );
+                    }
+
+                    // If no numbers, treat as unclear command
+                    return this.createAgentMessage(
+                        "I'm not sure what you'd like me to do. You have an active campaign.\n\n" +
+                        "Try commands like:\n" +
+                        "• 'Add TV placement'\n" +
+                        "• 'Show goals'\n" +
+                        "• 'Optimize my plan'\n" +
+                        "• 'Create new campaign' (to start fresh)",
+                        ['Show goals', 'Add placement', 'Optimize plan']
+                    );
+                }
+
                 // Improved parsing for k/m/mm suffixes
                 const budgetMatch = input.match(/\$?(\d+(?:,\d{3})*(?:\.\d+)?)\s*([kK]|[mM]{1,2})?/);
                 let budget = 100000;

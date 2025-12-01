@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Campaign, CampaignTemplate } from '../types';
 import { Calendar, DollarSign, ArrowRight, Plus, MessageSquare, Send, Sparkles } from 'lucide-react';
 import { TemplateLibrary } from './TemplateLibrary';
@@ -40,30 +40,140 @@ export const CampaignList: React.FC<CampaignListProps> = ({ campaigns, onSelectC
         }
     };
 
+    // Search & Filter State
+    const [searchQuery, setSearchQuery] = useState('');
+    const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'PAUSED' | 'DRAFT' | 'COMPLETED' | 'ARCHIVED'>('ALL');
+    const [sortBy, setSortBy] = useState<'status' | 'name' | 'startDate' | 'endDate' | 'budget'>('status');
+    const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+    const [visibleCount, setVisibleCount] = useState(20);
+
+    // Filter and sort campaigns
+    const filteredCampaigns = useMemo(() => {
+        // First filter
+        const filtered = campaigns.filter(c => {
+            const matchesSearch = c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                c.tags?.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
+
+            if (statusFilter === 'ALL') return matchesSearch && c.status !== 'ARCHIVED';
+            if (statusFilter === 'ARCHIVED') return matchesSearch && c.status === 'ARCHIVED';
+            return matchesSearch && c.status === statusFilter;
+        });
+
+        // Then sort
+        return filtered.sort((a, b) => {
+            let comparison = 0;
+
+            if (sortBy === 'status') {
+                const statusOrder: Record<string, number> = {
+                    ACTIVE: 1,
+                    PAUSED: 2,
+                    DRAFT: 3,
+                    COMPLETED: 4,
+                    ARCHIVED: 5
+                };
+                comparison = (statusOrder[a.status] || 999) - (statusOrder[b.status] || 999);
+            } else if (sortBy === 'name') {
+                comparison = a.name.localeCompare(b.name);
+            } else if (sortBy === 'startDate') {
+                comparison = new Date(a.startDate).getTime() - new Date(b.startDate).getTime();
+            } else if (sortBy === 'endDate') {
+                comparison = new Date(a.endDate).getTime() - new Date(b.endDate).getTime();
+            } else if (sortBy === 'budget') {
+                comparison = a.budget - b.budget;
+            }
+
+            return sortDirection === 'asc' ? comparison : -comparison;
+        });
+    }, [campaigns, searchQuery, statusFilter, sortBy, sortDirection]);
+
+    const visibleCampaigns = filteredCampaigns.slice(0, visibleCount);
+    const hasMore = visibleCount < filteredCampaigns.length;
+
+    const handleLoadMore = () => {
+        setVisibleCount(prev => prev + 20);
+    };
+
     return (
         <div className="p-6 space-y-6">
-            <div className="flex items-center justify-between">
-                <div className="flex gap-2">
-                    <button
-                        onClick={() => setShowTemplateLibrary(true)}
-                        className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg text-sm font-medium hover:from-purple-700 hover:to-pink-700 transition-all flex items-center gap-2 shadow-sm"
-                    >
-                        <Sparkles className="h-4 w-4" />
-                        Use Template
-                    </button>
-                    <button
-                        onClick={() => setShowNewCampaign(!showNewCampaign)}
-                        className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors flex items-center gap-2"
-                    >
-                        <Plus className="h-4 w-4" />
-                        New Campaign
-                    </button>
+            <div className="flex flex-col gap-4">
+                <div className="flex items-center justify-between">
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => setShowTemplateLibrary(true)}
+                            className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg text-sm font-medium hover:from-purple-700 hover:to-pink-700 transition-all flex items-center gap-2 shadow-sm"
+                        >
+                            <Sparkles className="h-4 w-4" />
+                            Use Template
+                        </button>
+                        <button
+                            onClick={() => setShowNewCampaign(!showNewCampaign)}
+                            className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors flex items-center gap-2"
+                        >
+                            <Plus className="h-4 w-4" />
+                            New Campaign
+                        </button>
+                    </div>
+                </div>
+
+                {/* Search & Filter Bar */}
+                <div className="flex items-center gap-4 bg-white p-3 rounded-xl border border-gray-200 shadow-sm">
+                    <div className="flex-1 relative">
+                        <input
+                            type="text"
+                            placeholder="Search campaigns by name or tag..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        />
+                        <div className="absolute left-3 top-2.5 text-gray-400">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
+                        </div>
+                    </div>
+
+                    <div className="flex bg-gray-100 p-1 rounded-lg">
+                        {(['ALL', 'ACTIVE', 'PAUSED', 'DRAFT', 'COMPLETED', 'ARCHIVED'] as const).map(status => (
+                            <button
+                                key={status}
+                                onClick={() => setStatusFilter(status)}
+                                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${statusFilter === status
+                                    ? 'bg-white text-purple-700 shadow-sm'
+                                    : 'text-gray-500 hover:text-gray-700'
+                                    }`}
+                            >
+                                {status.charAt(0) + status.slice(1).toLowerCase()}
+                            </button>
+                        ))}
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <select
+                            value={sortBy}
+                            onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+                            className="px-3 py-1.5 text-xs font-medium border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        >
+                            <option value="status">Sort by Status</option>
+                            <option value="name">Sort by Name</option>
+                            <option value="startDate">Sort by Start Date</option>
+                            <option value="endDate">Sort by End Date</option>
+                            <option value="budget">Sort by Budget</option>
+                        </select>
+                        <button
+                            onClick={() => setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')}
+                            className="p-1.5 text-gray-500 hover:text-gray-700 rounded-md transition-colors"
+                        >
+                            {sortDirection === 'asc' ? (
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
+                            ) : (
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m18 15-6-6-6 6" /></svg>
+                            )}
+                        </button>
+                    </div>
                 </div>
             </div>
 
             {/* Campaign Creation Input */}
             {showNewCampaign && (
                 <div className="bg-white p-4 rounded-xl border border-purple-200 shadow-sm">
+                    {/* ... existing creation form ... */}
                     <div className="flex items-center gap-2 mb-3">
                         <MessageSquare className="h-5 w-5 text-purple-600" />
                         <h3 className="text-sm font-medium text-gray-900">Create New Campaign</h3>
@@ -139,7 +249,7 @@ export const CampaignList: React.FC<CampaignListProps> = ({ campaigns, onSelectC
             )}
 
             <div className="grid gap-4">
-                {campaigns.map((campaign) => (
+                {visibleCampaigns.map((campaign) => (
                     <div
                         key={campaign.id}
                         onClick={() => onSelectCampaign(campaign)}
@@ -164,7 +274,7 @@ export const CampaignList: React.FC<CampaignListProps> = ({ campaigns, onSelectC
                             <div className="flex items-center gap-4">
                                 <div className="text-right">
                                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${campaign.status === 'ACTIVE' ? 'bg-green-100 text-green-800' :
-                                        campaign.status === 'PLANNING' ? 'bg-blue-100 text-blue-800' :
+                                        campaign.status === 'DRAFT' ? 'bg-blue-100 text-blue-800' :
                                             'bg-gray-100 text-gray-800'
                                         }`}>
                                         {campaign.status}
@@ -185,11 +295,8 @@ export const CampaignList: React.FC<CampaignListProps> = ({ campaigns, onSelectC
                                     <span>Campaign Timeline</span>
                                     <span>
                                         {(() => {
-                                            const start = new Date(campaign.startDate);
                                             const end = new Date(campaign.endDate);
                                             const now = new Date();
-                                            const total = end.getTime() - start.getTime();
-                                            const elapsed = now.getTime() - start.getTime();
                                             const remaining = end.getTime() - now.getTime();
                                             const daysRemaining = Math.ceil(remaining / (1000 * 60 * 60 * 24));
                                             return daysRemaining > 0 ? `${daysRemaining} days remaining` : 'Completed';
@@ -251,6 +358,18 @@ export const CampaignList: React.FC<CampaignListProps> = ({ campaigns, onSelectC
                     </div>
                 ))}
             </div>
+
+            {/* Load More Button */}
+            {hasMore && (
+                <div className="flex justify-center pt-4">
+                    <button
+                        onClick={handleLoadMore}
+                        className="px-6 py-2 bg-white border border-gray-200 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 hover:text-purple-600 transition-colors shadow-sm"
+                    >
+                        Load More ({filteredCampaigns.length - visibleCount} remaining)
+                    </button>
+                </div>
+            )}
 
             {/* Template Library Modal */}
             {showTemplateLibrary && (

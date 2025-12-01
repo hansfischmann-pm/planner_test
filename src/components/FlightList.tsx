@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Flight, CampaignTemplate } from '../types';
-import { Calendar, DollarSign, ArrowRight, Layers, Pause, Plus, Send, Rocket, Sparkles, ExternalLink } from 'lucide-react';
+import { Calendar, DollarSign, ArrowRight, Layers, Pause, Plus, Send, Rocket, Sparkles, ExternalLink, Search, Filter } from 'lucide-react';
 import { TemplateLibrary } from './TemplateLibrary';
 import { TemplateWizard } from './TemplateWizard';
 
@@ -36,12 +36,57 @@ export const FlightList: React.FC<FlightListProps> = ({
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
 
+    // Search & Filter State
+    const [searchQuery, setSearchQuery] = useState('');
+    const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'PAUSED' | 'DRAFT' | 'COMPLETED' | 'ARCHIVED'>('ALL');
+    const [sortBy, setSortBy] = useState<'status' | 'name' | 'startDate' | 'endDate' | 'budget'>('status');
+    const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+    const [visibleCount, setVisibleCount] = useState(20);
+
     const handlePause = (e: React.MouseEvent, flightId: string) => {
         e.stopPropagation(); // Prevent flight selection
         if (onPauseFlight) {
             onPauseFlight(flightId);
         }
     };
+
+    const filteredFlights = useMemo(() => {
+        // First filter
+        const filtered = flights.filter(flight => {
+            const matchesSearch = flight.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                flight.tags?.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
+            const matchesStatus = statusFilter === 'ALL' || flight.status === statusFilter;
+            return matchesSearch && matchesStatus;
+        });
+
+        // Then sort
+        return filtered.sort((a, b) => {
+            let comparison = 0;
+
+            if (sortBy === 'status') {
+                const statusOrder: Record<string, number> = {
+                    ACTIVE: 1,
+                    PAUSED: 2,
+                    DRAFT: 3,
+                    COMPLETED: 4,
+                    ARCHIVED: 5
+                };
+                comparison = (statusOrder[a.status] || 999) - (statusOrder[b.status] || 999);
+            } else if (sortBy === 'name') {
+                comparison = a.name.localeCompare(b.name);
+            } else if (sortBy === 'startDate') {
+                comparison = new Date(a.startDate).getTime() - new Date(b.startDate).getTime();
+            } else if (sortBy === 'endDate') {
+                comparison = new Date(a.endDate).getTime() - new Date(b.endDate).getTime();
+            } else if (sortBy === 'budget') {
+                comparison = a.budget - b.budget;
+            }
+
+            return sortDirection === 'asc' ? comparison : -comparison;
+        });
+    }, [flights, searchQuery, statusFilter, sortBy, sortDirection]);
+
+    const visibleFlights = filteredFlights.slice(0, visibleCount);
 
     if (selectedTemplate) {
         return (
@@ -117,6 +162,60 @@ export const FlightList: React.FC<FlightListProps> = ({
                     >
                         <Plus className="h-4 w-4" />
                         Add Flight
+                    </button>
+                </div>
+            </div>
+
+            {/* Search and Filters */}
+            <div className="flex flex-col sm:flex-row gap-4 justify-between items-center bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+                <div className="relative w-full sm:w-96">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <input
+                        type="text"
+                        placeholder="Search flights..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    />
+                </div>
+                <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-2 sm:pb-0">
+                    <Filter className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                    {(['ALL', 'ACTIVE', 'PAUSED', 'DRAFT', 'COMPLETED', 'ARCHIVED'] as const).map((status) => (
+                        <button
+                            key={status}
+                            onClick={() => setStatusFilter(status)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${statusFilter === status
+                                ? 'bg-purple-100 text-purple-700'
+                                : 'text-gray-600 hover:bg-gray-100'
+                                }`}
+                        >
+                            {status === 'ALL' ? 'All Flights' : status.charAt(0) + status.slice(1).toLowerCase()}
+                        </button>
+                    ))
+                    }
+                </div>
+                <div className="flex items-center gap-2">
+                    <select
+                        value={sortBy}
+                        onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+                        className="px-3 py-1.5 text-xs font-medium border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    >
+                        <option value="status">Sort by Status</option>
+                        <option value="name">Sort by Name</option>
+                        <option value="startDate">Sort by Start Date</option>
+                        <option value="endDate">Sort by End Date</option>
+                        <option value="budget">Sort by Budget</option>
+                    </select>
+                    <button
+                        onClick={() => setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')}
+                        className="p-1.5 text-gray-500 hover:text-gray-700 rounded-md transition-colors"
+                        title={sortDirection === 'asc' ? 'Sort ascending' : 'Sort descending'}
+                    >
+                        {sortDirection === 'asc' ? (
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
+                        ) : (
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m18 15-6-6-6 6" /></svg>
+                        )}
                     </button>
                 </div>
             </div>
@@ -205,7 +304,7 @@ export const FlightList: React.FC<FlightListProps> = ({
             )}
 
             <div className="grid gap-4">
-                {flights.map((flight) => (
+                {visibleFlights.map((flight) => (
                     <div
                         key={flight.id}
                         onClick={() => onSelectFlight(flight)}
@@ -301,7 +400,6 @@ export const FlightList: React.FC<FlightListProps> = ({
                                     <span>Flight Timeline</span>
                                     <span>
                                         {(() => {
-                                            const start = new Date(flight.startDate);
                                             const end = new Date(flight.endDate);
                                             const now = new Date();
                                             const remaining = end.getTime() - now.getTime();
@@ -365,6 +463,17 @@ export const FlightList: React.FC<FlightListProps> = ({
                     </div>
                 ))}
             </div>
+
+            {visibleFlights.length < filteredFlights.length && (
+                <div className="flex justify-center pt-4">
+                    <button
+                        onClick={() => setVisibleCount(prev => prev + 20)}
+                        className="px-6 py-2 bg-white border border-gray-200 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors shadow-sm"
+                    >
+                        Load More ({filteredFlights.length - visibleFlights.length} remaining)
+                    </button>
+                </div>
+            )}
         </div>
     );
 };

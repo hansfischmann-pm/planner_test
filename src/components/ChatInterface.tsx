@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { AgentMessage } from '../types';
+import { AgentState } from '../logic/agentBrain';
 import { Send, Cpu, ChevronDown, ChevronRight } from 'lucide-react';
 import { ContextualHelp } from './ContextualHelp';
 import { ForecastCards, ForecastCardData } from './ForecastCards';
@@ -9,7 +10,7 @@ interface ChatInterfaceProps {
   onSendMessage: (msg: string) => void;
   isTyping?: boolean;
   currentView?: 'LOGIN' | 'CLIENT_SELECTION' | 'CAMPAIGN_LIST' | 'FLIGHT_LIST' | 'MEDIA_PLAN' | 'AGENCY_ANALYTICS';
-  agentState?: 'IDLE' | 'WORKING' | 'WAITING';
+  agentState?: AgentState;
   hasPlan?: boolean;
   layout?: 'LEFT' | 'RIGHT' | 'BOTTOM';
 }

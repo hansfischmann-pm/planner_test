@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { HelpCircle, ChevronDown, ChevronUp, Lightbulb } from 'lucide-react';
+import { AgentState } from '../logic/agentBrain';
 
 interface ContextualHelpProps {
-    state: 'IDLE' | 'WORKING' | 'WAITING';
+    state: AgentState | 'IDLE';
     currentView?: 'LOGIN' | 'CLIENT_SELECTION' | 'CAMPAIGN_LIST' | 'FLIGHT_LIST' | 'MEDIA_PLAN' | 'AGENCY_ANALYTICS';
     hasPlan?: boolean;
     onSendPrompt: (prompt: string) => void;
@@ -132,7 +133,6 @@ export const ContextualHelp: React.FC<ContextualHelpProps> = ({ state, currentVi
                                                     setIsExpanded(false);
                                                 }}
                                                 className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-purple-50 hover:text-purple-700 rounded-lg transition-colors flex items-start gap-2"
-                                                disabled={state === 'WORKING'}
                                             >
                                                 <span className="text-purple-400 mt-0.5">→</span>
                                                 <span className="flex-1">{prompt}</span>

@@ -21,6 +21,8 @@ export interface Brand {
     campaigns: Campaign[];
 }
 
+export type EntityStatus = 'DRAFT' | 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'ARCHIVED';
+
 export interface Creative {
     id: string;
     name: string;
@@ -35,6 +37,16 @@ export interface Creative {
 
 export type Channel = 'Search' | 'Social' | 'Display' | 'TV' | 'Radio' | 'OOH' | 'Print';
 
+export interface Segment {
+    id: string;
+    name: string;
+    category: 'Demographics' | 'Behavioral' | 'Interest' | 'B2B' | 'Contextual' | 'First-Party' | 'Pixel-Based' | 'Custom';
+    vendor?: string; // Data provider (e.g., Adobe Audience Manager, Lotame, etc.)
+    reach?: number; // Estimated audience size
+    cpmUplift: number; // Additional cost per thousand impressions  
+    description?: string;
+}
+
 
 export interface Flight {
     id: string;
@@ -43,8 +55,9 @@ export interface Flight {
     startDate: string;
     endDate: string;
     budget: number;
-    lines: Placement[]; // Changed from Line[] to Placement[]
-    status: 'DRAFT' | 'ACTIVE' | 'COMPLETED';
+    status: EntityStatus;
+    tags: string[];
+    lines: Line[];
     forecast?: ForecastMetrics;
     delivery?: DeliveryMetrics;
 }
@@ -125,7 +138,8 @@ export interface Campaign {
         clicks?: number;
     };
     flights: Flight[];
-    status: 'PLANNING' | 'ACTIVE' | 'COMPLETED';
+    status: EntityStatus;
+    tags: string[];
     forecast?: ForecastMetrics;
     delivery?: DeliveryMetrics;
     // Legacy support (optional, or computed)
@@ -239,7 +253,8 @@ export interface Line {
     status: PlacementStatus;
     vendor: string;
     adUnit: string;
-    segment?: string;
+    segment?: string; // Legacy - single segment name
+    segments?: Segment[]; // New - multiple segments with full metadata
     rate: number;
     costMethod: CostMethod;
     startDate: string;

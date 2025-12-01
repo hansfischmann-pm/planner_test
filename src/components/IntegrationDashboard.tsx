@@ -60,7 +60,7 @@ export const IntegrationDashboard: React.FC<IntegrationDashboardProps> = ({ onBa
     };
 
     return (
-        <div className="space-y-6">
+        <div className="px-8 space-y-6">
             <div className="flex items-center gap-4 mb-6">
                 <button
                     onClick={onBack}
