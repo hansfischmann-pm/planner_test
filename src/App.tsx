@@ -264,7 +264,11 @@ function App() {
 
 
 
-    const handleCreateCampaign = (name: string, budget?: number, startDate?: string, endDate?: string) => {
+    const handleUpdateBrand = (updatedBrand: Brand) => {
+        setBrands(prevBrands => prevBrands.map(b => b.id === updatedBrand.id ? updatedBrand : b));
+    };
+
+    const handleCreateCampaign = (name: string, budget: number, startDate: string, endDate: string, goals: string[]) => {
         if (!currentBrand) return;
 
         const campaignId = generateId();
@@ -760,6 +764,7 @@ function App() {
             <ClientSelectionDashboard
                 brands={brands}
                 onSelectBrand={handleSelectBrand}
+                onUpdateBrand={handleUpdateBrand}
                 onViewAnalytics={() => setView('AGENCY_ANALYTICS')}
                 onViewIntegrations={() => setView('INTEGRATIONS')}
             />

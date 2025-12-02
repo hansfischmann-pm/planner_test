@@ -19,6 +19,16 @@ export interface Brand {
     budget?: number;
     activeCampaigns?: number;
     campaigns: Campaign[];
+
+    // Enhanced fields
+    industry?: string;
+    tier?: 'Enterprise' | 'Mid-Market' | 'SMB';
+    status?: 'Active' | 'Inactive' | 'Onboarding';
+    accountManager?: string;
+    lastActivity?: string;
+    monthlySpend?: number;
+    campaignCount?: number;
+    lifetimeValue?: number;
 }
 
 export type EntityStatus = 'DRAFT' | 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'ARCHIVED';
@@ -111,7 +121,7 @@ export interface MediaPlan {
     totalSpend: number;
     remainingBudget: number;
     version: number;
-    groupingMode?: 'CHANNEL_SUMMARY' | 'DETAILED';
+    groupingMode?: 'DETAILED' | 'CHANNEL_SUMMARY' | 'VENDOR' | 'SEGMENT' | 'STATUS' | 'FLIGHT' | 'OBJECTIVE' | 'DEVICE' | 'GEO';
     strategy?: 'BALANCED' | 'DIGITAL' | 'AWARENESS';
 
     // New fields for Phase 1

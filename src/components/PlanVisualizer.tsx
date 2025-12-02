@@ -1,15 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { MediaPlan, Placement } from '../types';
-import { BarChart3, LayoutList, Rows, ArrowUp, ArrowDown, ArrowUpDown, ChevronDown, ChevronRight, Trash2, Download, Presentation } from 'lucide-react';
+import { BarChart3, LayoutList, Rows, ArrowUp, ArrowDown, ArrowUpDown, ChevronDown, ChevronRight, Trash2, Download, Presentation, Layers, Filter } from 'lucide-react';
 import { clsx } from 'clsx';
 import { PlacementDetailPanel } from './PlacementDetailPanel';
 import { PlanMetricsSummary } from './PlanMetricsSummary';
 import { generateMediaPlanPDF } from '../utils/pdfGenerator';
 import { generateMediaPlanPPT } from '../utils/pptGenerator';
 
+type GroupingMode = 'DETAILED' | 'CHANNEL_SUMMARY' | 'VENDOR' | 'SEGMENT' | 'STATUS' | 'FLIGHT' | 'OBJECTIVE' | 'DEVICE' | 'GEO';
+
 interface PlanVisualizerProps {
     mediaPlan: MediaPlan | null;
-    onGroupingChange?: (mode: 'DETAILED' | 'CHANNEL_SUMMARY') => void;
+    onGroupingChange?: (mode: GroupingMode) => void;
     onUpdatePlacement?: (placement: Placement) => void;
     onDeletePlacement?: (placementId: string) => void;
 }
@@ -89,26 +91,21 @@ const EditableCell: React.FC<EditableCellProps> = ({ value, onSave, type = 'text
 
 export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGroupingChange, onUpdatePlacement, onDeletePlacement }) => {
     const [viewMode, setViewMode] = useState<'PLANNING' | 'PERFORMANCE'>('PLANNING');
-    const [expandedChannels, setExpandedChannels] = useState<Set<string>>(new Set());
+    const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
     const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
     const [selectedPlacementId, setSelectedPlacementId] = useState<string | null>(null);
     const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
 
     const handlePlacementUpdate = (updatedPlacement: Placement) => {
         if (!mediaPlan) return;
-
-        // Notify parent to handle state update and metric recalculation
         if (onUpdatePlacement) {
             onUpdatePlacement(updatedPlacement);
         }
-
-        if (onGroupingChange) onGroupingChange(mediaPlan.groupingMode || 'DETAILED');
     };
 
-    // Safety cleanup: If the placement is gone from the plan, remove it from deletingIds
+    // Safety cleanup
     React.useEffect(() => {
         if (!mediaPlan || !mediaPlan.campaign.placements) return;
-
         const currentIds = new Set(mediaPlan.campaign.placements.map(p => p.id));
         setDeletingIds(prev => {
             const next = new Set(prev);
@@ -124,15 +121,11 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
     }, [mediaPlan]);
 
     const handleDeletePlacement = async (placementId: string, e: React.MouseEvent) => {
-        console.log('[PlanVisualizer] Delete clicked for:', placementId);
         e.stopPropagation();
         e.preventDefault();
-
         if (deletingIds.has(placementId)) return;
 
         setDeletingIds(prev => new Set(prev).add(placementId));
-
-        // Safety timeout: Clear the spinner after 5 seconds if deletion fails or hangs
         setTimeout(() => {
             setDeletingIds(prev => {
                 if (prev.has(placementId)) {
@@ -144,19 +137,11 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
             });
         }, 5000);
 
-        // Small delay to show the loading state (optional, but good for UX)
         await new Promise(resolve => setTimeout(resolve, 300));
 
         if (!mediaPlan || !mediaPlan.campaign.placements) return;
-
-        // Close detail panel if deleting the selected placement
         if (selectedPlacementId === placementId) setSelectedPlacementId(null);
-
-        // Notify parent to handle state update and metric recalculation
-        if (onDeletePlacement) {
-            console.log('[PlanVisualizer] Calling parent handler');
-            onDeletePlacement(placementId);
-        }
+        if (onDeletePlacement) onDeletePlacement(placementId);
     };
 
     if (!mediaPlan) {
@@ -169,16 +154,16 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
         );
     }
 
-    const { campaign, groupingMode } = mediaPlan;
+    const { campaign, groupingMode = 'DETAILED' } = mediaPlan;
 
-    const toggleExpand = (channel: string) => {
-        const newExpanded = new Set(expandedChannels);
-        if (newExpanded.has(channel)) {
-            newExpanded.delete(channel);
+    const toggleExpand = (groupKey: string) => {
+        const newExpanded = new Set(expandedGroups);
+        if (newExpanded.has(groupKey)) {
+            newExpanded.delete(groupKey);
         } else {
-            newExpanded.add(channel);
+            newExpanded.add(groupKey);
         }
-        setExpandedChannels(newExpanded);
+        setExpandedGroups(newExpanded);
     };
 
     const handleSort = (key: string) => {
@@ -206,72 +191,81 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
         });
     };
 
+    // Generic Grouping Logic
+    const groupedData = useMemo(() => {
+        if (!campaign.placements || groupingMode === 'DETAILED') return null;
+
+        const groups: Record<string, any> = {};
+
+        campaign.placements.forEach(p => {
+            let key = 'Other';
+
+            switch (groupingMode) {
+                case 'CHANNEL_SUMMARY': key = p.channel; break;
+                case 'VENDOR': key = p.vendor || 'Unknown Vendor'; break;
+                case 'SEGMENT': key = p.segment || 'General Audience'; break;
+                case 'STATUS': key = p.status || 'Unknown'; break;
+                case 'DEVICE': key = p.targeting?.devices?.[0] || 'All Devices'; break;
+                case 'GEO': key = p.targeting?.geo?.[0] || 'National'; break;
+                default: key = 'Other';
+            }
+
+            if (!groups[key]) {
+                groups[key] = {
+                    key,
+                    label: key,
+                    count: 0,
+                    totalCost: 0,
+                    impressions: 0,
+                    conversions: 0,
+                    clicks: 0,
+                    placements: []
+                };
+            }
+
+            groups[key].count++;
+            groups[key].totalCost += p.totalCost;
+            groups[key].impressions += p.forecast?.impressions || 0; // Use forecast for planning view
+            groups[key].conversions += p.performance?.conversions || 0;
+            groups[key].clicks += p.performance?.clicks || 0;
+            groups[key].placements.push(p);
+        });
+
+        return Object.values(groups).map(g => ({
+            ...g,
+            cpa: g.conversions > 0 ? g.totalCost / g.conversions : 0,
+            roas: g.totalCost > 0 ? (g.conversions * 50) / g.totalCost : 0,
+        }));
+    }, [campaign.placements, groupingMode]);
+
     const renderTableContent = () => {
-        if (!campaign.placements || campaign.placements.length === 0) {
-            return null;
-        }
+        if (!campaign.placements || campaign.placements.length === 0) return null;
 
-        // Channel Summary View
-        if (groupingMode === 'CHANNEL_SUMMARY') {
-            const channelGroups = campaign.placements.reduce((acc, p) => {
-                if (!acc[p.channel]) {
-                    acc[p.channel] = {
-                        channel: p.channel,
-                        count: 0,
-                        totalCost: 0,
-                        impressions: 0,
-                        conversions: 0,
-                        clicks: 0,
-                        placements: []
-                    };
-                }
-                acc[p.channel].count++;
-                acc[p.channel].totalCost += p.totalCost;
-                acc[p.channel].impressions += p.performance?.impressions || 0;
-                acc[p.channel].conversions += p.performance?.conversions || 0;
-                acc[p.channel].clicks += p.performance?.clicks || 0;
-                acc[p.channel].placements.push(p);
-                return acc;
-            }, {} as Record<string, any>);
-
-            const groups = Object.values(channelGroups).map((g: any) => ({
-                ...g,
-                cpa: g.conversions > 0 ? g.totalCost / g.conversions : 0,
-                roas: g.totalCost > 0 ? (g.conversions * 50) / g.totalCost : 0,
-            }));
-
-            const sortedGroups = getSortedData(groups);
+        if (groupingMode !== 'DETAILED' && groupedData) {
+            const sortedGroups = getSortedData(groupedData);
 
             return sortedGroups.flatMap((group: any, index: number) => {
-                const isExpanded = expandedChannels.has(group.channel);
+                const isExpanded = expandedGroups.has(group.key);
 
                 const groupRow = (
                     <tr
-                        key={group.channel}
-                        onClick={() => toggleExpand(group.channel)}
-                        className="hover:bg-gray-50 transition-colors font-medium cursor-pointer"
+                        key={group.key}
+                        onClick={() => toggleExpand(group.key)}
+                        className="hover:bg-gray-50 transition-colors font-medium cursor-pointer bg-gray-50/30"
                     >
                         <td className="py-3 px-6 text-sm text-gray-400 font-mono flex items-center gap-2">
                             {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                             {index + 1}
                         </td>
-                        <td className="py-3 px-6 text-sm text-gray-900">
-                            <span className={clsx(
-                                "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium",
-                                group.channel === 'Search' && "bg-blue-100 text-blue-800",
-                                group.channel === 'Social' && "bg-pink-100 text-pink-800",
-                                group.channel === 'Display' && "bg-purple-100 text-purple-800",
-                                ['TV', 'Radio', 'OOH', 'Print'].includes(group.channel) && "bg-orange-100 text-orange-800"
-                            )}>
-                                {group.channel}
-                            </span>
+                        <td className="py-3 px-6 text-sm text-gray-900 font-semibold">
+                            {group.label}
                         </td>
                         <td className="py-3 px-6 text-sm text-gray-600">{group.count} Placements</td>
                         <td className="py-3 px-6 text-sm text-gray-500">-</td>
                         {viewMode === 'PLANNING' ? (
                             <>
                                 <td className="py-3 px-6 text-sm text-gray-500 tabular-nums">-</td>
-                                <td className="py-3 px-6 text-sm text-gray-600 text-right tabular-nums">{(group.placements.reduce((sum: number, p: any) => sum + (p.forecast?.impressions || 0), 0)).toLocaleString()}</td>
+                                <td className="py-3 px-6 text-sm text-gray-600 text-right tabular-nums">{group.impressions.toLocaleString()}</td>
                                 <td className="py-3 px-6 text-sm text-gray-600 text-right tabular-nums">-</td>
                                 <td className="py-3 px-6 text-sm text-gray-600 text-right tabular-nums">-</td>
                                 <td className="py-3 px-6 text-sm font-bold text-gray-900 text-right tabular-nums">${group.totalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
@@ -283,13 +277,10 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
                                     <div className="flex flex-col gap-1">
                                         <div className="flex justify-between text-xs mb-1">
                                             <span>{group.impressions.toLocaleString()}</span>
-                                            <span className="text-gray-400">/ {(group.placements.reduce((sum: number, p: any) => sum + (p.forecast?.impressions || 0), 0)).toLocaleString()}</span>
+                                            <span className="text-gray-400">/ {group.impressions.toLocaleString()}</span>
                                         </div>
                                         <div className="w-full bg-gray-100 rounded-full h-1.5">
-                                            <div
-                                                className="bg-blue-500 h-1.5 rounded-full"
-                                                style={{ width: `${Math.min(100, (group.impressions / Math.max(1, group.placements.reduce((sum: number, p: any) => sum + (p.forecast?.impressions || 0), 0))) * 100)}%` }}
-                                            />
+                                            <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: '50%' }} />
                                         </div>
                                     </div>
                                 </td>
@@ -297,13 +288,10 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
                                     <div className="flex flex-col gap-1">
                                         <div className="flex justify-between text-xs mb-1">
                                             <span>${group.totalCost.toLocaleString()}</span>
-                                            <span className="text-gray-400">/ ${(group.placements.reduce((sum: number, p: any) => sum + (p.forecast?.spend || 0), 0)).toLocaleString()}</span>
+                                            <span className="text-gray-400">/ ${group.totalCost.toLocaleString()}</span>
                                         </div>
                                         <div className="w-full bg-gray-100 rounded-full h-1.5">
-                                            <div
-                                                className="bg-green-500 h-1.5 rounded-full"
-                                                style={{ width: `${Math.min(100, (group.totalCost / Math.max(1, group.placements.reduce((sum: number, p: any) => sum + (p.forecast?.spend || 0), 0))) * 100)}%` }}
-                                            />
+                                            <div className="bg-green-500 h-1.5 rounded-full" style={{ width: '50%' }} />
                                         </div>
                                     </div>
                                 </td>
@@ -548,28 +536,60 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
                     {/* Controls */}
                     <div className="flex justify-between items-center mt-4">
                         <div className="flex gap-4 items-center">
-                            {/* Grouping Toggle */}
-                            <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
-                                <button
-                                    onClick={() => onGroupingChange?.('DETAILED')}
-                                    className={clsx(
-                                        "px-3 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2",
-                                        groupingMode === 'DETAILED' ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
-                                    )}
-                                >
-                                    <LayoutList className="w-4 h-4" />
-                                    <span className="hidden sm:inline">Line Items</span>
-                                </button>
-                                <button
-                                    onClick={() => onGroupingChange?.('CHANNEL_SUMMARY')}
-                                    className={clsx(
-                                        "px-3 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2",
-                                        groupingMode === 'CHANNEL_SUMMARY' ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
-                                    )}
-                                >
-                                    <Rows className="w-4 h-4" />
-                                    <span className="hidden sm:inline">Summary</span>
-                                </button>
+                            {/* Grouping Dropdown */}
+                            <div className="relative group">
+                                <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
+                                    <button
+                                        onClick={() => onGroupingChange?.('DETAILED')}
+                                        className={clsx(
+                                            "px-3 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2",
+                                            groupingMode === 'DETAILED' ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
+                                        )}
+                                    >
+                                        <LayoutList className="w-4 h-4" />
+                                        <span className="hidden sm:inline">Flat</span>
+                                    </button>
+
+                                    <div className="relative">
+                                        <button
+                                            className={clsx(
+                                                "px-3 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2",
+                                                groupingMode !== 'DETAILED' ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
+                                            )}
+                                        >
+                                            <Layers className="w-4 h-4" />
+                                            <span className="hidden sm:inline">
+                                                {groupingMode === 'DETAILED' ? 'Group By' :
+                                                    groupingMode === 'CHANNEL_SUMMARY' ? 'Channel' :
+                                                        groupingMode.charAt(0) + groupingMode.slice(1).toLowerCase()}
+                                            </span>
+                                            <ChevronDown className="w-3 h-3 ml-1" />
+                                        </button>
+
+                                        {/* Dropdown Menu - Simple CSS hover for now */}
+                                        <div className="absolute left-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-100 py-1 hidden group-hover:block z-20">
+                                            {[
+                                                { id: 'CHANNEL_SUMMARY', label: 'Channel' },
+                                                { id: 'VENDOR', label: 'Vendor' },
+                                                { id: 'SEGMENT', label: 'Segment' },
+                                                { id: 'STATUS', label: 'Status' },
+                                                { id: 'DEVICE', label: 'Device' },
+                                                { id: 'GEO', label: 'Geo' }
+                                            ].map(option => (
+                                                <button
+                                                    key={option.id}
+                                                    onClick={() => onGroupingChange?.(option.id as GroupingMode)}
+                                                    className={clsx(
+                                                        "w-full text-left px-4 py-2 text-sm hover:bg-gray-50",
+                                                        groupingMode === option.id ? "text-purple-600 font-medium" : "text-gray-700"
+                                                    )}
+                                                >
+                                                    {option.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
 
                             {/* View Mode Toggle */}
@@ -603,13 +623,13 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
                         <thead className="bg-gray-50 sticky top-0 z-10">
                             <tr>
                                 <HeaderCell label="#" />
-                                <HeaderCell label="Channel" sortKey="channel" />
-                                <HeaderCell label="Vendor/Segment" sortKey="vendor" />
+                                <HeaderCell label={groupingMode === 'DETAILED' ? "Channel" : "Group Name"} sortKey={groupingMode === 'DETAILED' ? "channel" : "label"} />
+                                <HeaderCell label={groupingMode === 'DETAILED' ? "Vendor/Segment" : "Count"} sortKey={groupingMode === 'DETAILED' ? "vendor" : "count"} />
                                 <HeaderCell label="Ad Unit" />
                                 {viewMode === 'PLANNING' ? (
                                     <>
                                         <HeaderCell label="Flight Dates" />
-                                        <HeaderCell label="Forecasted Impressions" sortKey="forecast.impressions" align="right" />
+                                        <HeaderCell label="Forecasted Impressions" sortKey={groupingMode === 'DETAILED' ? "forecast.impressions" : "impressions"} align="right" />
                                         <HeaderCell label="Rate" align="right" />
                                         <HeaderCell label="Quantity" align="right" />
                                         <HeaderCell label="Total Cost" sortKey="totalCost" align="right" />
@@ -617,10 +637,10 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
                                     </>
                                 ) : (
                                     <>
-                                        <HeaderCell label="Impressions (Delivered / Forecast)" sortKey="delivery.actualImpressions" />
-                                        <HeaderCell label="Spend (Actual / Budget)" sortKey="delivery.actualSpend" />
+                                        <HeaderCell label="Impressions (Delivered / Forecast)" sortKey={groupingMode === 'DETAILED' ? "delivery.actualImpressions" : "impressions"} />
+                                        <HeaderCell label="Spend (Actual / Budget)" sortKey={groupingMode === 'DETAILED' ? "delivery.actualSpend" : "totalCost"} />
                                         <HeaderCell label="Pacing" sortKey="delivery.pacing" align="right" />
-                                        <HeaderCell label="ROAS" sortKey="performance.roas" align="right" />
+                                        <HeaderCell label="ROAS" sortKey={groupingMode === 'DETAILED' ? "performance.roas" : "roas"} align="right" />
                                         <HeaderCell label="Status" align="center" />
                                     </>
                                 )}
