@@ -17,6 +17,13 @@ export type SegmentCategory =
 
 // Data Providers (DMPs and Contextual Providers)
 export const DATA_PROVIDERS = {
+    // DSPs
+    'AdRoll DSP': { type: 'DSP' as const },
+    'AdRoll ABM': { type: 'DSP' as const },
+    'The Trade Desk': { type: 'DSP' as const },
+    'Google DV360': { type: 'DSP' as const },
+    'Amazon DSP': { type: 'DSP' as const },
+
     // DMPs
     'Adobe Audience Manager': { type: 'DMP' as const },
     'Lotame': { type: 'DMP' as const },

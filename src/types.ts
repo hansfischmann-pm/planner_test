@@ -159,7 +159,7 @@ export interface Campaign {
     customizations?: string[]; // List of what was changed from the template
 }
 
-export type IntegrationType = 'DSP' | 'DMP' | 'ANALYTICS';
+export type IntegrationType = 'DSP' | 'DMP' | 'ANALYTICS' | 'CONTEXTUAL' | 'IDENTITY';
 export type IntegrationStatus = 'CONNECTED' | 'DISCONNECTED' | 'ERROR' | 'SYNCING';
 
 export interface Integration {

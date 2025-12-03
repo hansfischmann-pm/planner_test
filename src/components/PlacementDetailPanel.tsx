@@ -1,16 +1,18 @@
 import React, { useState } from 'react';
-import { Placement, Creative } from '../types';
-import { X, Image as ImageIcon, Film, Upload } from 'lucide-react';
+import { Placement, Creative, Segment } from '../types';
+import { X, Image as ImageIcon, Film, Upload, Plus, Users } from 'lucide-react';
 import { clsx } from 'clsx';
 import { CreativePerformanceCard } from './CreativePerformanceCard';
+import { SegmentPill } from './SegmentPill';
 
 interface PlacementDetailPanelProps {
     placement: Placement | null;
     onClose: () => void;
     onUpdate: (updatedPlacement: Placement) => void;
+    onOpenSegmentBrowser?: () => void;
 }
 
-export const PlacementDetailPanel: React.FC<PlacementDetailPanelProps> = ({ placement, onClose, onUpdate }) => {
+export const PlacementDetailPanel: React.FC<PlacementDetailPanelProps> = ({ placement, onClose, onUpdate, onOpenSegmentBrowser }) => {
     const [isUploading, setIsUploading] = useState(false);
 
     if (!placement) return null;
@@ -33,6 +35,16 @@ export const PlacementDetailPanel: React.FC<PlacementDetailPanelProps> = ({ plac
 
     const handleFieldChange = (field: keyof Placement, value: string) => {
         onUpdate({ ...placement, [field]: value });
+    };
+
+    const handleRemoveSegment = (index: number) => {
+        if (!placement.segments) return;
+        const newSegments = placement.segments.filter((_, i) => i !== index);
+        onUpdate({
+            ...placement,
+            segments: newSegments,
+            segment: newSegments.map(s => s.name).join(', ')
+        });
     };
 
     const handleSimulateUpload = () => {
@@ -122,6 +134,46 @@ export const PlacementDetailPanel: React.FC<PlacementDetailPanelProps> = ({ plac
 
             {/* Content */}
             <div className="flex-1 overflow-y-auto p-6 space-y-8">
+
+                {/* Targeting & Segments Section */}
+                <section>
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">Targeting & Segments</h3>
+                        <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full flex items-center gap-1">
+                            <Users className="w-3 h-3" />
+                            {placement.segments?.length || 0} Segments
+                        </span>
+                    </div>
+
+                    <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
+                        <div className="flex flex-wrap gap-2 mb-3">
+                            {placement.segments && placement.segments.length > 0 ? (
+                                placement.segments.map((seg, index) => (
+                                    <SegmentPill
+                                        key={index}
+                                        segment={seg}
+                                        onRemove={() => handleRemoveSegment(index)}
+                                        className="bg-white shadow-sm"
+                                    />
+                                ))
+                            ) : (
+                                <p className="text-sm text-gray-500 italic w-full text-center py-2">No segments selected</p>
+                            )}
+                        </div>
+
+                        {onOpenSegmentBrowser && (
+                            <button
+                                onClick={onOpenSegmentBrowser}
+                                className="w-full py-2 border border-dashed border-purple-300 rounded-lg text-sm font-medium text-purple-600 hover:bg-purple-50 hover:border-purple-400 transition-all flex items-center justify-center gap-2"
+                            >
+                                <Plus className="w-4 h-4" />
+                                Add Segments
+                            </button>
+                        )}
+                    </div>
+                </section>
+
+                <hr className="border-gray-100" />
 
                 {/* Buying Section */}
                 <section>

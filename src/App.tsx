@@ -231,7 +231,11 @@ function App() {
         // Create initial media plan from flight
         const initialPlan: MediaPlan = {
             id: generateId(),
-            campaign: currentCampaign!,
+            campaign: {
+                ...currentCampaign!,
+                placements: flight.lines // Ensure placements are populated from flight lines
+            },
+            activeFlightId: flight.id, // Set activeFlightId so updates can be tracked
             totalSpend: flight.lines.reduce((sum, line) => sum + line.totalCost, 0),
             remainingBudget: flight.budget - flight.lines.reduce((sum, line) => sum + line.totalCost, 0),
             version: 1,

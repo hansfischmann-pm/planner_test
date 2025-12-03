@@ -1,6 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import { MediaPlan, Placement } from '../types';
-import { BarChart3, LayoutList, Rows, ArrowUp, ArrowDown, ArrowUpDown, ChevronDown, ChevronRight, Trash2, Download, Presentation, Layers, Filter } from 'lucide-react';
+import { SegmentBrowser } from './SegmentBrowser';
+import { SegmentPill } from './SegmentPill';
+import { MediaPlan, Placement, Segment } from '../types';
+import { BarChart3, LayoutList, Rows, ArrowUp, ArrowDown, ArrowUpDown, ChevronDown, ChevronRight, Trash2, Download, Presentation, Layers, Filter, Plus } from 'lucide-react';
 import { clsx } from 'clsx';
 import { PlacementDetailPanel } from './PlacementDetailPanel';
 import { PlanMetricsSummary } from './PlanMetricsSummary';
@@ -95,6 +97,41 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
     const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
     const [selectedPlacementId, setSelectedPlacementId] = useState<string | null>(null);
     const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
+
+    // Segment Browser State
+    const [isSegmentBrowserOpen, setIsSegmentBrowserOpen] = useState(false);
+    const [editingPlacementId, setEditingPlacementId] = useState<string | null>(null);
+
+    const handleSegmentSelection = (segments: Segment[]) => {
+        if (editingPlacementId && mediaPlan?.campaign.placements) {
+            const placement = mediaPlan.campaign.placements.find(p => p.id === editingPlacementId);
+            if (placement) {
+                // Calculate base CPM (strip out previous segment uplifts)
+                const previousSegmentUplift = (placement.segments || []).reduce((sum, s) => sum + s.cpmUplift, 0);
+                const baseCpm = placement.rate - previousSegmentUplift;
+
+                // Calculate new segment uplift
+                const newSegmentUplift = segments.reduce((sum, s) => sum + s.cpmUplift, 0);
+                const newRate = baseCpm + newSegmentUplift;
+
+                // Recalculate total cost based on new rate
+                // totalCost = (rate / 1000) * quantity for CPM
+                const newTotalCost = placement.costMethod === 'CPM'
+                    ? (newRate / 1000) * placement.quantity
+                    : placement.totalCost; // Keep same for other cost methods
+
+                handlePlacementUpdate({
+                    ...placement,
+                    segments: segments,
+                    segment: segments.map(s => s.name).join(', '), // Legacy support
+                    rate: newRate,
+                    totalCost: newTotalCost
+                });
+            }
+        }
+        setIsSegmentBrowserOpen(false);
+        setEditingPlacementId(null);
+    };
 
     const handlePlacementUpdate = (updatedPlacement: Placement) => {
         if (!mediaPlan) return;
@@ -355,7 +392,36 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
             </td>
             <td className="py-3 px-6 text-sm text-gray-600">
                 <div>{placement.vendor}</div>
-                <div className="text-xs text-gray-400">{placement.segment || 'General'}</div>
+                <div className="flex flex-wrap gap-1 mt-1">
+                    {placement.segments && placement.segments.length > 0 ? (
+                        placement.segments.map((seg: Segment, i: number) => (
+                            <SegmentPill
+                                key={i}
+                                segment={seg}
+                                onRemove={() => {
+                                    const newSegments = placement.segments.filter((_: any, idx: number) => idx !== i);
+                                    handlePlacementUpdate({
+                                        ...placement,
+                                        segments: newSegments,
+                                        segment: newSegments.map((s: any) => s.name).join(', ')
+                                    });
+                                }}
+                            />
+                        ))
+                    ) : (
+                        <span className="text-xs text-gray-400">{placement.segment || 'General'}</span>
+                    )}
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingPlacementId(placement.id);
+                            setIsSegmentBrowserOpen(true);
+                        }}
+                        className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-medium text-purple-600 hover:bg-purple-50 transition-colors"
+                    >
+                        <Plus className="w-3 h-3" /> Add
+                    </button>
+                </div>
             </td>
             <td className="py-3 px-6 text-sm text-gray-500">{placement.adUnit}</td>
 
@@ -660,8 +726,27 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
                     placement={campaign.placements.find(p => p.id === selectedPlacementId)!}
                     onClose={() => setSelectedPlacementId(null)}
                     onUpdate={handlePlacementUpdate}
+                    onOpenSegmentBrowser={() => {
+                        setEditingPlacementId(selectedPlacementId);
+                        setIsSegmentBrowserOpen(true);
+                    }}
                 />
             )}
+
+            {/* Segment Browser Modal */}
+            <SegmentBrowser
+                isOpen={isSegmentBrowserOpen}
+                onClose={() => {
+                    setIsSegmentBrowserOpen(false);
+                    setEditingPlacementId(null);
+                }}
+                onSelectSegments={handleSegmentSelection}
+                initialSelectedSegments={
+                    editingPlacementId && mediaPlan?.campaign.placements
+                        ? mediaPlan.campaign.placements.find(p => p.id === editingPlacementId)?.segments
+                        : []
+                }
+            />
         </div>
     );
 };
