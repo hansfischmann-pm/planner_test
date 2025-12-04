@@ -1,8 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { Campaign, CampaignTemplate } from '../types';
-import { Calendar, DollarSign, ArrowRight, Plus, MessageSquare, Send, Sparkles } from 'lucide-react';
+import { Calendar, DollarSign, ArrowRight, Plus, MessageSquare, Send, Sparkles, AlertCircle } from 'lucide-react';
 import { TemplateLibrary } from './TemplateLibrary';
 import { TemplateWizard } from './TemplateWizard';
+import { validateCampaignName, validateBudget, validateDateRange } from '../utils/validation';
 
 interface CampaignListProps {
     campaigns: Campaign[];
@@ -24,7 +25,43 @@ export const CampaignList: React.FC<CampaignListProps> = ({ campaigns, onSelectC
     const [showTemplateLibrary, setShowTemplateLibrary] = useState(false);
     const [selectedTemplate, setSelectedTemplate] = useState<CampaignTemplate | null>(null);
 
+    // Validation errors
+    const [nameError, setNameError] = useState<string>('');
+    const [budgetError, setBudgetError] = useState<string>('');
+    const [dateError, setDateError] = useState<string>('');
+
     const handleCreate = () => {
+        // Reset errors
+        setNameError('');
+        setBudgetError('');
+        setDateError('');
+
+        // Validate campaign name
+        const nameValidation = validateCampaignName(campaignName);
+        if (!nameValidation.isValid) {
+            setNameError(nameValidation.error || 'Invalid campaign name');
+            return;
+        }
+
+        // Validate budget if provided
+        if (campaignBudget) {
+            const budgetValidation = validateBudget(parseFloat(campaignBudget));
+            if (!budgetValidation.isValid) {
+                setBudgetError(budgetValidation.error || 'Invalid budget');
+                return;
+            }
+        }
+
+        // Validate date range if both dates provided
+        if (startDate && endDate) {
+            const dateValidation = validateDateRange(new Date(startDate), new Date(endDate));
+            if (!dateValidation.isValid) {
+                setDateError(dateValidation.error || 'Invalid date range');
+                return;
+            }
+        }
+
+        // All validations passed, create campaign
         if (campaignName.trim() && onCreateCampaign) {
             onCreateCampaign(
                 campaignName.trim(),
@@ -36,6 +73,9 @@ export const CampaignList: React.FC<CampaignListProps> = ({ campaigns, onSelectC
             setCampaignBudget('');
             setStartDate('');
             setEndDate('');
+            setNameError('');
+            setBudgetError('');
+            setDateError('');
             setShowNewCampaign(false);
         }
     };
@@ -180,24 +220,56 @@ export const CampaignList: React.FC<CampaignListProps> = ({ campaigns, onSelectC
                     </div>
                     <div className="space-y-3">
                         <div>
-                            <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Campaign Name</label>
+                            <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Campaign Name *</label>
                             <input
                                 type="text"
                                 value={campaignName}
-                                onChange={(e) => setCampaignName(e.target.value)}
+                                onChange={(e) => {
+                                    setCampaignName(e.target.value);
+                                    if (nameError) setNameError(''); // Clear error on change
+                                }}
+                                onBlur={() => {
+                                    if (campaignName) {
+                                        const validation = validateCampaignName(campaignName);
+                                        setNameError(validation.isValid ? '' : validation.error || '');
+                                    }
+                                }}
                                 placeholder="e.g., 'Q2 2025 Campaign' or 'Holiday 2025'"
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent ${nameError ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                                    }`}
                             />
+                            {nameError && (
+                                <div className="flex items-center gap-1 mt-1 text-xs text-red-600">
+                                    <AlertCircle className="w-3 h-3" />
+                                    <span>{nameError}</span>
+                                </div>
+                            )}
                         </div>
                         <div>
                             <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Budget</label>
                             <input
                                 type="number"
                                 value={campaignBudget}
-                                onChange={(e) => setCampaignBudget(e.target.value)}
+                                onChange={(e) => {
+                                    setCampaignBudget(e.target.value);
+                                    if (budgetError) setBudgetError(''); // Clear error on change
+                                }}
+                                onBlur={() => {
+                                    if (campaignBudget) {
+                                        const validation = validateBudget(parseFloat(campaignBudget));
+                                        setBudgetError(validation.isValid ? '' : validation.error || '');
+                                    }
+                                }}
                                 placeholder="e.g., 100000 (defaults to $100k if not specified)"
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent ${budgetError ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                                    }`}
                             />
+                            {budgetError && (
+                                <div className="flex items-center gap-1 mt-1 text-xs text-red-600">
+                                    <AlertCircle className="w-3 h-3" />
+                                    <span>{budgetError}</span>
+                                </div>
+                            )}
                         </div>
                         <div className="grid grid-cols-2 gap-3">
                             <div>
@@ -205,8 +277,12 @@ export const CampaignList: React.FC<CampaignListProps> = ({ campaigns, onSelectC
                                 <input
                                     type="date"
                                     value={startDate}
-                                    onChange={(e) => setStartDate(e.target.value)}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                    onChange={(e) => {
+                                        setStartDate(e.target.value);
+                                        if (dateError) setDateError(''); // Clear error on change
+                                    }}
+                                    className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent ${dateError ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                                        }`}
                                 />
                             </div>
                             <div>
@@ -214,16 +290,33 @@ export const CampaignList: React.FC<CampaignListProps> = ({ campaigns, onSelectC
                                 <input
                                     type="date"
                                     value={endDate}
-                                    onChange={(e) => setEndDate(e.target.value)}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                    onChange={(e) => {
+                                        setEndDate(e.target.value);
+                                        if (dateError) setDateError(''); // Clear error on change
+                                    }}
+                                    onBlur={() => {
+                                        if (startDate && endDate) {
+                                            const validation = validateDateRange(new Date(startDate), new Date(endDate));
+                                            setDateError(validation.isValid ? '' : validation.error || '');
+                                        }
+                                    }}
+                                    className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent ${dateError ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                                        }`}
                                 />
                             </div>
                         </div>
+                        {dateError && (
+                            <div className="flex items-center gap-1 text-xs text-red-600">
+                                <AlertCircle className="w-3 h-3" />
+                                <span>{dateError}</span>
+                            </div>
+                        )}
                         <div className="flex gap-2">
                             <button
                                 onClick={handleCreate}
-                                disabled={!campaignName.trim()}
+                                disabled={!campaignName.trim() || !!nameError || !!budgetError || !!dateError}
                                 className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                title={nameError || budgetError || dateError || 'Create campaign'}
                             >
                                 <Send className="h-4 w-4" />
                                 Create Campaign

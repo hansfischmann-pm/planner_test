@@ -1,9 +1,10 @@
 import React from 'react';
-import { Portfolio, Campaign } from '../types';
+import { Portfolio } from '../types';
 import { DollarSign, TrendingUp, PieChart, ArrowRight, Activity } from 'lucide-react';
 import { CampaignComparisonChart } from './CampaignComparisonChart';
 import { BudgetOptimizer } from './BudgetOptimizer';
 import { UnifiedReportView } from './UnifiedReportView';
+import { EmptyState } from './EmptyState';
 
 interface PortfolioDashboardProps {
     portfolio: Portfolio;
@@ -25,12 +26,35 @@ export const PortfolioDashboard: React.FC<PortfolioDashboardProps> = ({ portfoli
     };
 
     const formatCurrency = (value: number) => {
+        if (value == null || isNaN(value)) return '$0';
         return new Intl.NumberFormat('en-US', {
             style: 'currency',
             currency: 'USD',
             maximumFractionDigits: 0
         }).format(value);
     };
+
+    const safeRatio = (numerator: number, denominator: number): number => {
+        if (!numerator || !denominator || denominator === 0) return 0;
+        return (numerator / denominator) * 100;
+    };
+
+    // Handle empty portfolio
+    if (!localPortfolio.campaigns || localPortfolio.campaigns.length === 0) {
+        return (
+            <div className="space-y-8 p-6 max-w-7xl mx-auto">
+                <div>
+                    <h1 className="text-3xl font-bold text-gray-900">{localPortfolio.name || 'Portfolio'}</h1>
+                    <p className="text-gray-500 mt-1">Portfolio Overview</p>
+                </div>
+                <EmptyState
+                    variant="no-campaigns"
+                    title="No Campaigns in Portfolio"
+                    description="This portfolio doesn't have any campaigns yet. Create your first campaign to get started."
+                />
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-8 p-6 max-w-7xl mx-auto">
@@ -79,7 +103,7 @@ export const PortfolioDashboard: React.FC<PortfolioDashboardProps> = ({ portfoli
                             <div className="mt-3 w-full bg-gray-100 rounded-full h-2">
                                 <div
                                     className="bg-blue-600 h-2 rounded-full"
-                                    style={{ width: `${Math.min(100, (localPortfolio.totalSpend / localPortfolio.totalBudget) * 100)}%` }}
+                                    style={{ width: `${Math.min(100, safeRatio(localPortfolio.totalSpend, localPortfolio.totalBudget))}%` }}
                                 ></div>
                             </div>
                         </div>
@@ -105,7 +129,7 @@ export const PortfolioDashboard: React.FC<PortfolioDashboardProps> = ({ portfoli
                                 </div>
                                 <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Portfolio ROAS</span>
                             </div>
-                            <div className="text-2xl font-bold text-gray-900">{localPortfolio.roas.toFixed(2)}x</div>
+                            <div className="text-2xl font-bold text-gray-900">{(localPortfolio.roas || 0).toFixed(2)}x</div>
                             <div className="mt-2 text-sm text-gray-500">
                                 Target: 2.50x
                             </div>
@@ -142,7 +166,7 @@ export const PortfolioDashboard: React.FC<PortfolioDashboardProps> = ({ portfoli
                                         <div className="w-full bg-gray-100 rounded-full h-2">
                                             <div
                                                 className="bg-blue-600 h-2 rounded-full"
-                                                style={{ width: `${(campaign.budget / localPortfolio.totalBudget) * 100}%` }}
+                                                style={{ width: `${safeRatio(campaign.budget, localPortfolio.totalBudget)}%` }}
                                             ></div>
                                         </div>
                                     </div>
