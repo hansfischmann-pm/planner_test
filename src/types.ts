@@ -147,6 +147,18 @@ export interface Campaign {
         conversions?: number;
         clicks?: number;
     };
+    performance?: {
+        spend: number;
+        impressions: number;
+        clicks: number;
+        conversions: number;
+        ctr: number;
+        cvr: number;
+        cpa: number;
+        roas: number;
+        revenue: number;
+        status: 'ACTIVE' | 'PAUSED' | 'COMPLETED';
+    };
     flights: Flight[];
     status: EntityStatus;
     tags: string[];
@@ -311,4 +323,24 @@ export interface AgentMessage {
     action?: 'EXPORT_PDF' | 'EXPORT_PPT' | string; // Allow other action types
     agentsInvoked?: string[]; // Names of agents being used for this action
     updatedMediaPlan?: MediaPlan; // Optional plan update to sync state
+}
+export interface Portfolio {
+    id: string;
+    name: string;
+    brandId: string;
+    campaigns: Campaign[];
+    totalBudget: number;
+    totalSpend: number;
+    totalRevenue: number;
+    roas: number;
+}
+
+export interface BudgetShift {
+    id: string;
+    sourceCampaignId: string;
+    targetCampaignId: string;
+    amount: number;
+    timestamp: number;
+    reason?: string;
+    status: 'PENDING' | 'APPLIED' | 'REVERTED';
 }

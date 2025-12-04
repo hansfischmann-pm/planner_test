@@ -1,8 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { SegmentBrowser } from './SegmentBrowser';
 import { SegmentPill } from './SegmentPill';
+import { AudienceInsightsPanel } from './AudienceInsightsPanel';
 import { MediaPlan, Placement, Segment } from '../types';
-import { BarChart3, LayoutList, Rows, ArrowUp, ArrowDown, ArrowUpDown, ChevronDown, ChevronRight, Trash2, Download, Presentation, Layers, Filter, Plus } from 'lucide-react';
+import { BarChart3, LayoutList, Rows, ArrowUp, ArrowDown, ArrowUpDown, ChevronDown, ChevronRight, Trash2, Download, Presentation, Layers, Filter, Plus, Users } from 'lucide-react';
 import { clsx } from 'clsx';
 import { PlacementDetailPanel } from './PlacementDetailPanel';
 import { PlanMetricsSummary } from './PlanMetricsSummary';
@@ -102,6 +103,9 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
     const [isSegmentBrowserOpen, setIsSegmentBrowserOpen] = useState(false);
     const [editingPlacementId, setEditingPlacementId] = useState<string | null>(null);
 
+    // Audience Insights State
+    const [isInsightsPanelOpen, setIsInsightsPanelOpen] = useState(false);
+
     const handleSegmentSelection = (segments: Segment[]) => {
         if (editingPlacementId && mediaPlan?.campaign.placements) {
             const placement = mediaPlan.campaign.placements.find(p => p.id === editingPlacementId);
@@ -138,6 +142,67 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
         if (onUpdatePlacement) {
             onUpdatePlacement(updatedPlacement);
         }
+    };
+
+    // Get all unique segments across all placements
+    const getAllCurrentSegments = (): Segment[] => {
+        if (!mediaPlan?.campaign.placements) return [];
+
+        const segmentMap = new Map<string, Segment>();
+        mediaPlan.campaign.placements.forEach(placement => {
+            placement.segments?.forEach(segment => {
+                if (!segmentMap.has(segment.id)) {
+                    segmentMap.set(segment.id, segment);
+                }
+            });
+        });
+        return Array.from(segmentMap.values());
+    };
+
+    // Handle quick-add segment from insights (adds to all placements)
+    const handleQuickAddSegment = (segment: Segment) => {
+        if (!mediaPlan?.campaign.placements) return;
+
+        // Add segment to the first placement that doesn't have it
+        const targetPlacement = mediaPlan.campaign.placements.find(p =>
+            !p.segments?.some(s => s.id === segment.id)
+        );
+
+        if (targetPlacement) {
+            const updatedSegments = [...(targetPlacement.segments || []), segment];
+            handlePlacementUpdate({
+                ...targetPlacement,
+                segments: updatedSegments,
+                segment: updatedSegments.map(s => s.name).join(', ')
+            });
+        }
+    };
+
+    // Handle removing a segment from all placements
+    const handleRemoveSegment = (segment: Segment) => {
+        if (!mediaPlan?.campaign.placements) return;
+
+        // Remove segment from all placements that have it
+        mediaPlan.campaign.placements.forEach(placement => {
+            if (placement.segments?.some(s => s.id === segment.id)) {
+                const updatedSegments = placement.segments.filter(s => s.id !== segment.id);
+
+                // Recalculate rate and cost after removing segment
+                const removedCpmUplift = segment.cpmUplift;
+                const newRate = placement.rate - removedCpmUplift;
+                const newTotalCost = placement.costMethod === 'CPM'
+                    ? (newRate / 1000) * placement.quantity
+                    : placement.totalCost;
+
+                handlePlacementUpdate({
+                    ...placement,
+                    segments: updatedSegments,
+                    segment: updatedSegments.map(s => s.name).join(', '),
+                    rate: newRate,
+                    totalCost: newTotalCost
+                });
+            }
+        });
     };
 
     // Safety cleanup
@@ -586,6 +651,14 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
                                 <Presentation className="w-4 h-4" />
                                 PPT
                             </button>
+                            <button
+                                onClick={() => setIsInsightsPanelOpen(true)}
+                                className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white font-medium rounded-lg hover:bg-purple-700 transition-colors shadow-sm"
+                                title="View Audience Insights"
+                            >
+                                <Users className="w-4 h-4" />
+                                Audience Insights
+                            </button>
                         </div>
                     </div>
 
@@ -742,10 +815,21 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
                 }}
                 onSelectSegments={handleSegmentSelection}
                 initialSelectedSegments={
-                    editingPlacementId && mediaPlan?.campaign.placements
-                        ? mediaPlan.campaign.placements.find(p => p.id === editingPlacementId)?.segments
+                    editingPlacementId && campaign.placements
+                        ? campaign.placements.find(p => p.id === editingPlacementId)?.segments || []
                         : []
                 }
+            />
+
+            {/* Audience Insights Panel */}
+            <AudienceInsightsPanel
+                isOpen={isInsightsPanelOpen}
+                onClose={() => setIsInsightsPanelOpen(false)}
+                placements={campaign.placements || []}
+                currentSegments={getAllCurrentSegments()}
+                goals={campaign.numericGoals}
+                onAddSegment={handleQuickAddSegment}
+                onRemoveSegment={handleRemoveSegment}
             />
         </div>
     );

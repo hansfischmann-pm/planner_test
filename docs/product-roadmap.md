@@ -65,17 +65,17 @@ This roadmap outlines the planned evolution of the FuseIQ Media Planner from pro
 - Quick-start workflows
 - Template customization
 
-### 5.5: Multi-Campaign Management 🚧 IN PROGRESS
-- Cross-campaign analytics
-- Portfolio optimization
-- Budget shifting between campaigns
-- Unified reporting
-
-### 5.6: Advanced Audience Insights 📋 PLANNED
+### 5.5: Advanced Audience Insights ✅ COMPLETE
 - Audience overlap visualization
 - Segment performance comparison
 - Lookalike audience suggestions
 - Audience expansion recommendations
+
+### 5.6: Multi-Campaign Management 📋 PLANNED
+- Cross-campaign analytics
+- Portfolio optimization
+- Budget shifting between campaigns
+- Unified reporting
 
 ### 5.7: Attribution Modeling 📋 PLANNED
 - Multi-touch attribution
@@ -280,5 +280,6 @@ This roadmap outlines the planned evolution of the FuseIQ Media Planner from pro
 
 ---
 
-## Current Status: Phase 5.4 ✅
-**Next Up: Phase 5.5 - Multi-Campaign Management**
+## Current Status: Phase 5.5 🚧
+**Next Up: Phase 5.5 - Advanced Audience Insights**
+

@@ -9,11 +9,13 @@ import { CampaignList } from './components/CampaignList';
 import { FlightList } from './components/FlightList';
 import { AgencyAnalyticsDashboard } from './components/AgencyAnalyticsDashboard';
 import { IntegrationDashboard } from './components/IntegrationDashboard';
+import { PortfolioDashboard } from './components/PortfolioDashboard';
 import { GlobalShortcuts } from './components/GlobalShortcuts';
 
 import { AgentBrain, AgentState } from './logic/agentBrain';
 import { AgentMessage, MediaPlan, User, Brand, Campaign, Flight, LayoutPosition, Placement } from './types';
 import { generateLargeScaleData } from './data/largeScaleData';
+import { initialPortfolio } from './data/portfolioData';
 import {
     generateFlight,
     generateId,
@@ -53,9 +55,9 @@ const updateBrandMetrics = (brand: Brand): Brand => {
 
 import { generateMediaPlanPDF } from './utils/pdfGenerator';
 import { generateMediaPlanPPT } from './utils/pptGenerator';
-import { Layout, LogOut, PieChart, Settings, Users, Moon, Sun, BarChart2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Layout, LogOut, PieChart, Settings, Users, Moon, Sun, BarChart2, ChevronLeft, ChevronRight, Briefcase } from 'lucide-react';
 
-type ViewState = 'LOGIN' | 'CLIENT_SELECTION' | 'CAMPAIGN_LIST' | 'FLIGHT_LIST' | 'MEDIA_PLAN' | 'AGENCY_ANALYTICS' | 'INTEGRATIONS';
+type ViewState = 'LOGIN' | 'CLIENT_SELECTION' | 'CAMPAIGN_LIST' | 'FLIGHT_LIST' | 'MEDIA_PLAN' | 'AGENCY_ANALYTICS' | 'INTEGRATIONS' | 'PORTFOLIO';
 
 function App() {
     // Mutable Data State
@@ -870,6 +872,17 @@ function App() {
                             {!sidebarCollapsed && 'Analytics'}
                         </button>
                         <button
+                            onClick={() => setView('PORTFOLIO')}
+                            className={`w-full flex items-center gap-2 px-2 py-2 text-sm font-medium rounded-lg transition-colors ${view === 'PORTFOLIO'
+                                ? 'bg-purple-50 text-purple-700 dark:bg-purple-900/20 dark:text-purple-300'
+                                : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
+                                }`}
+                            title={sidebarCollapsed ? 'Portfolio' : undefined}
+                        >
+                            <Briefcase className="w-4 h-4 flex-shrink-0" />
+                            {!sidebarCollapsed && 'Portfolio'}
+                        </button>
+                        <button
                             onClick={() => alert('Team management coming soon!')}
                             className="w-full flex items-center gap-2 px-2 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700 rounded-lg transition-colors"
                             title={sidebarCollapsed ? 'Team' : undefined}
@@ -1046,6 +1059,19 @@ function App() {
                             />
                             <OnboardingHints state={agentState} />
                         </div>
+                    </div>
+                )}
+
+                {view === 'PORTFOLIO' && (
+                    <div className="h-full overflow-y-auto">
+                        <PortfolioDashboard
+                            portfolio={initialPortfolio}
+                            onSelectCampaign={(campaignId) => {
+                                // For now, just switch to campaign list,
+                                // in a real app we'd load the specific campaign
+                                setView('CAMPAIGN_LIST');
+                            }}
+                        />
                     </div>
                 )}
             </div>
