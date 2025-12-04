@@ -229,7 +229,8 @@ function testPlacementGenerator(): void {
         budget: 100000,
         lines: [],
         campaignId: 'test-campaign',
-        status: 'ACTIVE' as const
+        status: 'ACTIVE' as const,
+        tags: []
     };
 
     // Test 1: Social placements

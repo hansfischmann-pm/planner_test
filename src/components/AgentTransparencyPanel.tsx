@@ -146,7 +146,7 @@ function optimizeAudience(campaign) {
                                         {agent.status === 'IDLE' && (
                                             <Check className="h-4 w-4 text-green-500" />
                                         )}
-                                        {agent.status === 'PROCESSING' && (
+                                        {agent.status === 'WORKING' && (
                                             <Loader className="h-4 w-4 text-blue-500 animate-spin" />
                                         )}
                                     </div>
@@ -187,9 +187,9 @@ function optimizeAudience(campaign) {
                                                         <span className="font-medium text-gray-900">{execution.action}</span>
                                                         <span className={clsx(
                                                             "inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium",
-                                                            execution.status === 'COMPLETED' && "bg-green-100 text-green-800",
-                                                            execution.status === 'IN_PROGRESS' && "bg-blue-100 text-blue-800",
-                                                            execution.status === 'FAILED' && "bg-red-100 text-red-800"
+                                                            execution.status === 'SUCCESS' && "bg-green-100 text-green-800",
+                                                            execution.status === 'PENDING' && "bg-blue-100 text-blue-800",
+                                                            execution.status === 'FAILURE' && "bg-red-100 text-red-800"
                                                         )}>
                                                             {execution.status}
                                                         </span>

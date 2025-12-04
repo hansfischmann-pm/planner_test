@@ -104,6 +104,7 @@ export const TemplateWizard: React.FC<TemplateWizardProps> = ({
             endDate: endDate,
             budget: budget,
             status: 'DRAFT', // Changed to DRAFT to match Flight status type
+            tags: [],
             lines: lines
         };
 
@@ -124,7 +125,8 @@ export const TemplateWizard: React.FC<TemplateWizardProps> = ({
                 goals: [template.name], // Use template name as initial goal
                 numericGoals: goals,
                 flights: [flight],
-                status: 'PLANNING',
+                status: 'DRAFT',
+                tags: [],
                 templateId: template.id,
                 customizations: [] // Track what was changed from template
             };

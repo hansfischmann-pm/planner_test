@@ -9,7 +9,10 @@ const VENDORS: Record<string, string[]> = {
     Social: ['Meta', 'TikTok', 'LinkedIn', 'Snapchat', 'Pinterest', 'X (Twitter)'],
     Display: ['Google Display Network', 'Taboola', 'Outbrain', 'Criteo', 'The Trade Desk'],
     TV: ['Linear TV', 'CTV'],
-    Radio: ['iHeartRadio', 'Spotify Audio Ads', 'Pandora', 'SiriusXM'],
+    Radio: ['iHeartRadio', 'SiriusXM', 'Audacy', 'Cumulus'],
+    'Streaming Audio': ['Spotify', 'Pandora', 'Amazon Music', 'Apple Music', 'Sonos'],
+    'Podcast': ['Spotify Podcasts', 'Apple Podcasts', 'Megaphone', 'Acast', 'Art19'],
+    'Place-based Audio': ['Vibenomics', 'Mood Media', 'Rockbot', 'Soundtrack Your Brand'],
     OOH: ['Clear Channel', 'Lamar', 'Outfront Media', 'JCDecaux'],
     Print: ['The New York Times', 'WSJ', 'USA Today', 'Local Newspapers']
 };
@@ -140,12 +143,17 @@ const generateForecast = (channel: string, vendor: string, budget: number): { fo
     else if (channel === 'Search' || channel === 'Social') source = 'Internal'; // Platform data
 
     // 2. Generate Forecast Metrics (Simulated)
-    // CPM assumptions for forecasting
+    // CPM benchmarks based on 2024-2025 industry data
+    // Sources: GroupM, eMarketer, IAB
     let estimatedCpm = 15;
-    if (channel === 'TV') estimatedCpm = 25;
-    if (channel === 'Social') estimatedCpm = 8;
-    if (channel === 'Search') estimatedCpm = 5;
-    if (channel === 'OOH') estimatedCpm = 12;
+    if (channel === 'TV') estimatedCpm = 20;          // Linear TV: $15-25 CPM (cable avg $20)
+    if (channel === 'Social') estimatedCpm = 12;      // Social: $5-15 CPM (avg ~$12)
+    if (channel === 'Display') estimatedCpm = 8;      // Display: $2.50-12 CPM (avg ~$8)
+    if (channel === 'Search') estimatedCpm = 35;      // Search: $11-200 CPM (typically CPC, higher effective CPM)
+    if (channel === 'OOH') estimatedCpm = 8;          // DOOH: $2-15 CPM (avg ~$8)
+    if (channel === 'Radio') estimatedCpm = 12;       // Radio: $8-15 CPM
+    if (channel === 'Streaming Audio') estimatedCpm = 20;  // Streaming audio: $15-25 CPM
+    if (channel === 'Podcast') estimatedCpm = 30;     // Podcast: $18-60 CPM (avg ~$30)
 
     const forecastedImpressions = Math.floor((budget / estimatedCpm) * 1000);
     const forecastedReach = Math.floor(forecastedImpressions * 0.4); // Rough estimate
@@ -192,97 +200,172 @@ const generateForecast = (channel: string, vendor: string, budget: number): { fo
     return { forecast, delivery };
 };
 
-export function generateLine(channel: 'Search' | 'Social' | 'Display' | 'TV' | 'Radio' | 'OOH' | 'Print', advertiser: string, networkName?: string, programName?: string): Line {
+export function generateLine(channel: 'Search' | 'Social' | 'Display' | 'TV' | 'Radio' | 'Streaming Audio' | 'Podcast' | 'Place-based Audio' | 'OOH' | 'Print', advertiser: string, networkName?: string, programName?: string): Line {
     const vendors = VENDORS;
 
-    const adUnits = {
+    const adUnits: Record<string, string[]> = {
         'Search': ['Responsive Search Ad', 'Exact Match Keyword', 'Shopping Ad'],
         'Social': ['Newsfeed Image', 'Story Video', 'Carousel', 'Reels'],
         'Display': ['300x250', '728x90', '160x600', 'Native'],
         'TV': [':30 Spot', ':15 Spot', 'Sponsorship'],
-        'Radio': ['Audio Spot :30', 'Host Read'],
+        'Radio': ['Audio Spot :30', 'Host Read', 'Live Read'],
+        'Streaming Audio': ['Audio :30', 'Audio :15', 'Companion Banner'],
+        'Podcast': ['Host Read :60', 'Pre-roll :15', 'Mid-roll :30', 'Baked-in'],
+        'Place-based Audio': ['In-Store Audio :15', 'In-Store Audio :30', 'Checkout Audio'],
         'OOH': ['Digital Billboard', 'Transit Shelter', 'Highway Bulletin'],
         'Print': ['Full Page Color', 'Half Page', 'Quarter Page']
     };
 
-    const segments = {
+    const segments: Record<string, string[]> = {
         'Search': ['High Intent', 'Brand Keywords', 'Competitor Conquesting'],
         'Social': ['A18-34', 'Parents', 'Interest: Tech', 'Lookalike 1%'],
         'Display': ['Retargeting', 'In-Market Auto', 'Affinity: Luxury'],
         'TV': ['Broad Reach', 'Sports Fans', 'Morning News'],
-        'Radio': ['Commuters', 'Music Lovers'],
+        'Radio': ['Commuters', 'Drive Time', 'Morning Show'],
+        'Streaming Audio': ['Music Listeners', 'Workout', 'Commute', 'Focus'],
+        'Podcast': ['True Crime', 'Business', 'Comedy', 'News & Politics'],
+        'Place-based Audio': ['Grocery Shoppers', 'QSR Diners', 'Retail Shoppers'],
         'OOH': ['Urban Centers', 'Highway Traffic'],
         'Print': ['Affluent Readers', 'Local Community']
     };
 
-    const rateInfo = {
-        'Search': { method: 'CPC' as const, min: 0.5, max: 12 },
-        'Social': { method: 'CPM' as const, min: 3, max: 20 },
-        'Display': { method: 'CPM' as const, min: 1, max: 8 },
-        'TV': { method: 'Spot' as const, min: 500, max: 50000 },
-        'Radio': { method: 'Spot' as const, min: 50, max: 2000 },
-        'OOH': { method: 'Flat' as const, min: 1000, max: 25000 },
-        'Print': { method: 'Flat' as const, min: 500, max: 10000 }
+    // Rate benchmarks based on 2024-2025 industry data
+    // TV uses CPM now (data-driven linear approach) rather than spot pricing
+    const rateInfo: Record<string, { method: CostMethod; min: number; max: number }> = {
+        'Search': { method: 'CPC' as const, min: 1.5, max: 8 },      // Google Ads avg CPC: $2.69-$5.26
+        'Social': { method: 'CPM' as const, min: 5, max: 15 },       // Facebook: $10-15, TikTok: $4-7, Instagram: $7-15
+        'Display': { method: 'CPM' as const, min: 2.5, max: 12 },    // Programmatic: $2.50-$12
+        'TV': { method: 'CPM' as const, min: 15, max: 35 },          // Linear: $15-25, CTV: $20-35
+        'Radio': { method: 'CPM' as const, min: 8, max: 15 },        // Terrestrial radio CPM
+        'Streaming Audio': { method: 'CPM' as const, min: 15, max: 25 },  // Spotify, Pandora: $15-25
+        'Podcast': { method: 'CPM' as const, min: 18, max: 60 },     // Pre-roll: $15, Mid-roll: $25-60
+        'Place-based Audio': { method: 'CPM' as const, min: 5, max: 15 }, // In-store audio
+        'OOH': { method: 'CPM' as const, min: 2, max: 15 },          // DOOH: $2-15 CPM
+        'Print': { method: 'Flat' as const, min: 500, max: 10000 }   // Print still uses flat rate
     };
 
-    const vendorList = vendors[channel];
-    const unitList = adUnits[channel];
-    const segmentList = segments[channel];
-    const rateInfo2 = rateInfo[channel];
+    const vendorList = vendors[channel] || vendors['TV'];
+    const unitList = adUnits[channel] || adUnits['TV'];
+    const segmentList = segments[channel] || segments['TV'];
+    const rateInfo2 = rateInfo[channel] || rateInfo['TV'];
 
     let vendor: string = vendorList[0];
     let adUnit: string = unitList[0];
 
-    // TV Logic (simplified from original for brevity, but keeping core logic)
-    if (channel === 'TV' && (networkName || programName)) {
-        // Logic to match network/program
-        if (networkName) vendor = networkName;
-        if (programName) adUnit = programName;
+    // If a specific vendor/network name is provided, use it
+    if (networkName) {
+        vendor = networkName;
+        // If program name is also provided (e.g., "ESPN" + "SportsCenter"), use it
+        if (programName) {
+            adUnit = programName;
+        } else {
+            // Pick a random ad unit for this channel
+            adUnit = unitList[Math.floor(Math.random() * unitList.length)];
+        }
+    } else if (channel === 'TV' && programName) {
+        // TV-specific: program name goes to adUnit
+        vendor = vendorList[Math.floor(Math.random() * vendorList.length)];
+        adUnit = programName;
 
         // Try to find specific network data if available
-        if (networkName && TV_NETWORKS.Linear[networkName]) {
+        if (TV_NETWORKS.Linear[vendor]) {
             // Could use this to validate or refine adUnits
         }
     } else {
+        // Random vendor and ad unit
         vendor = vendorList[Math.floor(Math.random() * vendorList.length)];
         adUnit = unitList[Math.floor(Math.random() * unitList.length)];
     }
 
     const segment = segmentList[Math.floor(Math.random() * segmentList.length)];
-    const rate = Math.floor(Math.random() * (rateInfo2.max - rateInfo2.min + 1)) + rateInfo2.min;
-
-    // Generate Performance Data
-    const quantity = Math.floor(Math.random() * 1000) + 100;
-    const totalCost = rate * quantity;
-    const ctr = Math.random() * 0.05;
-
+    const rate = rateInfo2.min + Math.random() * (rateInfo2.max - rateInfo2.min);
     const costMethod = rateInfo2.method;
+    const ctr = 0.005 + Math.random() * 0.025; // 0.5% - 3% CTR range (realistic)
 
-    // Estimate impressions based on cost method
-    let impressions: number;
+    // Generate realistic budget/cost first, then derive impressions from CPM
+    // Budget ranges based on typical placement sizes
+    let baseBudget: number;
 
     if (channel === 'TV') {
-        // TV impressions based on ratings/viewership
-        // Using realistic Nielsen-style ratings
-        // :30 spot during primetime: 2-10M viewers
-        // :30 spot during daytime: 500K-2M viewers
-        // Sports/major events: 5-20M viewers
-        const isPrimetime = adUnit.includes(':30') || adUnit.includes('Sponsorship');
-        const isSports = segment?.includes('Sports') || programName?.toLowerCase().includes('sport');
-
-        if (isSports) {
-            impressions = (5000000 + Math.random() * 15000000) * quantity; // 5M-20M per spot
-        } else if (isPrimetime) {
-            impressions = (2000000 + Math.random() * 8000000) * quantity; // 2M-10M per spot
-        } else {
-            impressions = (500000 + Math.random() * 1500000) * quantity; // 500K-2M per spot
-        }
-    } else if (costMethod === 'CPM') {
-        impressions = quantity * 1000;
-    } else if (costMethod === 'CPC') {
-        impressions = quantity / ctr; // if quantity is clicks
+        // TV placements: $10k - $100k per flight (realistic for cable)
+        baseBudget = 10000 + Math.random() * 90000;
+    } else if (channel === 'Search') {
+        // Search: $5k - $50k per placement
+        baseBudget = 5000 + Math.random() * 45000;
+    } else if (channel === 'Social') {
+        // Social: $5k - $40k per placement
+        baseBudget = 5000 + Math.random() * 35000;
+    } else if (channel === 'Podcast') {
+        // Podcast: $8k - $30k per placement
+        baseBudget = 8000 + Math.random() * 22000;
     } else {
-        impressions = (totalCost / (rate / 1000)); // fallback estimation
+        // Default: $5k - $30k per placement
+        baseBudget = 5000 + Math.random() * 25000;
+    }
+
+    const totalCost = Math.round(baseBudget);
+
+    // Calculate impressions based on CPM (the standard industry approach)
+    // Impressions = (Budget / CPM) * 1000
+    let impressions: number;
+
+    if (costMethod === 'CPM' || channel === 'TV') {
+        // CPM-based calculation: impressions = (budget / cpm) * 1000
+        impressions = Math.floor((totalCost / rate) * 1000);
+
+        // Apply realistic caps based on channel/audience size
+        // These caps reflect actual US market sizes
+        if (channel === 'TV') {
+            // TV caps based on realistic viewership:
+            // ESPN SportsCenter: ~700k viewers avg
+            // Primetime cable: 1-3M viewers
+            // Max reasonable flight impressions: 5-10M for a single show buy
+            const isPrimetime = adUnit.includes(':30') || adUnit.includes('Sponsorship');
+            const isSports = segment?.includes('Sports') || programName?.toLowerCase().includes('sport') || vendor.toLowerCase().includes('espn');
+
+            let maxImpressions: number;
+            if (isSports) {
+                // Sports programming: 500k - 5M per flight (depending on event)
+                maxImpressions = 500000 + Math.random() * 4500000;
+            } else if (isPrimetime) {
+                // Primetime: 1M - 5M per flight
+                maxImpressions = 1000000 + Math.random() * 4000000;
+            } else {
+                // Daytime/off-peak: 200k - 1.5M per flight
+                maxImpressions = 200000 + Math.random() * 1300000;
+            }
+            impressions = Math.min(impressions, Math.floor(maxImpressions));
+        } else if (channel === 'Podcast') {
+            // Podcast: cap at 2M impressions (top podcasts)
+            impressions = Math.min(impressions, 2000000);
+        } else if (channel === 'OOH') {
+            // OOH: cap at 10M impressions per placement
+            impressions = Math.min(impressions, 10000000);
+        }
+        // Social, Display, Streaming Audio can scale higher but still reasonable
+        impressions = Math.min(impressions, 50000000); // Global cap: 50M impressions
+
+    } else if (costMethod === 'CPC') {
+        // For CPC (Search), quantity represents clicks
+        const clicks = Math.floor(totalCost / rate);
+        impressions = Math.floor(clicks / ctr); // Derive impressions from clicks and CTR
+        impressions = Math.min(impressions, 20000000); // Cap at 20M
+    } else {
+        // Flat rate (Print): estimate based on circulation
+        impressions = Math.floor(50000 + Math.random() * 200000); // 50k - 250k for print
+    }
+
+    // Quantity represents different things per channel
+    // For CPM: quantity = impressions / 1000 (thousands)
+    // For CPC: quantity = clicks
+    // For Flat: quantity = units/insertions
+    let quantity: number;
+    if (costMethod === 'CPM' || channel === 'TV') {
+        quantity = Math.floor(impressions / 1000);
+    } else if (costMethod === 'CPC') {
+        quantity = Math.floor(totalCost / rate);
+    } else {
+        quantity = Math.floor(1 + Math.random() * 5); // 1-5 insertions for flat rate
     }
 
     const clicks = Math.floor(impressions * ctr);
@@ -385,7 +468,8 @@ export function generateLine(channel: 'Search' | 'Social' | 'Display' | 'TV' | '
         ioNumber,
         creative: creative as any, // Cast to any to match legacy type
         creatives: creatives,
-        rotationMode: 'OPTIMIZED'
+        rotationMode: 'OPTIMIZED',
+        status: 'ACTIVE' as const
     };
 };
 
@@ -476,7 +560,8 @@ export function generateFlight(campaignId: string, name: string, budget: number)
         lines,
         status: 'ACTIVE',
         forecast: calculateFlightForecast(lines),
-        delivery: calculateFlightDelivery(lines)
+        delivery: calculateFlightDelivery(lines),
+        tags: []
     };
 }
 
@@ -508,7 +593,8 @@ export function generateCampaign(brand: Brand): Campaign {
         status: 'ACTIVE',
         forecast: calculateCampaignForecast(flights),
         delivery: calculateCampaignDelivery(flights),
-        placements: [...flight1.lines, ...flight2.lines] // Legacy support
+        placements: [...flight1.lines, ...flight2.lines], // Legacy support
+        tags: []
     };
 }
 

@@ -108,9 +108,11 @@ export function aggregateSegmentPerformance(placements: Placement[]): Map<string
 
     placements.forEach(placement => {
         // Only process placements with performance data
-        if (!placement.performance || !placement.segments) return;
+        const perf = placement.performance;
+        const segs = placement.segments;
+        if (!perf || !segs) return;
 
-        placement.segments.forEach(segment => {
+        segs.forEach(segment => {
             if (!segmentMap.has(segment.id)) {
                 segmentMap.set(segment.id, {
                     segment,
@@ -130,10 +132,10 @@ export function aggregateSegmentPerformance(placements: Placement[]): Map<string
             const metrics = segmentMap.get(segment.id)!;
 
             // Divide performance proportionally among segments on this placement
-            const segmentCount = placement.segments.length;
-            metrics.impressions += (placement.performance.impressions || 0) / segmentCount;
-            metrics.clicks += (placement.performance.clicks || 0) / segmentCount;
-            metrics.conversions += (placement.performance.conversions || 0) / segmentCount;
+            const segmentCount = segs.length;
+            metrics.impressions += (perf.impressions || 0) / segmentCount;
+            metrics.clicks += (perf.clicks || 0) / segmentCount;
+            metrics.conversions += (perf.conversions || 0) / segmentCount;
             metrics.spend += (placement.totalCost || 0) / segmentCount;
             metrics.placements += 1;
         });

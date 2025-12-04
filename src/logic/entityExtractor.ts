@@ -223,7 +223,7 @@ export function extractAudience(input: string): ExtractedEntities['audience'] {
     for (const dp of demoPatterns) {
         const match = input.match(dp.pattern);
         if (match) {
-            if ('value' in dp) {
+            if ('value' in dp && dp.value) {
                 audience.demographics?.push(dp.value);
             } else if (dp.type === 'age_range') {
                 audience.demographics?.push(`Age ${match[1]}-${match[2]}`);

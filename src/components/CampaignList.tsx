@@ -7,7 +7,7 @@ import { TemplateWizard } from './TemplateWizard';
 interface CampaignListProps {
     campaigns: Campaign[];
     onSelectCampaign: (campaign: Campaign) => void;
-    onCreateCampaign?: (name: string, budget?: number, startDate?: string, endDate?: string) => void;
+    onCreateCampaign?: (name: string, budget?: number, startDate?: string, endDate?: string, goals?: string[]) => void;
     onCreateFromTemplate?: (campaign: Campaign) => void;
     brandId?: string;
     brandName?: string;

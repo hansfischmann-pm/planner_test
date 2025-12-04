@@ -1,21 +1,38 @@
 
-import { Campaign, MediaPlan, AgentMessage, Placement, Brand, AgentInfo, AgentExecution, Creative } from '../types';
+import { MediaPlan, AgentMessage, Placement, Brand, AgentInfo, AgentExecution, Creative } from '../types';
 import { generateCampaign, generateLine, calculatePlanMetrics, SAMPLE_AGENTS, generateId } from './dummyData';
-import { DMA_DATA, getDMAByCity } from './dmaData';
+import { getDMAByCity } from './dmaData';
+
+// Unique message ID generator to prevent React key collisions
+const generateMessageId = (prefix: string = 'msg') =>
+    `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
 // Enhanced Agent Intelligence Modules
-import { classifyIntent, IntentCategory } from './intentClassifier';
+import { classifyIntent } from './intentClassifier';
 import { extractAllEntities, extractBudget, extractChannels } from './entityExtractor';
 import { contextManager } from './contextManager';
-import { recommendBudgetAllocation, analyzeBudgetUsage, suggestOptimizations } from '../utils/budgetOptimizer';
-import { generateBatchPlacements } from '../utils/placementGenerator';
+import { recommendBudgetAllocation } from '../utils/budgetOptimizer';
 import { actionHistory } from '../utils/actionHistory';
 import { CAMPAIGN_TEMPLATES } from './campaignTemplates';
 import { generateOptimizationReport, formatOptimizationReport } from '../utils/optimizationEngine';
 import { analyzePlan, getAnalysisSummary } from '../utils/performanceAnalyzer';
 import { forecastCampaign, formatForecastResult, calculateAudienceOverlap } from '../utils/forecastingEngine';
 
+// Extracted modules for AgentBrain decomposition
+import { channelManager } from './ChannelManager';
+import { inventoryService } from './InventoryService';
+
 export type AgentState = 'INIT' | 'BUDGETING' | 'CHANNEL_SELECTION' | 'REFINEMENT' | 'OPTIMIZATION' | 'FINISHED';
+
+export type PendingActionType = 'PAUSE_UNDERPERFORMERS' | 'SCALE_WINNERS' | 'APPLY_OPTIMIZATION';
+
+export interface PendingAction {
+    type: PendingActionType;
+    description: string;
+    details: string[];
+    estimatedImpact: number;
+    data?: any; // Additional data needed to execute the action
+}
 
 interface AgentContext {
     state: AgentState;
@@ -24,6 +41,8 @@ interface AgentContext {
     history: AgentMessage[];
     agents: AgentInfo[];
     executions: AgentExecution[];
+    pendingAction?: PendingAction;
+    expressMode?: boolean; // If true, skip confirmation dialogs
 }
 
 export class AgentBrain {
@@ -61,7 +80,7 @@ export class AgentBrain {
 
     processInput(input: string): AgentMessage {
         const userMsg: AgentMessage = {
-            id: Date.now().toString(),
+            id: generateMessageId('user'),
             role: 'user',
             content: input,
             timestamp: Date.now()
@@ -71,11 +90,9 @@ export class AgentBrain {
         // ===== ENHANCED AGENT INTELLIGENCE =====
         // 1. Classify intent
         const intent = classifyIntent(input);
-        console.log('[AgentBrain] Intent detected:', intent);
 
         // 2. Extract entities
         const entities = extractAllEntities(input);
-        console.log('[AgentBrain] Entities extracted:', entities);
 
         // 3. Add to context manager
         contextManager.addMessage(this.sessionId, 'user', input, intent, entities);
@@ -83,6 +100,32 @@ export class AgentBrain {
         let responseContent = '';
         let suggestedActions: string[] = [];
         let agentMsg: AgentMessage | null = null;
+
+        // ===== PENDING ACTION CONFIRMATION HANDLING =====
+        // Check if user is confirming or canceling a pending action
+        if (this.context.pendingAction) {
+            const confirmPatterns = /^(yes|confirm|apply|proceed|do it|go ahead|execute|ok|okay)$/i;
+            const cancelPatterns = /^(no|cancel|nevermind|never mind|abort|stop|don't|dont)$/i;
+
+            if (confirmPatterns.test(input.trim())) {
+                // User confirmed - execute the pending action
+                const action = this.context.pendingAction;
+                this.context.pendingAction = undefined;
+                return this.executePendingAction(action);
+            } else if (cancelPatterns.test(input.trim())) {
+                // User canceled
+                this.context.pendingAction = undefined;
+                const response = this.createAgentMessage(
+                    "Action canceled. No changes were made.",
+                    ['Show performance', 'Optimize']
+                );
+                this.context.history.push(response);
+                contextManager.addMessage(this.sessionId, 'assistant', response.content);
+                return response;
+            }
+            // If neither confirm nor cancel, clear the pending action and process normally
+            this.context.pendingAction = undefined;
+        }
 
         // GLOBAL: Layout Commands (work regardless of media plan state)
         // Enhanced pattern matching to handle typos and variations
@@ -93,7 +136,7 @@ export class AgentBrain {
             responseContent = "I've switched the layout to **" + layoutMatch[1] + "** position.";
             suggestedActions = ['Continue planning'];
             agentMsg = {
-                id: Date.now().toString(),
+                id: generateMessageId('agent'),
                 role: 'agent',
                 content: responseContent,
                 timestamp: Date.now(),
@@ -573,7 +616,7 @@ export class AgentBrain {
                 }
 
                 agentMsg = {
-                    id: Date.now().toString(),
+                    id: generateMessageId('agent'),
                     role: 'agent',
                     content: responseContent,
                     timestamp: Date.now(),
@@ -608,7 +651,7 @@ export class AgentBrain {
         }
 
         agentMsg = {
-            id: Date.now().toString(),
+            id: generateMessageId('agent'),
             role: 'agent',
             content: responseContent,
             timestamp: Date.now(),
@@ -827,7 +870,159 @@ export class AgentBrain {
             return this.createAgentMessage(responseContent, ['Show full report', 'Show quick wins']);
         }
 
-        if (lowerInput.includes('growth opportunit') || lowerInput.includes('scale') && lowerInput.includes('winner')) {
+        // Handle "pause underperformers" - pause placements with poor performance
+        if (lowerInput.includes('pause') && lowerInput.includes('underperform')) {
+            console.log('[AgentBrain] Matched: Pause underperformers ACTION');
+
+            const plan = this.context.mediaPlan;
+            if (!plan || !plan.campaign.placements || plan.campaign.placements.length === 0) {
+                return this.createAgentMessage(
+                    "I can't pause underperformers yet - there are no placements to analyze.",
+                    ['Add placements first']
+                );
+            }
+
+            // Get recommendations from the optimization report
+            const flightBudget = 100000;
+            const report = generateOptimizationReport(plan.campaign.placements, flightBudget);
+            const pauseRecs = report.recommendations.filter(r =>
+                r.action === 'PAUSE' || r.action === 'REDUCE_BUDGET'
+            );
+
+            // Preview what would be paused (without actually pausing)
+            let totalSavings = 0;
+            const pausePreview: { placementId: string; name: string; roas: number }[] = [];
+
+            pauseRecs.forEach(rec => {
+                const placement = plan.campaign.placements?.find(p =>
+                    p.vendor === rec.placementName || p.id === rec.placementId
+                );
+                if (placement && placement.performance && placement.performance.status !== 'PAUSED') {
+                    totalSavings += rec.estimatedImpact;
+                    pausePreview.push({
+                        placementId: placement.id,
+                        name: placement.vendor,
+                        roas: placement.performance.roas
+                    });
+                }
+            });
+
+            if (pausePreview.length === 0) {
+                return this.createAgentMessage(
+                    "No placements qualified for pausing.\n\nAll your placements are performing well.",
+                    ['Optimize', 'Show performance']
+                );
+            }
+
+            // Check for express mode - if enabled, execute immediately
+            if (this.context.expressMode) {
+                return this.executePauseUnderperformers(pausePreview, totalSavings);
+            }
+
+            // Store the pending action for confirmation
+            this.context.pendingAction = {
+                type: 'PAUSE_UNDERPERFORMERS',
+                description: `Pause ${pausePreview.length} underperforming placement${pausePreview.length > 1 ? 's' : ''}`,
+                details: pausePreview.map(p => `${p.name} (ROAS: ${p.roas.toFixed(2)})`),
+                estimatedImpact: totalSavings,
+                data: { pausePreview, totalSavings }
+            };
+
+            // Show confirmation dialog
+            let responseContent = `**Confirm: Pause ${pausePreview.length} underperforming placement${pausePreview.length > 1 ? 's' : ''}?**\n\n`;
+            responseContent += `**Placements to pause:**\n`;
+            pausePreview.forEach(p => {
+                responseContent += `  • ${p.name} (ROAS: ${p.roas.toFixed(2)})\n`;
+            });
+            responseContent += `\n**Estimated savings:** $${Math.round(totalSavings).toLocaleString('en-US')}\n\n`;
+            responseContent += `Type **"yes"** to confirm or **"no"** to cancel.`;
+
+            const msg = this.createAgentMessage(
+                responseContent,
+                ['Yes', 'No']
+            );
+            msg.agentsInvoked = ['Performance Agent', 'Insights Agent'];
+            return msg;
+        }
+
+        // Handle "scale winners" - actually scale high-performing placements
+        if (lowerInput.includes('scale') && lowerInput.includes('winner')) {
+            console.log('[AgentBrain] Matched: Scale winners ACTION');
+
+            const plan = this.context.mediaPlan;
+            if (!plan || !plan.campaign.placements || plan.campaign.placements.length === 0) {
+                return this.createAgentMessage(
+                    "I can't scale winners yet - there are no placements to analyze.",
+                    ['Add placements first']
+                );
+            }
+
+            // Get recommendations from the optimization report
+            const flightBudget = 100000;
+            const report = generateOptimizationReport(plan.campaign.placements, flightBudget);
+            const scaleRecs = report.recommendations.filter(r => r.action === 'INCREASE_BUDGET');
+
+            // Preview what would be scaled (without actually scaling)
+            let totalBudgetIncrease = 0;
+            const scalePreview: { placementId: string; name: string; roas: number; currentCost: number; newCost: number }[] = [];
+
+            scaleRecs.forEach(rec => {
+                const placement = plan.campaign.placements?.find(p =>
+                    p.vendor === rec.placementName || p.id === rec.placementId
+                );
+                if (placement) {
+                    const increase = placement.totalCost * 0.25;
+                    totalBudgetIncrease += increase;
+                    scalePreview.push({
+                        placementId: placement.id,
+                        name: placement.vendor,
+                        roas: placement.performance?.roas || 0,
+                        currentCost: placement.totalCost,
+                        newCost: placement.totalCost * 1.25
+                    });
+                }
+            });
+
+            if (scalePreview.length === 0) {
+                return this.createAgentMessage(
+                    "No placements qualified for scaling (need ROAS > 3.0).\n\nYour high performers may already be well-funded.",
+                    ['Optimize', 'Show performance']
+                );
+            }
+
+            // Check for express mode - if enabled, execute immediately
+            if (this.context.expressMode) {
+                return this.executeScaleWinners(scalePreview, totalBudgetIncrease);
+            }
+
+            // Store the pending action for confirmation
+            this.context.pendingAction = {
+                type: 'SCALE_WINNERS',
+                description: `Scale ${scalePreview.length} high-performing placement${scalePreview.length > 1 ? 's' : ''} (+25%)`,
+                details: scalePreview.map(p => `${p.name} (ROAS: ${p.roas.toFixed(2)}) - $${Math.round(p.currentCost).toLocaleString()} → $${Math.round(p.newCost).toLocaleString()}`),
+                estimatedImpact: totalBudgetIncrease,
+                data: { scalePreview, totalBudgetIncrease }
+            };
+
+            // Show confirmation dialog
+            let responseContent = `**Confirm: Scale ${scalePreview.length} high-performing placement${scalePreview.length > 1 ? 's' : ''}?**\n\n`;
+            responseContent += `**Placements to scale (+25% budget & impressions):**\n`;
+            scalePreview.forEach(p => {
+                responseContent += `  • ${p.name} (ROAS: ${p.roas.toFixed(2)}) - $${Math.round(p.currentCost).toLocaleString()} → $${Math.round(p.newCost).toLocaleString()}\n`;
+            });
+            responseContent += `\n**Total budget increase:** $${Math.round(totalBudgetIncrease).toLocaleString('en-US')}\n\n`;
+            responseContent += `Type **"yes"** to confirm or **"no"** to cancel.`;
+
+            const msg = this.createAgentMessage(
+                responseContent,
+                ['Yes', 'No']
+            );
+            msg.agentsInvoked = ['Performance Agent', 'Yield Agent'];
+            return msg;
+        }
+
+        // Handle "growth opportunities" - show opportunities without taking action
+        if (lowerInput.includes('growth opportunit')) {
             console.log('[AgentBrain] Matched: Growth opportunities query');
 
             const plan = this.context.mediaPlan;
@@ -859,7 +1054,82 @@ export class AgentBrain {
                 responseContent += `   💰 Potential gain: $${Math.round(gain).toLocaleString('en-US')}\n\n`;
             });
 
-            return this.createAgentMessage(responseContent, ['Show full report']);
+            return this.createAgentMessage(responseContent, ['Scale winners', 'Show full report']);
+        }
+
+        // Handle "apply all recommendations" - execute all optimization actions
+        if (lowerInput.includes('apply all') || lowerInput.includes('apply recommendation')) {
+            console.log('[AgentBrain] Matched: Apply all recommendations ACTION');
+
+            const plan = this.context.mediaPlan;
+            if (!plan || !plan.campaign.placements || plan.campaign.placements.length === 0) {
+                return this.createAgentMessage(
+                    "I can't apply recommendations yet - there are no placements to analyze.",
+                    ['Add placements first']
+                );
+            }
+
+            const flightBudget = 100000;
+            const report = generateOptimizationReport(plan.campaign.placements, flightBudget);
+
+            let pausedCount = 0;
+            let scaledCount = 0;
+            let totalSavings = 0;
+            let totalIncrease = 0;
+
+            // Apply all recommendations
+            report.recommendations.forEach(rec => {
+                const placement = plan.campaign.placements?.find(p =>
+                    p.vendor === rec.placementName || p.id === rec.placementId
+                );
+                if (!placement) return;
+
+                // Handle PAUSE and REDUCE_BUDGET as "pause" actions
+                if ((rec.action === 'PAUSE' || rec.action === 'REDUCE_BUDGET') && placement.performance) {
+                    placement.performance.status = 'PAUSED';
+                    totalSavings += rec.estimatedImpact;
+                    pausedCount++;
+                }
+                // Handle INCREASE_BUDGET as "scale" action
+                else if (rec.action === 'INCREASE_BUDGET') {
+                    const increase = placement.totalCost * 0.25;
+                    placement.totalCost = placement.totalCost * 1.25;
+                    placement.quantity = Math.floor(placement.quantity * 1.25);
+                    if (placement.forecast) {
+                        placement.forecast.impressions = Math.floor(placement.forecast.impressions * 1.25);
+                    }
+                    totalIncrease += increase;
+                    scaledCount++;
+                }
+            });
+
+            // Recalculate plan metrics
+            plan.totalSpend = plan.campaign.placements?.reduce((acc, p) => acc + p.totalCost, 0) || 0;
+            plan.metrics = calculatePlanMetrics(plan.campaign.placements || []);
+
+            let responseContent = `🎯 **Applied All Recommendations**\n\n`;
+            if (pausedCount > 0) {
+                responseContent += `• Paused **${pausedCount}** underperforming placement${pausedCount > 1 ? 's' : ''}\n`;
+                responseContent += `  💰 Estimated savings: $${Math.round(totalSavings).toLocaleString('en-US')}\n\n`;
+            }
+            if (scaledCount > 0) {
+                responseContent += `• Scaled **${scaledCount}** high-performing placement${scaledCount > 1 ? 's' : ''}\n`;
+                responseContent += `  📈 Budget increase: $${Math.round(totalIncrease).toLocaleString('en-US')}\n\n`;
+            }
+
+            if (pausedCount === 0 && scaledCount === 0) {
+                return this.createAgentMessage(
+                    "No actionable recommendations to apply right now. Your plan is already optimized!",
+                    ['Show performance', 'Export PDF']
+                );
+            }
+
+            const msg = this.createAgentMessage(
+                responseContent,
+                ['Show performance', 'Undo', 'Export PDF']
+            );
+            msg.agentsInvoked = ['Performance Agent', 'Insights Agent', 'Yield Agent'];
+            return msg;
         }
 
         if (lowerInput.includes('detailed report') || lowerInput.includes('full report')) {
@@ -890,19 +1160,29 @@ export class AgentBrain {
             // Generate optimization report
             const report = generateOptimizationReport(plan.campaign.placements, flightBudget);
 
-            // Format the report
-            const formattedReport = formatOptimizationReport(report);
+            // Format the report with placement details
+            const formattedReport = formatOptimizationReport(report, plan.campaign.placements);
 
-            // Add suggested actions based on quick wins
+            // Add ACTIONABLE suggested actions based on recommendations
             const suggestedActions: string[] = [];
-            if (report.quickWins.length > 0) {
-                suggestedActions.push('Show quick wins');
+
+            // If there are underperformers to pause (PAUSE or REDUCE_BUDGET actions)
+            const pauseRecommendations = report.recommendations.filter(r =>
+                r.action === 'PAUSE' || r.action === 'REDUCE_BUDGET'
+            );
+            if (pauseRecommendations.length > 0) {
+                suggestedActions.push('Pause underperformers');
             }
-            if (report.recommendations.some(r => r.action === 'PAUSE')) {
-                suggestedActions.push('Show critical issues only');
+
+            // If there are winners to scale (INCREASE_BUDGET action)
+            const scaleRecommendations = report.recommendations.filter(r => r.action === 'INCREASE_BUDGET');
+            if (scaleRecommendations.length > 0) {
+                suggestedActions.push('Scale winners');
             }
-            if (report.totalGains > 0) {
-                suggestedActions.push('Show growth opportunities');
+
+            // If there are any recommendations at all
+            if (report.recommendations.length > 0) {
+                suggestedActions.push('Apply all recommendations');
             }
 
             return this.createAgentMessage(
@@ -1077,21 +1357,28 @@ export class AgentBrain {
             return this.createAgentMessage(responseContent, ['Forecast campaign', 'Optimize my plan']);
         }
 
-        // Handle inventory questions
+        // Handle inventory questions (delegated to InventoryService)
         // Triggers: "what available", "what avail", "what inventory"
-        if (lowerInput.includes('what') && (lowerInput.includes('available') || lowerInput.includes('avail') || lowerInput.includes('inventory'))) {
+        // Inventory queries: "what is available", "what DOOH is in NYC", "what sports shows..."
+        if (lowerInput.includes('what') && (
+            lowerInput.includes('available') ||
+            lowerInput.includes('avail') ||
+            lowerInput.includes('inventory') ||
+            (lowerInput.includes('dooh') && lowerInput.includes(' in ')) ||
+            (lowerInput.includes('ooh') && lowerInput.includes(' in '))
+        )) {
             // Check for DMA/Broadcast specific queries first
             // e.g. "what channels are avail in Des Moines", "broadcast stations in Dallas"
             if (lowerInput.includes('channel') || lowerInput.includes('station') || lowerInput.includes('broadcast') || lowerInput.includes('tv')) {
-                const dmaMatch = this.handleDMAQuery(input);
+                const dmaMatch = inventoryService.handleDMAQuery(input);
                 if (dmaMatch) {
-                    console.log('[AgentBrain] Matched: DMA Broadcast query');
+                    console.log('[AgentBrain] Matched: DMA Broadcast query (via InventoryService)');
                     return dmaMatch;
                 }
             }
 
-            console.log('[AgentBrain] Matched: Inventory query');
-            return this.handleInventoryQuery(input);
+            console.log('[AgentBrain] Matched: Inventory query (via InventoryService)');
+            return inventoryService.handleInventoryQuery(input);
         }
 
         // Handle Forecast/Delivery questions
@@ -1124,10 +1411,10 @@ export class AgentBrain {
         // =================================================================
         // BUDGET ALLOCATION RECOMMENDATIONS (NEW - Phase 4)
         // =================================================================
-        // Patterns: "how should I allocate", "split budget", "distribute $X"
-        const budgetAllocMatch = lowerInput.match(/(?:how.*allocate|split|distribute|spread).*(?:\$?([\d,]+(?:k|m)?)|budget)/i);
+        // Patterns: "allocate $50k", "how should I allocate", "split budget", "distribute $X"
+        const budgetAllocMatch = lowerInput.match(/(?:allocate|split|distribute|spread).*(?:\$?([\d,]+(?:k|m)?)|budget)/i);
 
-        if (budgetAllocMatch && (lowerInput.includes('allocate') || lowerInput.includes('split') || lowerInput.includes('distribute'))) {
+        if (budgetAllocMatch && (lowerInput.includes('allocate') || lowerInput.includes('split') || lowerInput.includes('distribute') || lowerInput.includes('spread'))) {
             console.log('[AgentBrain] Matched: Budget allocation query');
 
             // Extract budget from input or use campaign budget
@@ -1180,10 +1467,51 @@ export class AgentBrain {
                 });
             }
 
-            const suggestedActions = recommendation.channels.slice(0, 2).map(ch =>
-                `Add ${ch.channel} placements`
-            );
-            suggestedActions.push('Modify allocation');
+            // Actually create placements based on the allocation
+            const plan = this.context.mediaPlan;
+            if (plan) {
+                if (!plan.campaign.placements) {
+                    plan.campaign.placements = [];
+                }
+                const placements = plan.campaign.placements;
+
+                let addedCount = 0;
+                recommendation.channels.forEach(ch => {
+                    // Create a placement for each recommended channel
+                    const p = generateLine(
+                        ch.channel as any,
+                        plan.campaign.advertiser,
+                        ch.channel, // vendor name
+                        undefined
+                    );
+
+                    // Set the allocated budget
+                    p.totalCost = ch.allocatedBudget;
+                    if (p.costMethod === 'CPM' && p.rate > 0) {
+                        p.quantity = Math.floor((ch.allocatedBudget * 1000) / p.rate);
+                    } else if (p.rate > 0) {
+                        p.quantity = Math.floor(ch.allocatedBudget / p.rate);
+                    }
+
+                    // Update forecast based on budget
+                    if (p.forecast) {
+                        p.forecast.impressions = Math.floor(ch.allocatedBudget * 100); // Estimate
+                        p.forecast.spend = ch.allocatedBudget;
+                    }
+
+                    placements.push(p);
+                    addedCount++;
+                });
+
+                // Update plan totals
+                plan.totalSpend = placements.reduce((acc, p) => acc + p.totalCost, 0);
+                plan.remainingBudget = plan.campaign.budget - plan.totalSpend;
+                plan.metrics = calculatePlanMetrics(placements);
+
+                responseContent += `\n**${addedCount} placements added to your plan.**\nTotal spend: $${plan.totalSpend.toLocaleString()}`;
+            }
+
+            const suggestedActions = ['Optimize', 'Show plan', 'Export PDF'];
 
             return this.createAgentMessage(responseContent, suggestedActions);
         }
@@ -1200,7 +1528,7 @@ export class AgentBrain {
             console.log('[AgentBrain] Matched: Create Campaign', campaignName);
 
             return {
-                id: Date.now().toString(),
+                id: generateMessageId('agent'),
                 role: 'agent',
                 content: `I'm creating a new campaign called "**${campaignName}**".`,
                 timestamp: Date.now(),
@@ -1216,7 +1544,7 @@ export class AgentBrain {
             console.log('[AgentBrain] Matched: Create Flight', flightName);
 
             return {
-                id: Date.now().toString(),
+                id: generateMessageId('agent'),
                 role: 'agent',
                 content: `I'm creating a new flight called "**${flightName}**".`,
                 timestamp: Date.now(),
@@ -1226,305 +1554,66 @@ export class AgentBrain {
         }
 
         // =================================================================
-        // BATCH PLACEMENT GENERATION (NEW - Phase 4)
+        // BATCH PLACEMENT GENERATION (Delegated to ChannelManager)
         // =================================================================
         // Pattern: "add 5 social placements", "create 3 TV spots on ESPN"
-        const batchMatch = lowerInput.match(/(?:add|create|make|generate)\s+(\d+)\s+(social|display|tv|ctv|connected tv|linear tv|search|audio|video|native)/i);
-
-        if (batchMatch) {
-            const count = parseInt(batchMatch[1]);
-            let channelInput = batchMatch[2];
-
-            // Normalize channel names
-            const channelMap: Record<string, string> = {
-                'ctv': 'Connected TV',
-                'connected tv': 'Connected TV',
-                'linear tv': 'Linear TV',
-                'tv': 'Connected TV',  // Default TV to CTV
-                'social': 'Social',
-                'display': 'Display',
-                'search': 'Search',
-                'audio': 'Audio',
-                'video': 'Video',
-                'native': 'Native'
-            };
-
-            const channel = channelMap[channelInput.toLowerCase()] || channelInput;
-
-            // Extract network if specified (e.g., "on ESPN")
-            const networkMatch = input.match(/on\s+([a-z]+)/i);
-            const network = networkMatch ? networkMatch[1] : undefined;
-
-            // Validate count
-            if (count < 1 || count > 10) {
-                return this.createAgentMessage(
-                    `I can create between 1 and 10 placements at a time. You requested ${count}.`,
-                    [`Add ${Math.min(count, 10)} ${channel} placements`]
-                );
-            }
-
-            // Generate batch placements
-            const activeFlightId = this.context.mediaPlan!.activeFlightId;
-            const activeFlight = this.context.mediaPlan!.campaign.flights?.find(f => f.id === activeFlightId);
-
-            if (!activeFlight) {
-                return this.createAgentMessage(
-                    "I need to be in a flight to add placements. Please select or create a flight first.",
-                    ['Create new flight']
-                );
-            }
-
-            const placements = generateBatchPlacements({
-                channel,
-                network,
-                count,
-                variation: 'diverse'  // Always use diverse for batch generation
-            }, activeFlight);
-
-            // Add all placements to campaign
-            if (!this.context.mediaPlan!.campaign.placements) {
-                this.context.mediaPlan!.campaign.placements = [];
-            }
-
-            let totalCost = 0;
-            placements.forEach(p => {
-                this.context.mediaPlan!.campaign.placements!.push(p);
-                totalCost += p.totalCost;
-            });
-
-            // Update plan totals
-            this.context.mediaPlan!.totalSpend += totalCost;
-            this.context.mediaPlan!.remainingBudget = this.context.mediaPlan!.campaign.budget - this.context.mediaPlan!.totalSpend;
-            this.context.mediaPlan!.metrics = calculatePlanMetrics(this.context.mediaPlan!.campaign.placements);
-
-            // Record action for undo
-            actionHistory.recordAction({
-                id: `batch-${Date.now()}`,
-                type: 'add_placement',
-                description: `Added ${count} ${channel} placements`,
-                userCommand: input,
-                stateBefore: { placementCount: this.context.mediaPlan!.campaign.placements!.length - count },
-                stateAfter: { placementCount: this.context.mediaPlan!.campaign.placements!.length },
-                canUndo: true
-            });
-
-            // Generate summary
-            const placementSummary = placements.slice(0, 3).map(p =>
-                `• ${p.vendor} - ${p.adUnit} ($${(p.totalCost / 1000).toFixed(1)}k)`
-            ).join('\\n');
-
-            const moreText = count > 3 ? `\\n...and ${count - 3} more` : '';
-
-            responseContent = `✅ Created **${count} ${channel} placements** for **$${(totalCost / 1000).toFixed(1)}k**:\\n\\n${placementSummary}${moreText}\\n\\n` +
-                `**Total Spend:** $${(this.context.mediaPlan!.totalSpend / 1000).toFixed(1)}k of $${(this.context.mediaPlan!.campaign.budget / 1000).toFixed(1)}k`;
-
-            // Check budget usage and warn if high
-            const budgetUsed = (this.context.mediaPlan!.totalSpend / this.context.mediaPlan!.campaign.budget) * 100;
-            if (budgetUsed > 80) {
-                responseContent += `\\n\\n⚠️ **${budgetUsed.toFixed(0)}% of budget allocated** - limited budget remaining.`;
-            }
-
-            suggestedActions = ['Add more placements', 'Optimize plan', 'Export PDF'];
-
-            // Add to context manager
-            contextManager.addMessage(this.sessionId, 'assistant', responseContent);
-
-            return this.createAgentMessage(responseContent, suggestedActions);
+        const batchResult = channelManager.addBatchPlacements(input, this.context as any);
+        if (batchResult) {
+            console.log('[AgentBrain] Matched: Batch placement (via ChannelManager)');
+            contextManager.addMessage(this.sessionId, 'assistant', batchResult.content);
+            return batchResult;
         }
 
         // =================================================================
-        // SINGLE PLACEMENT (Existing logic)
+        // SINGLE PLACEMENT (Delegated to ChannelManager)
         // =================================================================
-        // 1. Add Channel
-        const addMatch = lowerInput.match(/add\s+(search|social|display|tv|radio|ooh|print|espn|cbs|nbc|abc|fox|cnn|msnbc|hgtv|discovery|tlc|bravo|tnt|netflix|hulu|amazon|disney|hbo|apple|paramount|peacock|youtube|roku|tubi|pluto|f1|dazn|sling|nfl|nba|mlb|nhl)/i);
-
-        if (addMatch) {
-            console.log('[AgentBrain] Matched: Add channel/placement', addMatch[1]);
-            let channelStr = addMatch[1].toLowerCase();
-            let channel: any;
-            let networkName: string | undefined;
-            let programName: string | undefined;
-
-            const tvNetworks = ['espn', 'espn2', 'cbs', 'nbc', 'abc', 'fox', 'cnn', 'msnbc', 'hgtv', 'discovery', 'tlc', 'bravo', 'tnt', 'netflix', 'hulu', 'amazon', 'disney', 'hbo', 'apple', 'paramount', 'peacock', 'youtube', 'roku', 'tubi', 'pluto', 'f1', 'dazn', 'sling', 'nfl', 'nba', 'mlb', 'nhl'];
-
-            if (tvNetworks.includes(channelStr)) {
-                channel = 'TV';
-                // Special handling for sports leagues to be more descriptive
-                if (['nfl', 'nba', 'mlb', 'nhl', 'f1'].includes(channelStr)) {
-                    networkName = 'Sports Network';
-                    programName = channelStr.toUpperCase();
-                } else {
-                    networkName = channelStr;
-                }
-
-                const networkPattern = new RegExp(`add\\s+${channelStr}\\s+(.+)`, 'i');
-                const programMatch = input.match(networkPattern);
-                if (programMatch) {
-                    programName = programMatch[1].trim();
-                }
-            } else {
-                if (channelStr === 'tv') channel = 'TV';
-                else if (channelStr === 'ooh') channel = 'OOH';
-                else channel = channelStr.charAt(0).toUpperCase() + channelStr.slice(1);
-            }
-
-            const p = generateLine(channel, this.context.mediaPlan!.campaign.advertiser, networkName, programName);
-
-            const alloc = Math.max(5000, this.context.mediaPlan!.campaign.budget * 0.05);
-            if (p.costMethod === 'CPM') {
-                p.quantity = Math.floor((alloc * 1000) / p.rate);
-                p.totalCost = (p.quantity * p.rate) / 1000;
-            } else if (p.costMethod === 'Spot' || p.costMethod === 'Flat') {
-                p.quantity = Math.max(1, Math.floor(alloc / p.rate));
-                p.totalCost = p.quantity * p.rate;
-            } else {
-                p.quantity = Math.floor(alloc / p.rate);
-                p.totalCost = p.quantity * p.rate;
-            }
-
-            // Ensure placements array exists
-            if (!this.context.mediaPlan!.campaign.placements) {
-                this.context.mediaPlan!.campaign.placements = [];
-            }
-
-            this.context.mediaPlan!.campaign.placements.push(p);
-            this.context.mediaPlan!.totalSpend += p.totalCost;
-            this.context.mediaPlan!.remainingBudget = this.context.mediaPlan!.campaign.budget - this.context.mediaPlan!.totalSpend;
-
-            // Recalculate metrics
-            this.context.mediaPlan!.metrics = calculatePlanMetrics(this.context.mediaPlan!.campaign.placements);
-
-            const displayName = channel === 'TV' && p.vendor && p.adUnit
-                ? `${p.vendor} - ${p.adUnit}`
-                : (networkName
-                    ? `${networkName}${programName ? ` - ${programName}` : ''}`
-                    : channel);
-
-            responseContent = `I've added a new **${displayName}** placement for $${p.totalCost.toLocaleString()}.\\n\\nCurrent Spend: $${this.context.mediaPlan!.totalSpend.toLocaleString()}`;
-            suggestedActions = ['Add another channel', 'Looks good', 'Export PDF'];
-            return this.createAgentMessage(responseContent, suggestedActions);
+        // Try single channel/network placement first
+        const singleResult = channelManager.addSinglePlacement(input, this.context as any);
+        if (singleResult) {
+            console.log('[AgentBrain] Matched: Single placement (via ChannelManager)');
+            return singleResult;
         }
 
-        // Check for show names without network
-        const showOnlyMatch = lowerInput.match(/^add\s+(.+)$/i);
-        if (showOnlyMatch) {
-            const programName = showOnlyMatch[1].trim();
-            const channel = 'TV';
-            const p = generateLine(channel, this.context.mediaPlan!.campaign.advertiser, undefined, programName);
-
-            const alloc = Math.max(5000, this.context.mediaPlan!.campaign.budget * 0.05);
-            if (p.costMethod === 'CPM') {
-                p.quantity = Math.floor((alloc * 1000) / p.rate);
-                p.totalCost = (p.quantity * p.rate) / 1000;
-            } else if (p.costMethod === 'Spot' || p.costMethod === 'Flat') {
-                p.quantity = Math.max(1, Math.floor(alloc / p.rate));
-                p.totalCost = p.quantity * p.rate;
-            } else {
-                p.quantity = Math.floor(alloc / p.rate);
-                p.totalCost = p.quantity * p.rate;
-            }
-
-            if (!this.context.mediaPlan!.campaign.placements) {
-                this.context.mediaPlan!.campaign.placements = [];
-            }
-            this.context.mediaPlan!.campaign.placements.push(p);
-            this.context.mediaPlan!.totalSpend += p.totalCost;
-            this.context.mediaPlan!.remainingBudget = this.context.mediaPlan!.campaign.budget - this.context.mediaPlan!.totalSpend;
-
-            // Recalculate metrics
-            this.context.mediaPlan!.metrics = calculatePlanMetrics(this.context.mediaPlan!.campaign.placements);
-
-            const displayName = p.vendor && p.adUnit
-                ? `${p.vendor} - ${p.adUnit}`
-                : 'TV';
-
-            responseContent = `I've added a new **${displayName}** placement for $${p.totalCost.toLocaleString()}.\\n\\nCurrent Spend: $${this.context.mediaPlan!.totalSpend.toLocaleString()}`;
-            suggestedActions = ['Add another channel', 'Looks good', 'Export PDF'];
-            return this.createAgentMessage(responseContent, suggestedActions);
+        // Try show name without network (catch-all for "add SportsCenter")
+        const showResult = channelManager.addShowByName(input, this.context as any);
+        if (showResult) {
+            console.log('[AgentBrain] Matched: Show by name (via ChannelManager)');
+            return showResult;
         }
+
+        // =================================================================
+        // BUDGET, DATES, PAUSE/RESUME (Delegated to ChannelManager)
+        // =================================================================
 
         // 2. Change Budget
-        if (lowerInput.includes('budget')) {
-            const budgetMatch = input.match(/\$?(\d+(?:,\d{3})*(?:\.\d+)?)\s*([kK]|[mM]{1,2})?/);
-            if (budgetMatch) {
-                const rawValue = parseFloat(budgetMatch[1].replace(/,/g, ''));
-                const suffix = (budgetMatch[2] || '').toLowerCase();
-                let newBudget = rawValue;
-
-                if (suffix.startsWith('m')) {
-                    newBudget = rawValue * 1000000;
-                } else if (suffix.startsWith('k')) {
-                    newBudget = rawValue * 1000;
-                }
-
-                this.context.mediaPlan!.campaign.budget = newBudget;
-                this.context.mediaPlan!.remainingBudget = newBudget - this.context.mediaPlan!.totalSpend;
-                responseContent = `Updated total budget to **$${newBudget.toLocaleString()}**. You have $${this.context.mediaPlan!.remainingBudget.toLocaleString()} remaining.`;
-                suggestedActions = ['Add TV', 'Export PDF'];
-                return this.createAgentMessage(responseContent, suggestedActions);
-            }
+        const budgetResult = channelManager.changeBudget(input, this.context as any);
+        if (budgetResult) {
+            console.log('[AgentBrain] Matched: Change budget (via ChannelManager)');
+            return budgetResult;
         }
 
         // 3. Change Dates
-        if (lowerInput.includes('date') || lowerInput.includes('run from') || lowerInput.includes('delay')) {
-            if (lowerInput.includes('delay')) {
-                const oldStart = new Date(this.context.mediaPlan!.campaign.startDate);
-                oldStart.setMonth(oldStart.getMonth() + 1);
-                this.context.mediaPlan!.campaign.startDate = oldStart.toISOString().split('T')[0];
-                responseContent = "I've shifted the campaign start date by 1 month.";
-            } else {
-                responseContent = "I've updated the flight dates. (Note: For this prototype, please use 'Delay start' to shift dates).";
-            }
-            suggestedActions = ['Delay start by 1 month', 'Export PDF'];
-            return this.createAgentMessage(responseContent, suggestedActions);
+        const datesResult = channelManager.changeDates(input, this.context as any);
+        if (datesResult) {
+            console.log('[AgentBrain] Matched: Change dates (via ChannelManager)');
+            return datesResult;
         }
 
         // 4. Pause Specific Items (by row or name)
-        const pauseRowMatch = lowerInput.match(/pause\s+(?:row\s+)?(\d+)/i);
-        const pauseNameMatch = lowerInput.match(/pause\s+(.+?)(?:\s+and|\s*$)/i);
-
-        // Only process pause if NOT unpause/resume
-        if ((pauseRowMatch || pauseNameMatch) && !lowerInput.includes('unpause') && !lowerInput.includes('resume')) {
-            let pausedCount = 0;
-            let pausedItems: string[] = [];
-
-            if (pauseRowMatch) {
-                // Pause by row number
-                const rowNum = parseInt(pauseRowMatch[1]);
-                if (this.context.mediaPlan!.campaign.placements && rowNum > 0 && rowNum <= this.context.mediaPlan!.campaign.placements.length) {
-                    const placement = this.context.mediaPlan!.campaign.placements[rowNum - 1];
-                    if (placement.performance) {
-                        placement.performance.status = 'PAUSED';
-                        pausedItems.push(`Row #${rowNum} (${placement.vendor})`);
-                        pausedCount++;
-                    }
-                }
-            } else if (pauseNameMatch) {
-                // Pause by name/vendor
-                const searchTerm = pauseNameMatch[1].toLowerCase().trim();
-                this.context.mediaPlan!.campaign.placements?.forEach((p, idx) => {
-                    if (p.vendor?.toLowerCase().includes(searchTerm) || p.name?.toLowerCase().includes(searchTerm)) {
-                        if (p.performance) {
-                            p.performance.status = 'PAUSED';
-                            pausedItems.push(`${p.vendor || p.name}`);
-                            pausedCount++;
-                        }
-                    }
-                });
-            }
-
-            if (pausedCount > 0) {
-                responseContent = `I've paused ${pausedCount} placement(s): ${pausedItems.join(', ')}.`;
-                suggestedActions = ['Resume placements', 'Export PDF'];
-                return this.createAgentMessage(responseContent, suggestedActions);
-            } else {
-                responseContent = "I couldn't find any matching placements to pause. Please check the row number or name.";
-                suggestedActions = ['Show Details'];
-                return this.createAgentMessage(responseContent, suggestedActions);
-            }
+        const pauseResult = channelManager.pausePlacement(input, this.context as any);
+        if (pauseResult) {
+            console.log('[AgentBrain] Matched: Pause placement (via ChannelManager)');
+            return pauseResult;
         }
 
         // 4b. Resume/Unpause Specific Items (by row or name)
+        const resumeResult = channelManager.resumePlacement(input, this.context as any);
+        if (resumeResult) {
+            console.log('[AgentBrain] Matched: Resume placement (via ChannelManager)');
+            return resumeResult;
+        }
+
+        // Legacy fallback for complex resume logic (will be refactored)
         const resumeRowMatch = lowerInput.match(/(?:resume|unpause)\s+(?:row\s+)?(\d+)/i);
         const resumeNameMatch = lowerInput.match(/(?:resume|unpause)\s+(.+?)(?:\s+and|\s*$)/i);
 
@@ -1637,40 +1726,18 @@ export class AgentBrain {
             return this.createAgentMessage(responseContent, suggestedActions, 'EXPORT_PDF');
         }
 
-        // 6. Grouping / Views
-        if (lowerInput.includes('group') || lowerInput.includes('summary') || lowerInput.includes('detail') || lowerInput.includes('segment') || lowerInput.includes('line item') || lowerInput.includes('placement') || lowerInput.includes('flat')) {
-            if (lowerInput.includes('detail') || lowerInput.includes('segment') || lowerInput.includes('line item') || lowerInput.includes('placement') || lowerInput.includes('flat')) {
-                this.context.mediaPlan!.groupingMode = 'DETAILED';
-                responseContent = "Switched to **Detailed View** (Line Items).";
-            } else {
-                this.context.mediaPlan!.groupingMode = 'CHANNEL_SUMMARY';
-                responseContent = "Switched to **Channel Summary View**. Data is now aggregated by channel.";
-            }
-            suggestedActions = ['Show Details', 'Show Channel Summary', 'Export PDF'];
-            return this.createAgentMessage(responseContent, suggestedActions);
+        // 6. Grouping / Views (Delegated to ChannelManager)
+        const groupingResult = channelManager.changeGrouping(input, this.context as any);
+        if (groupingResult) {
+            console.log('[AgentBrain] Matched: Change grouping (via ChannelManager)');
+            return groupingResult;
         }
 
-        // 7. Modify Segment by Row
-        const segmentMatch = lowerInput.match(/row\s+(\d+).*?segment.*?to\s+(.+)/i) || lowerInput.match(/change\s+segment.*?(\d+).*?to\s+(.+)/i);
-        if (segmentMatch) {
-            const rowNum = parseInt(segmentMatch[1]);
-            const newSegment = segmentMatch[2].replace(/['"]/g, '').trim();
-
-            if (this.context.mediaPlan!.campaign.placements && rowNum > 0 && rowNum <= this.context.mediaPlan!.campaign.placements.length) {
-                const placement = this.context.mediaPlan!.campaign.placements[rowNum - 1];
-                const oldSegment = placement.segment;
-                placement.segment = newSegment;
-
-                const displaySegment = newSegment.charAt(0).toUpperCase() + newSegment.slice(1);
-                placement.segment = displaySegment;
-
-                responseContent = `Updated Row #${rowNum} (${placement.vendor}): Changed segment from "${oldSegment}" to "**${displaySegment}**".`;
-                suggestedActions = ['Change another segment', 'Export PDF'];
-                return this.createAgentMessage(responseContent, suggestedActions);
-            } else {
-                responseContent = `I couldn't find Row #${rowNum}. Please check the table and try again.`;
-                return this.createAgentMessage(responseContent, ['Show Details']);
-            }
+        // 7. Modify Segment by Row (Delegated to ChannelManager)
+        const segmentResult = channelManager.modifySegment(input, this.context as any);
+        if (segmentResult) {
+            console.log('[AgentBrain] Matched: Modify segment (via ChannelManager)');
+            return segmentResult;
         }
 
         return null;
@@ -1773,9 +1840,133 @@ export class AgentBrain {
         this.context.mediaPlan.metrics = calculatePlanMetrics(placements);
     }
 
+    /**
+     * Execute a pending action after user confirmation
+     */
+    private executePendingAction(action: PendingAction): AgentMessage {
+        switch (action.type) {
+            case 'PAUSE_UNDERPERFORMERS':
+                return this.executePauseUnderperformers(
+                    action.data.pausePreview,
+                    action.data.totalSavings
+                );
+            case 'SCALE_WINNERS':
+                return this.executeScaleWinners(
+                    action.data.scalePreview,
+                    action.data.totalBudgetIncrease
+                );
+            default:
+                return this.createAgentMessage(
+                    "Unknown action type. No changes were made.",
+                    ['Show performance', 'Optimize']
+                );
+        }
+    }
+
+    /**
+     * Execute pause underperformers action
+     */
+    private executePauseUnderperformers(
+        pausePreview: { placementId: string; name: string; roas: number }[],
+        totalSavings: number
+    ): AgentMessage {
+        const plan = this.context.mediaPlan;
+        if (!plan || !plan.campaign.placements) {
+            return this.createAgentMessage(
+                "Error: No media plan found.",
+                ['Create new campaign']
+            );
+        }
+
+        let pausedCount = 0;
+        const pausedPlacements: string[] = [];
+
+        pausePreview.forEach(preview => {
+            const placement = plan.campaign.placements?.find(p => p.id === preview.placementId);
+            if (placement && placement.performance && placement.performance.status !== 'PAUSED') {
+                placement.performance.status = 'PAUSED';
+                pausedPlacements.push(`${preview.name} (ROAS: ${preview.roas.toFixed(2)})`);
+                pausedCount++;
+            }
+        });
+
+        // Recalculate plan metrics
+        plan.totalSpend = plan.campaign.placements.reduce((acc, p) => acc + p.totalCost, 0);
+        plan.metrics = calculatePlanMetrics(plan.campaign.placements);
+
+        let responseContent = `**Paused ${pausedCount} underperforming placement${pausedCount > 1 ? 's' : ''}**\n\n`;
+        responseContent += `**Placements paused:**\n`;
+        pausedPlacements.forEach(name => {
+            responseContent += `  • ${name}\n`;
+        });
+        responseContent += `\n**Estimated savings:** $${Math.round(totalSavings).toLocaleString('en-US')}`;
+
+        const msg = this.createAgentMessage(
+            responseContent,
+            ['Scale winners', 'Show performance', 'Undo']
+        );
+        msg.agentsInvoked = ['Performance Agent', 'Insights Agent'];
+        this.context.history.push(msg);
+        contextManager.addMessage(this.sessionId, 'assistant', msg.content);
+        return msg;
+    }
+
+    /**
+     * Execute scale winners action
+     */
+    private executeScaleWinners(
+        scalePreview: { placementId: string; name: string; roas: number; currentCost: number; newCost: number }[],
+        totalBudgetIncrease: number
+    ): AgentMessage {
+        const plan = this.context.mediaPlan;
+        if (!plan || !plan.campaign.placements) {
+            return this.createAgentMessage(
+                "Error: No media plan found.",
+                ['Create new campaign']
+            );
+        }
+
+        let scaledCount = 0;
+        const scaledPlacements: string[] = [];
+
+        scalePreview.forEach(preview => {
+            const placement = plan.campaign.placements?.find(p => p.id === preview.placementId);
+            if (placement) {
+                placement.totalCost = preview.newCost;
+                placement.quantity = Math.floor(placement.quantity * 1.25);
+                if (placement.forecast) {
+                    placement.forecast.impressions = Math.floor(placement.forecast.impressions * 1.25);
+                }
+                scaledPlacements.push(`${preview.name} (ROAS: ${preview.roas.toFixed(2)})`);
+                scaledCount++;
+            }
+        });
+
+        // Recalculate plan metrics
+        plan.totalSpend = plan.campaign.placements.reduce((acc, p) => acc + p.totalCost, 0);
+        plan.metrics = calculatePlanMetrics(plan.campaign.placements);
+
+        let responseContent = `**Scaled ${scaledCount} high-performing placement${scaledCount > 1 ? 's' : ''}**\n\n`;
+        responseContent += `**Placements scaled (+25% budget & impressions):**\n`;
+        scaledPlacements.forEach(name => {
+            responseContent += `  • ${name}\n`;
+        });
+        responseContent += `\n**Total budget increase:** $${Math.round(totalBudgetIncrease).toLocaleString('en-US')}`;
+        responseContent += `\n**New total spend:** $${plan.totalSpend.toLocaleString('en-US')}`;
+
+        const msg = this.createAgentMessage(
+            responseContent,
+            ['Pause underperformers', 'Show performance', 'Undo']
+        );
+        msg.agentsInvoked = ['Performance Agent', 'Yield Agent'];
+        this.context.history.push(msg);
+        contextManager.addMessage(this.sessionId, 'assistant', msg.content);
+        return msg;
+    }
+
     private createAgentMessage(content: string, suggestedActions: string[], action?: AgentMessage['action']): AgentMessage {
         return {
-            id: Date.now().toString(),
+            id: generateMessageId('agent'),
             role: 'agent',
             content,
             timestamp: Date.now(),
@@ -1814,6 +2005,10 @@ export class AgentBrain {
         );
     }
 
+    /**
+     * @deprecated Use inventoryService.handleInventoryQuery() instead
+     * This method is kept for backwards compatibility and will be removed in a future version.
+     */
     private handleInventoryQuery(query: string): AgentMessage {
         const lowerQuery = query.toLowerCase();
 
@@ -2208,6 +2403,10 @@ export class AgentBrain {
         );
     }
 
+    /**
+     * @deprecated Use inventoryService.handleDMAQuery() instead
+     * This method is kept for backwards compatibility and will be removed in a future version.
+     */
     private handleDMAQuery(query: string): AgentMessage | null {
         const dma = getDMAByCity(query);
 

@@ -274,12 +274,16 @@ function App() {
         setBrands(prevBrands => prevBrands.map(b => b.id === updatedBrand.id ? updatedBrand : b));
     };
 
-    const handleCreateCampaign = (name: string, budget: number, startDate: string, endDate: string, goals: string[]) => {
+    const handleCreateCampaign = (name: string, budget?: number, startDate?: string, endDate?: string, goals?: string[]) => {
         if (!currentBrand) return;
 
         const campaignId = generateId();
         const today = new Date().toISOString().split('T')[0];
         const in90Days = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        const actualBudget = budget ?? 100000;
+        const actualStartDate = startDate || today;
+        const actualEndDate = endDate || in90Days;
+        const actualGoals = goals || ['Brand Awareness'];
 
         // Create new campaign with NO default flights
         const newCampaign: Campaign = {
@@ -287,10 +291,10 @@ function App() {
             name: name,
             brandId: currentBrand.id,
             advertiser: currentBrand.name,
-            budget: budget || 100000,
-            startDate: startDate || today,
-            endDate: endDate || in90Days,
-            goals: ['Brand Awareness'],
+            budget: actualBudget,
+            startDate: actualStartDate,
+            endDate: actualEndDate,
+            goals: actualGoals,
             flights: [], // Start with zero flights
             status: 'DRAFT',
             tags: [],
@@ -706,7 +710,7 @@ function App() {
 
     const handleSendMessage = async (text: string) => {
         const userMsg: AgentMessage = {
-            id: Date.now().toString(),
+            id: `user-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
             role: 'user',
             content: text,
             timestamp: Date.now()
@@ -751,7 +755,15 @@ function App() {
             } else if (typeof action === 'object') {
                 // Handle complex actions
                 if (action.type === 'CREATE_CAMPAIGN') {
-                    handleCreateCampaign(action.payload.name);
+                    const today = new Date().toISOString().split('T')[0];
+                    const in90Days = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+                    handleCreateCampaign(
+                        action.payload.name,
+                        action.payload.budget || 100000,
+                        action.payload.startDate || today,
+                        action.payload.endDate || in90Days,
+                        action.payload.goals || []
+                    );
                 } else if (action.type === 'CREATE_FLIGHT') {
                     handleCreateFlight(action.payload.name);
                 }

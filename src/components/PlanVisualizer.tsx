@@ -436,27 +436,30 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
                 {isChild ? <span className="text-gray-300 ml-4 mr-2">↳</span> : (index !== undefined ? index + 1 : '')}
             </td>
             <td className="py-3 px-6 text-sm font-medium text-gray-900">
+                {!isChild && (
+                    <span className={clsx(
+                        "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium whitespace-nowrap",
+                        placement.channel === 'Search' && "bg-blue-100 text-blue-800",
+                        placement.channel === 'Social' && "bg-pink-100 text-pink-800",
+                        placement.channel === 'Display' && "bg-purple-100 text-purple-800",
+                        placement.channel === 'Streaming Audio' && "bg-green-100 text-green-800",
+                        placement.channel === 'Podcast' && "bg-teal-100 text-teal-800",
+                        placement.channel === 'Place-based Audio' && "bg-amber-100 text-amber-800",
+                        ['TV', 'Radio', 'OOH', 'Print'].includes(placement.channel) && "bg-orange-100 text-orange-800"
+                    )}>
+                        {placement.channel}
+                    </span>
+                )}
+            </td>
+            <td className="py-3 px-6 text-sm text-gray-600">
                 <div className="flex items-center gap-2">
-                    {!isChild && (
-                        <span className={clsx(
-                            "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium",
-                            placement.channel === 'Search' && "bg-blue-100 text-blue-800",
-                            placement.channel === 'Social' && "bg-pink-100 text-pink-800",
-                            placement.channel === 'Display' && "bg-purple-100 text-purple-800",
-                            ['TV', 'Radio', 'OOH', 'Print'].includes(placement.channel) && "bg-orange-100 text-orange-800"
-                        )}>
-                            {placement.channel}
-                        </span>
-                    )}
+                    <span>{placement.vendor}</span>
                     {placement.performance?.status === 'PAUSED' && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-600">
-                            <span className="text-gray-400">■</span> Paused
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium bg-gray-200 text-gray-500">
+                            Paused
                         </span>
                     )}
                 </div>
-            </td>
-            <td className="py-3 px-6 text-sm text-gray-600">
-                <div>{placement.vendor}</div>
                 <div className="flex flex-wrap gap-1 mt-1">
                     {placement.segments && placement.segments.length > 0 ? (
                         placement.segments.map((seg: Segment, i: number) => (

@@ -22,7 +22,7 @@ export const generateMediaPlanPDF = (mediaPlan: MediaPlan) => {
     doc.text(`Remaining: $${mediaPlan.remainingBudget.toLocaleString()}`, 140, 38);
 
     // Placements Table
-    const tableData = campaign.placements.map(p => [
+    const tableData = (campaign.placements || []).map(p => [
         p.channel,
         p.vendor,
         p.adUnit,

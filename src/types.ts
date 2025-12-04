@@ -271,7 +271,7 @@ export type PlacementStatus = 'PLANNING' | 'ACTIVE' | 'COMPLETED' | 'PAUSED';
 export interface Line {
     id: string;
     name: string;
-    channel: 'Search' | 'Social' | 'Display' | 'TV' | 'Radio' | 'OOH' | 'Print';
+    channel: 'Search' | 'Social' | 'Display' | 'TV' | 'Radio' | 'Streaming Audio' | 'Podcast' | 'Place-based Audio' | 'OOH' | 'Print';
     status: PlacementStatus;
     vendor: string;
     adUnit: string;

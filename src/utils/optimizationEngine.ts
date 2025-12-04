@@ -234,31 +234,86 @@ function issueToRecommendation(
 /**
  * Format optimization report as text for agent responses
  */
-export function formatOptimizationReport(report: OptimizationReport): string {
+export function formatOptimizationReport(report: OptimizationReport, placements?: Placement[]): string {
     const { analysis, recommendations, totalSavings, totalGains, netImpact, quickWins } = report;
 
     let output = `🎯 **Plan Optimization Report**\n\n`;
 
     // Overall score
     output += `**Overall Score:** ${analysis.overallScore}/100`;
-    if (analysis.overallScore < 50) output += ` ⚠️ Needs Attention\n`;
-    else if (analysis.overallScore < 70) output += ` 📊 Fair\n`;
-    else if (analysis.overallScore < 85) output += ` ✅ Good\n`;
-    else output += ` 🌟 Excellent\n`;
+    if (analysis.overallScore < 50) output += ` Needs Attention\n`;
+    else if (analysis.overallScore < 70) output += ` Fair\n`;
+    else if (analysis.overallScore < 85) output += ` Good\n`;
+    else output += ` Excellent\n`;
 
     output += `\n`;
+
+    // Channel breakdown (if placements provided)
+    if (placements && placements.length > 0) {
+        output += `**Channel Breakdown:**\n`;
+
+        // Group placements by channel
+        const channelGroups: Record<string, Placement[]> = {};
+        placements.forEach(p => {
+            const channel = p.channel || 'Unknown';
+            if (!channelGroups[channel]) channelGroups[channel] = [];
+            channelGroups[channel].push(p);
+        });
+
+        // Sort channels by total spend
+        const sortedChannels = Object.entries(channelGroups)
+            .map(([channel, pls]) => ({
+                channel,
+                placements: pls,
+                totalSpend: pls.reduce((sum, p) => sum + p.totalCost, 0),
+                avgRoas: pls.filter(p => p.performance?.roas).length > 0
+                    ? pls.reduce((sum, p) => sum + (p.performance?.roas || 0), 0) / pls.filter(p => p.performance?.roas).length
+                    : null
+            }))
+            .sort((a, b) => b.totalSpend - a.totalSpend);
+
+        sortedChannels.forEach(({ channel, placements: pls, totalSpend, avgRoas }) => {
+            const roasStr = avgRoas !== null ? ` | ROAS: ${avgRoas.toFixed(2)}` : '';
+            const status = avgRoas !== null
+                ? (avgRoas >= 3.0 ? ' ↑' : avgRoas < 1.0 ? ' ↓' : '')
+                : '';
+            output += `\n**${channel}** ($${formatCurrency(totalSpend)}${roasStr})${status}\n`;
+
+            // List individual placements
+            pls.forEach(p => {
+                const perf = p.performance;
+                let placementStatus = '';
+                let metrics = '';
+
+                if (perf) {
+                    if (perf.status === 'PAUSED') {
+                        placementStatus = ' [PAUSED]';
+                    } else if (perf.roas >= 3.0) {
+                        placementStatus = ' ★';
+                    } else if (perf.roas < 1.0) {
+                        placementStatus = ' !';
+                    }
+                    metrics = ` | ROAS: ${perf.roas.toFixed(2)} | CTR: ${(perf.ctr * 100).toFixed(2)}%`;
+                }
+
+                output += `  • ${p.vendor}: $${formatCurrency(p.totalCost)}${metrics}${placementStatus}\n`;
+            });
+        });
+
+        output += `\n`;
+    }
 
     // Critical issues
     const critical = recommendations.filter(r => r.priority === 'HIGH');
     if (critical.length > 0) {
-        output += `**🚨 Critical Issues (${critical.length}):**\n`;
+        output += `**Critical Issues (${critical.length}):**\n`;
         critical.slice(0, 3).forEach(r => {
             const impact = r.estimatedImpact > 0
                 ? `Save $${formatCurrency(r.estimatedImpact)}`
                 : `Gain $${formatCurrency(Math.abs(r.estimatedImpact))}`;
-            output += `• ${r.description}\n`;
+            output += `• ${r.placementName}: ${r.description}\n`;
             output += `  ${r.currentMetric} → ${r.specificAction}\n`;
-            output += `  💰 ${impact}\n\n`;
+            output += `  ${impact}\n\n`;
         });
         if (critical.length > 3) {
             output += `  _...and ${critical.length - 3} more critical issues_\n\n`;
@@ -268,17 +323,17 @@ export function formatOptimizationReport(report: OptimizationReport): string {
     // Opportunities
     const opportunities = recommendations.filter(r => r.estimatedImpact < 0);
     if (opportunities.length > 0) {
-        output += `**✨ Growth Opportunities (${opportunities.length}):**\n`;
+        output += `**Growth Opportunities (${opportunities.length}):**\n`;
         opportunities.slice(0, 2).forEach(r => {
             const gain = Math.abs(r.estimatedImpact);
-            output += `• ${r.description}\n`;
+            output += `• ${r.placementName}: ${r.description}\n`;
             output += `  ${r.currentMetric} → ${r.specificAction}\n`;
-            output += `  💰 Potential gain: $${formatCurrency(gain)}\n\n`;
+            output += `  Potential gain: $${formatCurrency(gain)}\n\n`;
         });
     }
 
     // Summary
-    output += `**📊 Total Impact:**\n`;
+    output += `**Total Impact:**\n`;
     if (totalSavings > 0) {
         output += `• Save: $${formatCurrency(totalSavings)} from waste reduction\n`;
     }
@@ -291,7 +346,7 @@ export function formatOptimizationReport(report: OptimizationReport): string {
 
     // Quick wins
     if (quickWins.length > 0) {
-        output += `\n💡 ${quickWins.length} quick win${quickWins.length > 1 ? 's' : ''} available - easy actions with high impact`;
+        output += `\n${quickWins.length} quick win${quickWins.length > 1 ? 's' : ''} available - easy actions with high impact`;
     }
 
     return output;

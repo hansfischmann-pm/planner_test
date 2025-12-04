@@ -63,21 +63,26 @@ const CHANNEL_BENCHMARKS: Record<CampaignObjective, Record<string, { efficiency:
         'DOOH': { efficiency: 0.7, reach: 0.6, minBudget: 15000 },
         'Display': { efficiency: 0.6, reach: 0.8, minBudget: 5000 },
         'Social': { efficiency: 0.7, reach: 0.85, minBudget: 10000 },
-        'Video': { efficiency: 0.75, reach: 0.75, minBudget: 15000 }
+        'Video': { efficiency: 0.75, reach: 0.75, minBudget: 15000 },
+        'Search': { efficiency: 0.5, reach: 0.4, minBudget: 5000 },  // Lower priority for awareness but still available
+        'Audio': { efficiency: 0.65, reach: 0.6, minBudget: 8000 }
     },
     consideration: {
         'Social': { efficiency: 0.8, reach: 0.8, minBudget: 10000 },
         'Display': { efficiency: 0.7, reach: 0.75, minBudget: 5000 },
         'Native': { efficiency: 0.75, reach: 0.7, minBudget: 8000 },
         'Video': { efficiency: 0.8, reach: 0.75, minBudget: 12000 },
-        'Audio': { efficiency: 0.7, reach: 0.65, minBudget: 10000 }
+        'Audio': { efficiency: 0.7, reach: 0.65, minBudget: 10000 },
+        'Search': { efficiency: 0.7, reach: 0.5, minBudget: 5000 },
+        'Connected TV': { efficiency: 0.7, reach: 0.7, minBudget: 20000 }
     },
     conversion: {
         'Search': { efficiency: 0.9, reach: 0.5, minBudget: 5000 },
         'Social': { efficiency: 0.85, reach: 0.7, minBudget: 8000 },
         'Display': { efficiency: 0.75, reach: 0.7, minBudget: 5000 },
         'Retail Media': { efficiency: 0.9, reach: 0.4, minBudget: 10000 },
-        'Email': { efficiency: 0.95, reach: 0.3, minBudget: 2000 }
+        'Email': { efficiency: 0.95, reach: 0.3, minBudget: 2000 },
+        'Connected TV': { efficiency: 0.6, reach: 0.6, minBudget: 20000 }
     }
 };
 
@@ -142,8 +147,8 @@ export function recommendBudgetAllocation(
         if (!benchmark) continue;
 
         let weight = benchmark.efficiency;
-        if (historicalPerformance && historicalPerformance[channel]) {
-            const historicalROAS = historicalPerformance[channel];
+        const historicalROAS = historicalPerformance?.[channel];
+        if (historicalROAS) {
             weight = weight * 0.6 + (historicalROAS / 5) * 0.4;
         }
 
@@ -152,7 +157,7 @@ export function recommendBudgetAllocation(
 
         // Generate reasoning
         let reasoning = `Strong ${objective} performance`;
-        if (historicalPerformance && historicalPerformance[channel]) {
+        if (historicalROAS) {
             reasoning += ` (${historicalROAS.toFixed(2)}x historical ROAS)`;
         } else {
             reasoning += ` (${(benchmark.efficiency * 5).toFixed(2)}x expected ROAS)`;
@@ -273,7 +278,7 @@ export function suggestOptimizations(lines: Line[]): string[] {
     }
 
     // Check frequency
-    const highFrequency = lines.filter(l => l.delivery && l.delivery.frequency > 8);
+    const highFrequency = lines.filter(l => l.performance && l.performance.frequency && l.performance.frequency > 8);
     if (highFrequency.length > 0) {
         suggestions.push(`⚠️ ${highFrequency.length} placement(s) have frequency >8x. Consider frequency capping.`);
     }

@@ -63,7 +63,7 @@ export const AudienceInsightsPanel: React.FC<AudienceInsightsPanelProps> = ({
     }, [segmentPerformance, currentSegments]);
 
     const lookalikeRecs = useMemo(() =>
-        bestSegment ? findLookalikeSegments(bestSegment, SEGMENT_LIBRARY, currentSegments) : [],
+        bestSegment ? findLookalikeSegments(bestSegment, SEGMENT_LIBRARY as Segment[], currentSegments) : [],
         [bestSegment, currentSegments]
     );
 
@@ -98,7 +98,7 @@ export const AudienceInsightsPanel: React.FC<AudienceInsightsPanelProps> = ({
     }, [placements]);
 
     const expansionRecs = useMemo(() =>
-        goals ? generateExpansionRecommendations(currentSegments, goals, currentPerformance, SEGMENT_LIBRARY) : [],
+        goals ? generateExpansionRecommendations(currentSegments, goals, currentPerformance, SEGMENT_LIBRARY as Segment[]) : [],
         [currentSegments, goals, currentPerformance]
     );
 

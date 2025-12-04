@@ -22,14 +22,16 @@ export const generateMediaPlanPPT = (mediaPlan: MediaPlan) => {
     slide2.addText('Remaining Budget', { x: 4, y: 2, fontSize: 14, color: '666666' });
     slide2.addText(`$${mediaPlan.remainingBudget.toLocaleString()}`, { x: 4, y: 2.5, fontSize: 32, color: '28A745', bold: true });
 
+    const placements = campaign.placements || [];
+
     slide2.addText('Total Placements', { x: 7, y: 2, fontSize: 14, color: '666666' });
-    slide2.addText(campaign.placements.length.toString(), { x: 7, y: 2.5, fontSize: 32, color: 'FF8C00', bold: true });
+    slide2.addText(placements.length.toString(), { x: 7, y: 2.5, fontSize: 32, color: 'FF8C00', bold: true });
 
     // Slide 3: Detailed Placements Table
     const slide3 = pres.addSlide();
     slide3.addText('Detailed Media Schedule', { x: 0.5, y: 0.5, fontSize: 24, color: '363636', bold: true });
 
-    const rows = campaign.placements.map(p => [
+    const rows: (string | { text: string })[][] = placements.map(p => [
         p.channel,
         p.vendor,
         p.adUnit,
@@ -42,7 +44,9 @@ export const generateMediaPlanPPT = (mediaPlan: MediaPlan) => {
     // Add Header Row
     rows.unshift(['Channel', 'Vendor', 'Ad Unit', 'Dates', 'Rate', 'Qty', 'Cost']);
 
-    slide3.addTable(rows, {
+    // String arrays work as table rows in pptxgenjs
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    slide3.addTable(rows as any, {
         x: 0.5,
         y: 1.2,
         w: 9,
