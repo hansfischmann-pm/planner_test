@@ -11,6 +11,7 @@ import { AgencyAnalyticsDashboard } from './components/AgencyAnalyticsDashboard'
 import { IntegrationDashboard } from './components/IntegrationDashboard';
 import { PortfolioDashboard } from './components/PortfolioDashboard';
 import { GlobalShortcuts } from './components/GlobalShortcuts';
+import { AttributionDashboard } from './components/AttributionDashboard';
 
 import { AgentBrain, AgentState } from './logic/agentBrain';
 import { AgentMessage, MediaPlan, User, Brand, Campaign, Flight, LayoutPosition, Placement } from './types';
@@ -58,7 +59,7 @@ import { generateMediaPlanPDF } from './utils/pdfGenerator';
 import { generateMediaPlanPPT } from './utils/pptGenerator';
 import { Layout, LogOut, PieChart, Settings, Users, Moon, Sun, BarChart2, ChevronLeft, ChevronRight, Briefcase, Layers } from 'lucide-react';
 
-type ViewState = 'LOGIN' | 'CLIENT_SELECTION' | 'CAMPAIGN_LIST' | 'FLIGHT_LIST' | 'MEDIA_PLAN' | 'AGENCY_ANALYTICS' | 'INTEGRATIONS' | 'PORTFOLIO';
+type ViewState = 'LOGIN' | 'CLIENT_SELECTION' | 'CAMPAIGN_LIST' | 'FLIGHT_LIST' | 'MEDIA_PLAN' | 'AGENCY_ANALYTICS' | 'INTEGRATIONS' | 'PORTFOLIO' | 'ATTRIBUTION';
 
 function App() {
     // Mutable Data State
@@ -990,6 +991,15 @@ function App() {
                                     <span>{currentFlight?.name}</span>
                                 </div>
                             )}
+                            {view === 'ATTRIBUTION' && (
+                                <div className="flex items-center gap-2">
+                                    <span className="text-gray-500 dark:text-gray-400 font-normal cursor-pointer hover:text-purple-600" onClick={() => setView('FLIGHT_LIST')}>
+                                        {currentCampaign?.name}
+                                    </span>
+                                    <span className="text-gray-300 dark:text-gray-600">/</span>
+                                    <span>Attribution Analysis</span>
+                                </div>
+                            )}
                             {view === 'AGENCY_ANALYTICS' && 'Agency Analytics'}
                         </h1>
                     </div>
@@ -1035,6 +1045,7 @@ function App() {
                         onActivateFlight={handleActivateFlight}
                         onPauseFlight={handlePauseFlight}
                         onAddFlightFromTemplate={handleAddFlightFromTemplate}
+                        onViewAttribution={() => setView('ATTRIBUTION')}
                         brandId={currentBrand?.id || ''}
                         brandName={currentBrand?.name || ''}
                     />
@@ -1122,6 +1133,15 @@ function App() {
                                 // in a real app we'd load the specific campaign
                                 setView('CAMPAIGN_LIST');
                             }}
+                        />
+                    </div>
+                )}
+
+                {view === 'ATTRIBUTION' && currentCampaign && (
+                    <div className="h-full overflow-y-auto">
+                        <AttributionDashboard
+                            campaign={currentCampaign}
+                            onBack={() => setView('FLIGHT_LIST')}
                         />
                     </div>
                 )}

@@ -1,4 +1,4 @@
-import { Campaign, Line, CostMethod, Brand, User, Flight, MediaPlan, AgentInfo, AgentExecution, PlanMetrics, ForecastMetrics, DeliveryMetrics, ForecastSource, Creative } from '../types';
+import { Campaign, Line, CostMethod, Brand, User, Flight, MediaPlan, AgentInfo, AgentExecution, PlanMetrics, ForecastMetrics, DeliveryMetrics, ForecastSource, Creative, ConversionPath, Touchpoint, ChannelType } from '../types';
 
 // Generate a random ID (for user-created entities)
 export const generateId = () => Math.random().toString(36).substr(2, 9);
@@ -658,3 +658,108 @@ export const MOCK_DATA = {
         };
     })
 };
+
+// --- Attribution Data Generation ---
+
+/**
+ * Generate realistic conversion paths for attribution modeling
+ */
+export function generateConversionPaths(campaign: Campaign, count: number = 50): ConversionPath[] {
+    const paths: ConversionPath[] = [];
+
+    // Map channels to ChannelType
+    const channelTypeMap: Record<string, ChannelType> = {
+        'Search': 'SEARCH',
+        'Social': 'SOCIAL',
+        'Display': 'DISPLAY',
+        'TV': 'VIDEO',
+        'Radio': 'AUDIO',
+        'Streaming Audio': 'AUDIO',
+        'Podcast': 'AUDIO',
+        'Place-based Audio': 'AUDIO',
+        'OOH': 'OOH',
+        'Print': 'DISPLAY'
+    };
+
+    // Get all placements from campaign flights
+    const allPlacements: Line[] = campaign.flights.flatMap(f => f.lines);
+
+    if (allPlacements.length === 0) {
+        return paths; // No placements, no paths
+    }
+
+    for (let i = 0; i < count; i++) {
+        const pathId = generateId();
+        const userId = `user_${generateId()}`;
+
+        // Random number of touchpoints (2-8, weighted toward 3-5)
+        const numTouchpoints = Math.floor(Math.random() * 100) < 60
+            ? 3 + Math.floor(Math.random() * 3) // 60% chance of 3-5 touchpoints
+            : 2 + Math.floor(Math.random() * 7); // 40% chance of 2-8 touchpoints
+
+        const touchpoints: Touchpoint[] = [];
+        const now = new Date();
+
+        // Time to conversion: 1-30 days (hours)
+        const timeToConversionHours = 24 + Math.random() * (29 * 24);
+        const conversionDate = new Date(now.getTime() - timeToConversionHours * 60 * 60 * 1000);
+
+        let currentTime = now.getTime() - timeToConversionHours * 60 * 60 * 1000;
+
+        // Generate touchpoints in chronological order
+        for (let t = 0; t < numTouchpoints; t++) {
+            // Pick a random placement
+            const placement = allPlacements[Math.floor(Math.random() * allPlacements.length)];
+
+            // Time gap between touchpoints: 1 hour to 7 days
+            const timeGapHours = t === 0 ? 0 : 1 + Math.random() * (7 * 24);
+            currentTime += timeGapHours * 60 * 60 * 1000;
+
+            const channelType = channelTypeMap[placement.channel] || 'DISPLAY';
+
+            // Cost per touchpoint (approximate from placement)
+            const avgCost = placement.totalCost / (placement.quantity || 1);
+            const touchpointCost = avgCost * (0.5 + Math.random()); // Vary cost
+
+            touchpoints.push({
+                id: generateId(),
+                channel: placement.vendor,
+                channelType: channelType,
+                campaignId: campaign.id,
+                campaignName: campaign.name,
+                timestamp: new Date(currentTime).toISOString(),
+                cost: Math.round(touchpointCost * 100) / 100
+            });
+        }
+
+        // Conversion value: $50 - $500
+        const conversionValue = 50 + Math.random() * 450;
+
+        paths.push({
+            id: pathId,
+            userId,
+            touchpoints,
+            conversionValue: Math.round(conversionValue * 100) / 100,
+            conversionDate: conversionDate.toISOString(),
+            timeToConversion: timeToConversionHours
+        });
+    }
+
+    return paths;
+}
+
+/**
+ * Generate attribution data for all campaigns in a brand
+ */
+export function generateBrandAttributionData(brand: Brand): Map<string, ConversionPath[]> {
+    const attributionData = new Map<string, ConversionPath[]>();
+
+    brand.campaigns.forEach(campaign => {
+        // Generate 30-80 paths per campaign (based on campaign size)
+        const pathCount = 30 + Math.floor(Math.random() * 50);
+        const paths = generateConversionPaths(campaign, pathCount);
+        attributionData.set(campaign.id, paths);
+    });
+
+    return attributionData;
+}

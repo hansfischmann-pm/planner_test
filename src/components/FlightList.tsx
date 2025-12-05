@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Flight, CampaignTemplate } from '../types';
-import { Calendar, DollarSign, ArrowRight, Layers, Pause, Plus, Send, Rocket, Sparkles, ExternalLink, Search, Filter } from 'lucide-react';
+import { Calendar, DollarSign, ArrowRight, Layers, Pause, Plus, Send, Rocket, Sparkles, ExternalLink, Search, Filter, TrendingUp } from 'lucide-react';
 import { TemplateLibrary } from './TemplateLibrary';
 import { TemplateWizard } from './TemplateWizard';
 
@@ -12,6 +12,7 @@ interface FlightListProps {
     onActivateFlight?: (flightId: string) => void;
     onCreateFlight?: (name: string, budget?: number, startDate?: string, endDate?: string) => void;
     onAddFlightFromTemplate?: (flight: Flight) => void;
+    onViewAttribution?: () => void;
     brandId?: string;
     brandName?: string;
 }
@@ -24,6 +25,7 @@ export const FlightList: React.FC<FlightListProps> = ({
     onActivateFlight,
     onCreateFlight,
     onAddFlightFromTemplate,
+    onViewAttribution,
     brandId = 'brand-123', // Fallback
     brandName = 'Brand' // Fallback
 }) => {
@@ -147,6 +149,15 @@ export const FlightList: React.FC<FlightListProps> = ({
                     ← Back to Campaigns
                 </button>
                 <div className="flex gap-2">
+                    {onViewAttribution && (
+                        <button
+                            onClick={onViewAttribution}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
+                        >
+                            <TrendingUp className="h-4 w-4" />
+                            View Attribution
+                        </button>
+                    )}
                     {onAddFlightFromTemplate && (
                         <button
                             onClick={() => setShowTemplateLibrary(true)}
