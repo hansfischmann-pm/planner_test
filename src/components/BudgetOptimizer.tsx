@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Campaign, Portfolio } from '../types';
-import { ArrowRight, TrendingUp, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Portfolio } from '../types';
+import { ArrowRight, TrendingUp, AlertCircle, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { validateBudgetShift } from '../utils/validation';
 
 interface BudgetOptimizerProps {
     portfolio: Portfolio;
@@ -12,6 +13,7 @@ export const BudgetOptimizer: React.FC<BudgetOptimizerProps> = ({ portfolio, onA
     const [targetId, setTargetId] = useState<string>('');
     const [amount, setAmount] = useState<number>(0);
     const [isSimulating, setIsSimulating] = useState(false);
+    const [validationError, setValidationError] = useState<string>('');
 
     const activeCampaigns = portfolio.campaigns.filter(c => c.status === 'ACTIVE');
     const sourceCampaign = activeCampaigns.find(c => c.id === sourceId);
@@ -21,10 +23,7 @@ export const BudgetOptimizer: React.FC<BudgetOptimizerProps> = ({ portfolio, onA
 
     const formatCurrency = (val: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(val);
 
-    const handleSimulate = () => {
-        if (!sourceCampaign || !targetCampaign || amount <= 0) return;
-        setIsSimulating(true);
-    };
+
 
     const handleApply = () => {
         if (!sourceCampaign || !targetCampaign || amount <= 0) return;
@@ -92,8 +91,25 @@ export const BudgetOptimizer: React.FC<BudgetOptimizerProps> = ({ portfolio, onA
                             step="1000"
                             value={amount}
                             onChange={(e) => {
-                                setAmount(parseInt(e.target.value));
-                                setIsSimulating(true);
+                                const newAmount = parseInt(e.target.value);
+                                setAmount(newAmount);
+
+                                if (sourceCampaign && targetCampaign) {
+                                    const validation = validateBudgetShift(
+                                        newAmount,
+                                        sourceCampaign.budget
+                                    );
+
+                                    if (!validation.isValid) {
+                                        setValidationError(validation.error || '');
+                                        setIsSimulating(false);
+                                    } else {
+                                        setValidationError('');
+                                        setIsSimulating(true);
+                                    }
+                                } else {
+                                    setIsSimulating(true);
+                                }
                             }}
                             disabled={!sourceId || !targetId}
                             className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
@@ -129,6 +145,30 @@ export const BudgetOptimizer: React.FC<BudgetOptimizerProps> = ({ portfolio, onA
                 </div>
             </div>
 
+            {/* Validation Errors */}
+            {validationError && (
+                <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
+                    <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" />
+                    <div>
+                        <h4 className="text-sm font-bold text-red-900">Validation Error</h4>
+                        <p className="text-sm text-red-700 mt-1">{validationError}</p>
+                    </div>
+                </div>
+            )}
+
+            {/* Warning for large shifts */}
+            {!validationError && amount > 0 && sourceCampaign && amount > sourceCampaign.budget * 0.3 && (
+                <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-3">
+                    <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5" />
+                    <div>
+                        <h4 className="text-sm font-bold text-amber-900">Large Budget Shift</h4>
+                        <p className="text-sm text-amber-700 mt-1">
+                            You're shifting more than 30% of the source campaign's budget. This is a significant change that may impact campaign performance.
+                        </p>
+                    </div>
+                </div>
+            )}
+
             {/* Simulation Results */}
             {isSimulating && sourceCampaign && targetCampaign && amount > 0 && (
                 <div className="mb-6 p-4 bg-blue-50 border border-blue-100 rounded-lg animate-in fade-in slide-in-from-top-2">
@@ -160,8 +200,9 @@ export const BudgetOptimizer: React.FC<BudgetOptimizerProps> = ({ portfolio, onA
             <div className="flex justify-end pt-4 border-t border-gray-100">
                 <button
                     onClick={handleApply}
-                    disabled={!isSimulating || amount <= 0}
+                    disabled={!isSimulating || amount <= 0 || !!validationError}
                     className="px-6 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                    title={validationError ? validationError : 'Apply the budget shift'}
                 >
                     <CheckCircle2 className="w-4 h-4" />
                     Apply Budget Shift
