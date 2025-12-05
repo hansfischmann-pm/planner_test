@@ -344,3 +344,70 @@ export interface BudgetShift {
     reason?: string;
     status: 'PENDING' | 'APPLIED' | 'REVERTED';
 }
+
+// Attribution Modeling Types
+export type AttributionModel =
+    | 'FIRST_TOUCH'
+    | 'LAST_TOUCH'
+    | 'LINEAR'
+    | 'TIME_DECAY'
+    | 'POSITION_BASED';
+
+export type ChannelType = 'SEARCH' | 'SOCIAL' | 'DISPLAY' | 'VIDEO' | 'EMAIL' | 'TV' | 'AUDIO' | 'OOH';
+
+export interface Touchpoint {
+    id: string;
+    channel: string;
+    channelType: ChannelType;
+    campaignId: string;
+    campaignName: string;
+    timestamp: string;
+    cost: number;
+}
+
+export interface ConversionPath {
+    id: string;
+    userId: string;
+    touchpoints: Touchpoint[];
+    conversionValue: number;
+    conversionDate: string;
+    timeToConversion: number; // hours
+}
+
+export interface AttributionResult {
+    channel: string;
+    channelType: ChannelType;
+    model: AttributionModel;
+    credit: number;           // Attribution credit (0-1)
+    revenue: number;          // Attributed revenue
+    cost: number;             // Channel cost
+    roas: number;             // Attributed ROAS
+    conversions: number;      // Attributed conversions
+}
+
+export interface IncrementalityTest {
+    id: string;
+    channel: string;
+    channelType: ChannelType;
+    testPeriod: { start: string; end: string };
+    controlGroup: { spend: number; conversions: number; revenue: number };
+    testGroup: { spend: number; conversions: number; revenue: number };
+    lift: number;             // % lift in conversions
+    confidence: number;       // Statistical confidence (0-1)
+    isSignificant: boolean;
+    pValue: number;          // Statistical p-value
+}
+
+export interface AttributionAnalysis {
+    paths: ConversionPath[];
+    results: Map<AttributionModel, AttributionResult[]>;
+    incrementalityTests: IncrementalityTest[];
+    summary: {
+        totalConversions: number;
+        totalRevenue: number;
+        avgTouchpoints: number;
+        avgTimeToConversion: number; // hours
+        topPerformingChannels: string[];
+    };
+}
+
