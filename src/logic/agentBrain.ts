@@ -148,6 +148,64 @@ export class AgentBrain {
             return agentMsg;
         }
 
+        // GLOBAL: Navigation Commands (work regardless of media plan state)
+        // Handle intent-based navigation to analytics dashboards
+        if (intent.category === 'navigation') {
+            let action: string | null = null;
+            let message = '';
+            let actions: string[] = [];
+
+            switch (intent.subIntent) {
+                case 'view_predictive_analytics':
+                    if (!this.context.brand) {
+                        message = "Please select a brand first to view predictive analytics.";
+                        actions = [];
+                    } else {
+                        action = 'NAVIGATE_TO_PREDICTIVE_ANALYTICS';
+                        message = "Opening Predictive Analytics dashboard...";
+                        actions = [];
+                    }
+                    break;
+
+                case 'view_attribution':
+                    // Attribution requires a campaign context
+                    message = "To view attribution analysis, please select a campaign from the flight list.";
+                    actions = ['Select a campaign'];
+                    break;
+
+                case 'view_portfolio':
+                    if (!this.context.brand) {
+                        message = "Please select a brand first to view the portfolio.";
+                        actions = [];
+                    } else {
+                        action = 'NAVIGATE_TO_PORTFOLIO';
+                        message = "Opening Portfolio dashboard...";
+                        actions = [];
+                    }
+                    break;
+
+                case 'view_integrations':
+                    action = 'NAVIGATE_TO_INTEGRATIONS';
+                    message = "Opening Integrations dashboard...";
+                    actions = [];
+                    break;
+
+                case 'view_analytics':
+                    action = 'NAVIGATE_TO_ANALYTICS';
+                    message = "Opening Agency Analytics dashboard...";
+                    actions = [];
+                    break;
+            }
+
+            if (message) {
+                agentMsg = this.createAgentMessage(message, actions, action as any);
+                this.context.history.push(agentMsg);
+                contextManager.addMessage(this.sessionId, 'assistant', message);
+                return agentMsg;
+            }
+        }
+
+
         // 1. GLOBAL COMMANDS (Available whenever a plan exists)
         if (this.context.mediaPlan) {
             agentMsg = this.handleGlobalCommands(input);

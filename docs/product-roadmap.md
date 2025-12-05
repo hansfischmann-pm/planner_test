@@ -77,11 +77,15 @@ This roadmap outlines the planned evolution of the FuseIQ Media Planner from pro
 - Budget shifting between campaigns
 - Unified reporting
 
-### 5.7: Attribution Modeling 📋 PLANNED
-- Multi-touch attribution
-- Path to conversion analysis
-- Incrementality testing
-- Channel contribution analysis
+### 5.7: Attribution Modeling 🚧 IN PROGRESS
+- ✅ Multi-touch attribution models (Linear, First Touch, Last Touch, Time Decay, Position-Based)
+- ✅ Attribution dashboard with model comparison
+- ✅ Channel attribution breakdown
+- ✅ Path to conversion visualization
+- ✅ Incrementality panel
+- ✅ Channel contribution charts
+- [ ] Incrementality testing framework
+- [ ] Advanced attribution analytics
 
 ---
 
@@ -90,6 +94,9 @@ This roadmap outlines the planned evolution of the FuseIQ Media Planner from pro
 
 ### 6.1: Ad Platform APIs
 - Google Ads integration
+  - **Google Search keyword planning** (keyword research, search volume, competition analysis)
+  - Campaign creation and management
+  - Performance data sync
 - Meta Ads (Facebook/Instagram)
 - LinkedIn Ads
 - TikTok Ads

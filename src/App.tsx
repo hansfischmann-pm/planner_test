@@ -12,6 +12,7 @@ import { IntegrationDashboard } from './components/IntegrationDashboard';
 import { PortfolioDashboard } from './components/PortfolioDashboard';
 import { GlobalShortcuts } from './components/GlobalShortcuts';
 import { AttributionDashboard } from './components/AttributionDashboard';
+import { PredictiveAnalyticsDashboard } from './components/PredictiveAnalyticsDashboard';
 
 import { AgentBrain, AgentState } from './logic/agentBrain';
 import { AgentMessage, MediaPlan, User, Brand, Campaign, Flight, LayoutPosition, Placement } from './types';
@@ -56,9 +57,9 @@ const updateBrandMetrics = (brand: Brand): Brand => {
 
 import { generateMediaPlanPDF } from './utils/pdfGenerator';
 import { generateMediaPlanPPT } from './utils/pptGenerator';
-import { Layout, LogOut, PieChart, Settings, Users, Moon, Sun, BarChart2, ChevronLeft, ChevronRight, Briefcase } from 'lucide-react';
+import { Layout, LogOut, PieChart, Settings, Users, Moon, Sun, BarChart2, ChevronLeft, ChevronRight, Briefcase, TrendingUp } from 'lucide-react';
 
-type ViewState = 'LOGIN' | 'CLIENT_SELECTION' | 'CAMPAIGN_LIST' | 'FLIGHT_LIST' | 'MEDIA_PLAN' | 'AGENCY_ANALYTICS' | 'INTEGRATIONS' | 'PORTFOLIO' | 'ATTRIBUTION';
+type ViewState = 'LOGIN' | 'CLIENT_SELECTION' | 'CAMPAIGN_LIST' | 'FLIGHT_LIST' | 'MEDIA_PLAN' | 'AGENCY_ANALYTICS' | 'INTEGRATIONS' | 'PORTFOLIO' | 'ATTRIBUTION' | 'PREDICTIVE_ANALYTICS';
 
 function App() {
     // Mutable Data State
@@ -753,6 +754,16 @@ function App() {
                 // Handle layout changes from conversational commands
                 const newLayout = action.replace('LAYOUT_', '') as LayoutPosition;
                 handleLayoutChange(newLayout);
+            } else if (action === 'NAVIGATE_TO_PREDICTIVE_ANALYTICS') {
+                setView('PREDICTIVE_ANALYTICS');
+            } else if (action === 'NAVIGATE_TO_ATTRIBUTION') {
+                setView('ATTRIBUTION');
+            } else if (action === 'NAVIGATE_TO_PORTFOLIO') {
+                setView('PORTFOLIO');
+            } else if (action === 'NAVIGATE_TO_INTEGRATIONS') {
+                setView('INTEGRATIONS');
+            } else if (action === 'NAVIGATE_TO_ANALYTICS') {
+                setView('AGENCY_ANALYTICS');
             } else if (typeof action === 'object') {
                 // Handle complex actions
                 if (action.type === 'CREATE_CAMPAIGN') {
@@ -896,6 +907,17 @@ function App() {
                             {!sidebarCollapsed && 'Portfolio'}
                         </button>
                         <button
+                            onClick={() => setView('PREDICTIVE_ANALYTICS')}
+                            className={`w-full flex items-center gap-2 px-2 py-2 text-sm font-medium rounded-lg transition-colors ${view === 'PREDICTIVE_ANALYTICS'
+                                ? 'bg-purple-50 text-purple-700 dark:bg-purple-900/20 dark:text-purple-300'
+                                : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
+                                }`}
+                            title={sidebarCollapsed ? 'Predictive Analytics' : undefined}
+                        >
+                            <TrendingUp className="w-4 h-4 flex-shrink-0" />
+                            {!sidebarCollapsed && 'Predictive Analytics'}
+                        </button>
+                        <button
                             onClick={() => alert('Team management coming soon!')}
                             className="w-full flex items-center gap-2 px-2 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700 rounded-lg transition-colors"
                             title={sidebarCollapsed ? 'Team' : undefined}
@@ -961,6 +983,7 @@ function App() {
                                     <span>Attribution Analysis</span>
                                 </div>
                             )}
+                            {view === 'PREDICTIVE_ANALYTICS' && 'Predictive Analytics'}
                             {view === 'AGENCY_ANALYTICS' && 'Agency Analytics'}
                         </h1>
                     </div>
@@ -1103,6 +1126,15 @@ function App() {
                         <AttributionDashboard
                             campaign={currentCampaign}
                             onBack={() => setView('FLIGHT_LIST')}
+                        />
+                    </div>
+                )}
+
+                {view === 'PREDICTIVE_ANALYTICS' && currentBrand && (
+                    <div className="h-full overflow-y-auto">
+                        <PredictiveAnalyticsDashboard
+                            campaigns={currentBrand.campaigns}
+                            onBack={() => setView('CAMPAIGN_LIST')}
                         />
                     </div>
                 )}
