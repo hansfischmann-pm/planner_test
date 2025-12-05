@@ -5,38 +5,63 @@ import { Segment, Placement, PerformanceMetrics } from '../types';
 // ============================================================================
 
 /**
+ * Generate a deterministic pseudo-random value between 0 and 1 based on two segment IDs
+ * This ensures the same pair of segments always produces the same "random" value
+ */
+function deterministicRandom(id1: string, id2: string): number {
+    // Sort IDs to ensure consistent ordering regardless of parameter order
+    const [a, b] = [id1, id2].sort();
+    const combined = `${a}-${b}`;
+
+    // Simple hash function
+    let hash = 0;
+    for (let i = 0; i < combined.length; i++) {
+        const char = combined.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash; // Convert to 32-bit integer
+    }
+
+    // Convert to a value between 0 and 1
+    return Math.abs(hash % 1000) / 1000;
+}
+
+/**
  * Calculate overlap percentage between two segments
  * Returns a value between 0 and 1 representing the percentage of overlap
+ * Uses deterministic random based on segment IDs to ensure consistent results
  */
 export function calculateOverlap(segment1: Segment, segment2: Segment): number {
     // Same segment = 100% overlap
     if (segment1.id === segment2.id) return 1.0;
 
+    // Get deterministic random value for this pair
+    const rand = deterministicRandom(segment1.id, segment2.id);
+
     // Demographics have high overlap with each other
     if (segment1.category === 'Demographics' && segment2.category === 'Demographics') {
-        return 0.6 + Math.random() * 0.3; // 60-90% overlap
+        return 0.6 + rand * 0.3; // 60-90% overlap
     }
 
     // Behavioral overlaps moderately with interest
     if ((segment1.category === 'Behavioral' && segment2.category === 'Interest') ||
         (segment1.category === 'Interest' && segment2.category === 'Behavioral')) {
-        return 0.3 + Math.random() * 0.3; // 30-60% overlap
+        return 0.3 + rand * 0.3; // 30-60% overlap
     }
 
     // B2B has low overlap with consumer segments
     if ((segment1.category === 'B2B' && segment2.category !== 'B2B') ||
         (segment2.category === 'B2B' && segment1.category !== 'B2B')) {
-        return 0.05 + Math.random() * 0.15; // 5-20% overlap
+        return 0.05 + rand * 0.15; // 5-20% overlap
     }
 
     // First-party and Pixel-based have minimal overlap with third-party
     if ((segment1.category === 'First-Party' || segment1.category === 'Pixel-Based') &&
         (segment2.category !== 'First-Party' && segment2.category !== 'Pixel-Based')) {
-        return 0.1 + Math.random() * 0.2; // 10-30% overlap
+        return 0.1 + rand * 0.2; // 10-30% overlap
     }
 
     // Default moderate overlap
-    return 0.2 + Math.random() * 0.4; // 20-60% overlap
+    return 0.2 + rand * 0.4; // 20-60% overlap
 }
 
 /**

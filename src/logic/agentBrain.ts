@@ -36,7 +36,9 @@ export interface PendingAction {
 
 // Window context for context-aware chat in windowed mode
 export interface WindowContext {
-    windowType: 'campaign' | 'flight' | 'portfolio' | 'report' | 'settings' | 'media-plan' | null;
+    windowType: 'campaign' | 'flight' | 'portfolio' | 'report' | 'settings' | 'media-plan' | 'client' | 'client-list' | null;
+    brandId?: string;      // Brand/Client ID for this window
+    brandName?: string;    // Brand/Client name for display
     campaignId?: string;
     campaignName?: string;
     flightId?: string;

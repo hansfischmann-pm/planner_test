@@ -13,7 +13,10 @@ import {
   Settings,
   FolderOpen,
   Maximize2,
-  MessageSquare
+  MessageSquare,
+  Users,
+  Building2,
+  Target
 } from 'lucide-react';
 import { WindowState, WindowType } from '../types/windowTypes';
 import { useCanvas } from '../context/CanvasContext';
@@ -30,7 +33,10 @@ const windowTypeIcons: Record<WindowType, typeof FolderOpen> = {
   'report': FileText,
   'settings': Settings,
   'media-plan': Layers,
-  'chat': MessageSquare
+  'audience-insights': Target,
+  'chat': MessageSquare,
+  'client-list': Users,
+  'client': Building2
 };
 
 export function WindowTaskbar({ minimizedWindows }: WindowTaskbarProps) {

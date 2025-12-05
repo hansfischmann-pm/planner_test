@@ -24,11 +24,13 @@ interface AudienceInsightsPanelProps {
     goals?: CampaignGoals;
     onAddSegment: (segment: Segment) => void;
     onRemoveSegment: (segment: Segment) => void;
+    embedded?: boolean; // When true, renders as inline content without modal overlay
 }
 
 export const AudienceInsightsPanel: React.FC<AudienceInsightsPanelProps> = ({
     isOpen,
     onClose,
+    embedded = false,
     placements,
     currentSegments,
     goals,
@@ -106,6 +108,144 @@ export const AudienceInsightsPanel: React.FC<AudienceInsightsPanelProps> = ({
 
     const reachEfficiency = totalReach > 0 ? (uniqueReach / totalReach) * 100 : 0;
 
+    // Embedded mode: render as inline content without modal overlay
+    if (embedded) {
+        return (
+            <div className="h-full flex flex-col bg-white">
+                {/* Header */}
+                <div className="p-4 border-b border-gray-200 bg-gradient-to-r from-purple-50 to-blue-50">
+                    <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                        <Users className="w-6 h-6 text-purple-600" />
+                        Audience Insights
+                    </h2>
+                    <p className="text-sm text-gray-600 mt-1">
+                        Analyzing {currentSegments.length} segment{currentSegments.length !== 1 ? 's' : ''} across {placements.length} placement{placements.length !== 1 ? 's' : ''}
+                    </p>
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 overflow-y-auto p-4 space-y-6">
+                    {/* Key Metrics */}
+                    <div className="grid grid-cols-3 gap-3">
+                        <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-3 rounded-lg border border-blue-200">
+                            <div className="text-xs text-blue-700 font-semibold uppercase tracking-wider mb-1">Total Reach</div>
+                            <div className="text-2xl font-bold text-gray-900">
+                                {(totalReach / 1000000).toFixed(1)}M
+                            </div>
+                            <div className="text-xs text-blue-600">Combined audience</div>
+                        </div>
+
+                        <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-3 rounded-lg border border-purple-200">
+                            <div className="text-xs text-purple-700 font-semibold uppercase tracking-wider mb-1">Unique Reach</div>
+                            <div className="text-2xl font-bold text-gray-900">
+                                {(uniqueReach / 1000000).toFixed(1)}M
+                            </div>
+                            <div className="text-xs text-purple-600">After deduplication</div>
+                        </div>
+
+                        <div className="bg-gradient-to-br from-green-50 to-green-100 p-3 rounded-lg border border-green-200">
+                            <div className="text-xs text-green-700 font-semibold uppercase tracking-wider mb-1">Efficiency</div>
+                            <div className="text-2xl font-bold text-gray-900">
+                                {reachEfficiency.toFixed(0)}%
+                            </div>
+                            <div className="text-xs text-green-600">Unique vs total</div>
+                        </div>
+                    </div>
+
+                    {/* Audience Overlap */}
+                    <div className="bg-white border border-gray-200 rounded-lg p-4">
+                        <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                            <Target className="w-4 h-4 text-purple-600" />
+                            Audience Overlap
+                        </h3>
+                        {currentSegments.length > 0 ? (
+                            <AudienceOverlapChart
+                                segments={currentSegments}
+                                overlapMatrix={overlapMatrix}
+                            />
+                        ) : (
+                            <p className="text-sm text-gray-500 text-center py-4">No segments selected</p>
+                        )}
+                    </div>
+
+                    {/* Segment Performance */}
+                    <div className="bg-white border border-gray-200 rounded-lg p-4">
+                        <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                            <TrendingUp className="w-4 h-4 text-blue-600" />
+                            Segment Performance
+                        </h3>
+                        <SegmentPerformanceTable
+                            segmentPerformance={segmentPerformance}
+                        />
+                    </div>
+
+                    {/* Lookalike Recommendations */}
+                    {lookalikeRecs.length > 0 && (
+                        <div className="bg-white border border-gray-200 rounded-lg p-4">
+                            <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                                <Lightbulb className="w-4 h-4 text-yellow-600" />
+                                Similar Segments
+                            </h3>
+                            <LookalikeRecommendations
+                                recommendations={lookalikeRecs}
+                                onAddSegment={onAddSegment}
+                            />
+                        </div>
+                    )}
+
+                    {/* Expansion Recommendations */}
+                    {expansionRecs.length > 0 && (
+                        <div className="bg-white border border-gray-200 rounded-lg p-4">
+                            <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                                <Zap className="w-4 h-4 text-orange-600" />
+                                Expansion Opportunities
+                            </h3>
+                            <ExpansionRecommendations
+                                recommendations={expansionRecs}
+                                onAddSegment={onAddSegment}
+                            />
+                        </div>
+                    )}
+                </div>
+
+                {/* Confirmation Modal */}
+                {showConfirmModal && segmentToRemove && (
+                    <div className="absolute inset-0 bg-black bg-opacity-50 z-10 flex items-center justify-center p-4">
+                        <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+                            <h3 className="text-lg font-semibold text-gray-900 mb-2">Remove Segment?</h3>
+                            <p className="text-sm text-gray-600 mb-4">
+                                Remove <span className="font-medium">{segmentToRemove.segment.name}</span> from all placements?
+                                This segment has {(segmentToRemove.avgOverlap * 100).toFixed(0)}% average overlap with other segments.
+                            </p>
+                            <div className="flex gap-3 justify-end">
+                                <button
+                                    onClick={() => {
+                                        setShowConfirmModal(false);
+                                        setSegmentToRemove(null);
+                                    }}
+                                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        onRemoveSegment(segmentToRemove.segment);
+                                        setShowConfirmModal(false);
+                                        setSegmentToRemove(null);
+                                    }}
+                                    className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700"
+                                >
+                                    Remove
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    }
+
+    // Modal mode: full-screen overlay
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-7xl max-h-[90vh] flex flex-col">

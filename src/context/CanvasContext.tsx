@@ -19,6 +19,16 @@ import {
   WINDOW_CASCADE_OFFSET
 } from '../types/windowTypes';
 
+// Debug flag for canvas/window tracking - set to true to enable console logs
+const CANVAS_DEBUG = true;
+
+// Helper for conditional debug logging
+const canvasLog = (...args: unknown[]) => {
+  if (CANVAS_DEBUG) {
+    console.log('[Canvas]', ...args);
+  }
+};
+
 // Generate unique window ID
 const generateWindowId = () => `window-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
@@ -34,9 +44,9 @@ const saveCanvasState = (state: CanvasState) => {
     try {
       // Only save pinned windows, and don't save content state (could be large/stale)
       const pinnedWindows = state.windows.filter(w => w.isPinned);
-      console.log(`[CanvasContext] Saving ${pinnedWindows.length} pinned windows to localStorage`);
+      canvasLog(`Saving ${pinnedWindows.length} pinned windows to localStorage`);
       pinnedWindows.forEach(w => {
-        console.log(`  - ${w.type}: entityId=${w.entityId}, title=${w.title}`);
+        canvasLog(`  - ${w.type}: entityId=${w.entityId}, brandId=${w.brandId}, title=${w.title}`);
       });
 
       const stateToSave = {
@@ -57,15 +67,15 @@ const saveCanvasState = (state: CanvasState) => {
 const loadCanvasState = (): CanvasState | null => {
   try {
     const saved = localStorage.getItem(CANVAS_STORAGE_KEY);
-    console.log(`[CanvasContext] Loading from localStorage, found: ${saved ? 'yes' : 'no'}`);
+    canvasLog(`Loading from localStorage, found: ${saved ? 'yes' : 'no'}`);
     if (saved) {
       const parsed = JSON.parse(saved);
       // Validate the loaded state has expected structure
       if (parsed && Array.isArray(parsed.windows)) {
         const state = parsed as CanvasState;
-        console.log(`[CanvasContext] Loaded ${state.windows.length} windows from localStorage:`);
+        canvasLog(`Loaded ${state.windows.length} windows from localStorage:`);
         state.windows.forEach(w => {
-          console.log(`  - ${w.type}: entityId=${w.entityId}, title=${w.title}, isPinned=${w.isPinned}`);
+          canvasLog(`  - ${w.type}: entityId=${w.entityId}, brandId=${w.brandId}, title=${w.title}, isPinned=${w.isPinned}`);
         });
 
         // If chatMode is 'floating' but there's no chat window, reset to docked
@@ -142,6 +152,7 @@ function canvasReducer(state: CanvasState, action: WindowAction): CanvasState {
         id: generateWindowId(),
         type: action.payload.type,
         entityId: action.payload.entityId,
+        brandId: action.payload.brandId,  // Store brand context
         title: action.payload.title,
         state: 'normal',
         position,
@@ -243,16 +254,20 @@ function canvasReducer(state: CanvasState, action: WindowAction): CanvasState {
       return {
         ...state,
         windows: state.windows.map(w => {
-          if (w.id !== action.windowId || !w.previousState) return w;
-          return {
-            ...w,
-            state: 'normal',
-            position: w.previousState.position,
-            size: w.previousState.size,
-            zIndex: state.nextZIndex,
-            isActive: true,
-            previousState: undefined
-          };
+          if (w.id === action.windowId && w.previousState) {
+            // Restore this window and make it active
+            return {
+              ...w,
+              state: 'normal',
+              position: w.previousState.position,
+              size: w.previousState.size,
+              zIndex: state.nextZIndex,
+              isActive: true,
+              previousState: undefined
+            };
+          }
+          // Deactivate all other windows
+          return { ...w, isActive: false };
         }),
         activeWindowId: action.windowId,
         nextZIndex: state.nextZIndex + 1
@@ -522,7 +537,7 @@ interface CanvasContextType {
   state: CanvasState;
   dispatch: React.Dispatch<WindowAction>;
   // Convenience methods
-  openWindow: (type: WindowType, title: string, entityId?: string) => void;
+  openWindow: (type: WindowType, title: string, entityId?: string, brandId?: string) => void;
   closeWindow: (windowId: string) => void;
   minimizeWindow: (windowId: string) => void;
   maximizeWindow: (windowId: string) => void;
@@ -556,11 +571,16 @@ export function CanvasProvider({ children }: { children: ReactNode }) {
     }
   }, [state, isInitialized]);
 
-  const openWindow = useCallback((type: WindowType, title: string, entityId?: string) => {
-    // Check if window for this entity AND TYPE already exists
+  const openWindow = useCallback((type: WindowType, title: string, entityId?: string, brandId?: string) => {
+    // Check if window for this entity AND TYPE AND BRAND already exists
     // (e.g., a flight window and media-plan window can both reference the same flight ID)
+    // Also check brandId to allow same entity from different brands
     if (entityId) {
-      const existingWindow = state.windows.find(w => w.entityId === entityId && w.type === type);
+      const existingWindow = state.windows.find(w =>
+        w.entityId === entityId &&
+        w.type === type &&
+        (brandId ? w.brandId === brandId : true)
+      );
       if (existingWindow) {
         dispatch({ type: 'FOCUS_WINDOW', windowId: existingWindow.id });
         if (existingWindow.state === 'minimized') {
@@ -576,6 +596,7 @@ export function CanvasProvider({ children }: { children: ReactNode }) {
         type,
         title,
         entityId,
+        brandId,  // Store brand context with the window
         state: 'normal',
         position: { x: 0, y: 0 }, // Will be calculated
         size: WINDOW_CONFIGS[type].defaultSize,

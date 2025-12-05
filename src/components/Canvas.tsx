@@ -39,7 +39,7 @@ function WindowContent({ entityId, windowType }: WindowContentProps) {
 
 interface CanvasProps {
   chatComponent: ReactNode;
-  renderWindowContent?: (windowType: WindowType, entityId?: string) => ReactNode;
+  renderWindowContent?: (windowType: WindowType, entityId?: string, brandId?: string) => ReactNode;
 }
 
 export function Canvas({ chatComponent, renderWindowContent }: CanvasProps) {
@@ -132,7 +132,7 @@ export function Canvas({ chatComponent, renderWindowContent }: CanvasProps) {
             path={window.title} // Title contains the path (e.g., "Campaign > Flight")
           >
             {renderWindowContent
-              ? renderWindowContent(window.type, window.entityId)
+              ? renderWindowContent(window.type, window.entityId, window.brandId)
               : <WindowContent
                   entityId={window.entityId}
                   windowType={window.type}

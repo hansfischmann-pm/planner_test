@@ -836,9 +836,19 @@ function App() {
         return (
             <WindowedApp
                 brand={currentBrand}
+                allBrands={brands}
                 onBrandUpdate={(updatedBrand) => {
                     setBrands(prev => prev.map(b => b.id === updatedBrand.id ? updatedBrand : b));
-                    setCurrentBrand(updatedBrand);
+                    // Only update currentBrand if it's the brand being modified
+                    if (currentBrand && updatedBrand.id === currentBrand.id) {
+                        setCurrentBrand(updatedBrand);
+                    }
+                }}
+                onBrandSelect={(brandId) => {
+                    const selectedBrand = brands.find(b => b.id === brandId);
+                    if (selectedBrand) {
+                        setCurrentBrand(selectedBrand);
+                    }
                 }}
                 onBack={() => setView('CLIENT_SELECTION')}
                 onSwitchToClassic={() => {

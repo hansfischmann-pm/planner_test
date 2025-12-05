@@ -36,11 +36,11 @@ export function Window({ window: windowState, children, path }: WindowProps) {
   const [showCopiedToast, setShowCopiedToast] = useState<string | null>(null);
 
   // Handle window focus on click
+  // Always call focusWindow - even if we think we're active, this ensures
+  // the context updates correctly for multi-client windows
   const handleFocus = useCallback(() => {
-    if (!windowState.isActive) {
-      focusWindow(windowState.id);
-    }
-  }, [windowState.id, windowState.isActive, focusWindow]);
+    focusWindow(windowState.id);
+  }, [windowState.id, focusWindow]);
 
   // Handle drag stop
   const handleDragStop = useCallback((_e: any, d: { x: number; y: number }) => {

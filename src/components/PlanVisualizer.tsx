@@ -18,6 +18,7 @@ interface PlanVisualizerProps {
     onUpdatePlacement?: (placement: Placement) => void;
     onDeletePlacement?: (placementId: string) => void;
     onAddPlacement?: () => void;
+    onOpenAudienceInsights?: () => void; // Opens audience insights in separate window
 }
 
 interface EditableCellProps {
@@ -106,7 +107,7 @@ const EditableCell: React.FC<EditableCellProps> = ({ value, onSave, type = 'text
 // Status filter type for plan view
 type PlanStatusFilter = 'ALL' | 'ACTIVE' | 'PAUSED' | 'DRAFT';
 
-export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGroupingChange, onUpdatePlacement, onDeletePlacement, onAddPlacement }) => {
+export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGroupingChange, onUpdatePlacement, onDeletePlacement, onAddPlacement, onOpenAudienceInsights }) => {
     const [viewMode, setViewMode] = useState<'PLANNING' | 'PERFORMANCE'>('PLANNING');
     const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
     const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
@@ -858,7 +859,7 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
                                 PPT
                             </button>
                             <button
-                                onClick={() => setIsInsightsPanelOpen(true)}
+                                onClick={() => onOpenAudienceInsights ? onOpenAudienceInsights() : setIsInsightsPanelOpen(true)}
                                 className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white font-medium rounded-lg hover:bg-purple-700 transition-colors shadow-sm"
                                 title="View Audience Insights"
                             >
@@ -1056,16 +1057,18 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
                 }
             />
 
-            {/* Audience Insights Panel */}
-            <AudienceInsightsPanel
-                isOpen={isInsightsPanelOpen}
-                onClose={() => setIsInsightsPanelOpen(false)}
-                placements={campaign.placements || []}
-                currentSegments={getAllCurrentSegments()}
-                goals={campaign.numericGoals}
-                onAddSegment={handleQuickAddSegment}
-                onRemoveSegment={handleRemoveSegment}
-            />
+            {/* Audience Insights Panel - only shown as internal panel if no external handler */}
+            {!onOpenAudienceInsights && (
+                <AudienceInsightsPanel
+                    isOpen={isInsightsPanelOpen}
+                    onClose={() => setIsInsightsPanelOpen(false)}
+                    placements={campaign.placements || []}
+                    currentSegments={getAllCurrentSegments()}
+                    goals={campaign.numericGoals}
+                    onAddSegment={handleQuickAddSegment}
+                    onRemoveSegment={handleRemoveSegment}
+                />
+            )}
         </div>
     );
 };

@@ -10,14 +10,25 @@ import { useState, useRef, useEffect, ReactNode, useCallback } from 'react';
 import { Canvas } from './Canvas';
 import { ChatInterface } from './ChatInterface';
 import { PlanVisualizer } from './PlanVisualizer';
+import { AudienceInsightsPanel } from './AudienceInsightsPanel';
 import { CanvasProvider, useCanvas } from '../context/CanvasContext';
 import { WindowType } from '../types/windowTypes';
 import { AgentBrain, AgentState, WindowContext } from '../logic/agentBrain';
-import { AgentMessage, MediaPlan, Brand, Campaign, Flight, Placement } from '../types';
+import { AgentMessage, MediaPlan, Brand, Campaign, Flight, Placement, Segment } from '../types';
 import { generateMediaPlanPDF } from '../utils/pdfGenerator';
 import { generateMediaPlanPPT } from '../utils/pptGenerator';
 import { calculatePlanMetrics, calculateFlightForecast, calculateFlightDelivery, calculateCampaignForecast, calculateCampaignDelivery, generateId } from '../logic/dummyData';
-import { ArrowLeft, Folder, Calendar, BarChart3, FileText, DollarSign, TrendingUp, PanelRightClose, PanelRightOpen, LayoutGrid, Play, Pause, Edit3, Plus, Download, FileDown, Filter, Eye, Target } from 'lucide-react';
+import { ArrowLeft, Folder, Calendar, BarChart3, FileText, DollarSign, TrendingUp, PanelRightClose, PanelRightOpen, LayoutGrid, Play, Pause, Edit3, Plus, Download, FileDown, Filter, Eye, Target, Users, Search, Briefcase, ChevronRight } from 'lucide-react';
+
+// Debug flag for window interface tracking - set to true to enable console logs
+const WINDOW_DEBUG = true;
+
+// Helper for conditional debug logging
+const windowLog = (...args: unknown[]) => {
+  if (WINDOW_DEBUG) {
+    console.log('[Window]', ...args);
+  }
+};
 
 // Status filter options
 type StatusFilter = 'ALL' | 'ACTIVE' | 'PAUSED' | 'DRAFT' | 'COMPLETED';
@@ -25,18 +36,29 @@ type StatusFilter = 'ALL' | 'ACTIVE' | 'PAUSED' | 'DRAFT' | 'COMPLETED';
 // Campaign window content with flight filter
 interface CampaignWindowContentProps {
   campaign: Campaign;
-  onCreateFlight: () => void;
+  onCreateFlight: (name: string, budget?: number, startDate?: string, endDate?: string) => void;
   onOpenFlight: (flightId: string, flightName: string) => void;
+  onOpenTemplateLibrary?: () => void;
 }
 
-function CampaignWindowContent({ campaign, onCreateFlight, onOpenFlight }: CampaignWindowContentProps) {
+function CampaignWindowContent({ campaign, onCreateFlight, onOpenFlight, onOpenTemplateLibrary }: CampaignWindowContentProps) {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('ACTIVE');
+  const [visibleCount, setVisibleCount] = useState(10);
+  const [showNewFlightForm, setShowNewFlightForm] = useState(false);
+  const [flightName, setFlightName] = useState('');
+  const [flightBudget, setFlightBudget] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
   // Filter flights by status
   const filteredFlights = campaign.flights.filter(flight => {
     if (statusFilter === 'ALL') return true;
     return flight.status === statusFilter;
   });
+
+  // Paginated flights
+  const visibleFlights = filteredFlights.slice(0, visibleCount);
+  const hasMore = visibleCount < filteredFlights.length;
 
   // Get status counts
   const statusCounts = {
@@ -45,6 +67,22 @@ function CampaignWindowContent({ campaign, onCreateFlight, onOpenFlight }: Campa
     PAUSED: campaign.flights.filter(f => f.status === 'PAUSED').length,
     DRAFT: campaign.flights.filter(f => f.status === 'DRAFT').length,
     COMPLETED: campaign.flights.filter(f => f.status === 'COMPLETED').length,
+  };
+
+  const handleSubmitNewFlight = () => {
+    if (flightName.trim()) {
+      onCreateFlight(
+        flightName.trim(),
+        flightBudget ? parseFloat(flightBudget) : undefined,
+        startDate || undefined,
+        endDate || undefined
+      );
+      setFlightName('');
+      setFlightBudget('');
+      setStartDate('');
+      setEndDate('');
+      setShowNewFlightForm(false);
+    }
   };
 
   return (
@@ -59,14 +97,97 @@ function CampaignWindowContent({ campaign, onCreateFlight, onOpenFlight }: Campa
             <p className="text-sm text-gray-500">{campaign.flights.length} flights</p>
           </div>
         </div>
-        <button
-          onClick={onCreateFlight}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          New Flight
-        </button>
+        <div className="flex items-center gap-2">
+          {onOpenTemplateLibrary && (
+            <button
+              onClick={onOpenTemplateLibrary}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium border border-purple-200 text-purple-700 rounded-lg hover:bg-purple-50 transition-colors"
+            >
+              <FileText className="w-4 h-4" />
+              Use Template
+            </button>
+          )}
+          <button
+            onClick={() => setShowNewFlightForm(!showNewFlightForm)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            New Flight
+          </button>
+        </div>
       </div>
+
+      {/* New Flight Form */}
+      {showNewFlightForm && (
+        <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-4">
+          <h3 className="text-sm font-medium text-gray-900 mb-3">Create New Flight</h3>
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Flight Name</label>
+              <input
+                type="text"
+                value={flightName}
+                onChange={(e) => setFlightName(e.target.value)}
+                placeholder="e.g., 'Q1 Launch' or 'Holiday Push'"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                autoFocus
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Budget (Optional)</label>
+              <input
+                type="number"
+                value={flightBudget}
+                onChange={(e) => setFlightBudget(e.target.value)}
+                placeholder={`Leave blank for default ($${Math.floor(campaign.budget * 0.25).toLocaleString()})`}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Start Date</label>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 uppercase mb-1">End Date</label>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={handleSubmitNewFlight}
+                disabled={!flightName.trim()}
+                className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                Create Flight
+              </button>
+              <button
+                onClick={() => {
+                  setFlightName('');
+                  setFlightBudget('');
+                  setStartDate('');
+                  setEndDate('');
+                  setShowNewFlightForm(false);
+                }}
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-3 gap-4 mb-6">
         <div className="bg-blue-50 rounded-lg p-3">
@@ -112,7 +233,7 @@ function CampaignWindowContent({ campaign, onCreateFlight, onOpenFlight }: Campa
             No {statusFilter.toLowerCase()} flights found
           </div>
         ) : (
-          filteredFlights.map(flight => (
+          visibleFlights.map(flight => (
             <button
               key={flight.id}
               onClick={() => onOpenFlight(flight.id, flight.name)}
@@ -136,6 +257,18 @@ function CampaignWindowContent({ campaign, onCreateFlight, onOpenFlight }: Campa
           ))
         )}
       </div>
+
+      {/* Load More Button */}
+      {hasMore && (
+        <div className="flex justify-center pt-4">
+          <button
+            onClick={() => setVisibleCount(prev => prev + 10)}
+            className="px-4 py-2 bg-white border border-gray-200 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 hover:text-purple-600 transition-colors"
+          >
+            Load More ({filteredFlights.length - visibleCount} remaining)
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -149,6 +282,7 @@ interface PortfolioWindowContentProps {
 
 function PortfolioWindowContent({ brand, onCreateCampaign, onOpenCampaign }: PortfolioWindowContentProps) {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('ACTIVE');
+  const [visibleCount, setVisibleCount] = useState(10);
 
   const totalBudget = brand.campaigns.reduce((sum, c) => sum + (c.budget || 0), 0);
   const totalSpend = brand.campaigns.reduce((sum, c) => sum + (c.delivery?.actualSpend || 0), 0);
@@ -158,6 +292,10 @@ function PortfolioWindowContent({ brand, onCreateCampaign, onOpenCampaign }: Por
     if (statusFilter === 'ALL') return true;
     return campaign.status === statusFilter;
   });
+
+  // Paginated campaigns
+  const visibleCampaigns = filteredCampaigns.slice(0, visibleCount);
+  const hasMore = visibleCount < filteredCampaigns.length;
 
   // Get status counts
   const statusCounts = {
@@ -176,7 +314,7 @@ function PortfolioWindowContent({ brand, onCreateCampaign, onOpenCampaign }: Por
             <BarChart3 className="w-5 h-5 text-green-600" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">Portfolio Overview</h2>
+            <h2 className="text-lg font-semibold text-gray-900">{brand.name} Portfolio</h2>
             <p className="text-sm text-gray-500">{brand.campaigns.length} campaigns</p>
           </div>
         </div>
@@ -235,7 +373,7 @@ function PortfolioWindowContent({ brand, onCreateCampaign, onOpenCampaign }: Por
             No {statusFilter.toLowerCase()} campaigns found
           </div>
         ) : (
-          filteredCampaigns.map(campaign => (
+          visibleCampaigns.map(campaign => (
             <button
               key={campaign.id}
               onClick={() => onOpenCampaign(campaign.id, campaign.name)}
@@ -259,6 +397,18 @@ function PortfolioWindowContent({ brand, onCreateCampaign, onOpenCampaign }: Por
           ))
         )}
       </div>
+
+      {/* Load More Button */}
+      {hasMore && (
+        <div className="flex justify-center pt-4">
+          <button
+            onClick={() => setVisibleCount(prev => prev + 10)}
+            className="px-4 py-2 bg-white border border-gray-200 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 hover:text-purple-600 transition-colors"
+          >
+            Load More ({filteredCampaigns.length - visibleCount} remaining)
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -485,15 +635,293 @@ function FlightWindowContent({ flight, campaignName, onToggleStatus, onEditPlan 
   );
 }
 
+// Client List Window - Agency view showing all clients/brands
+interface ClientListWindowContentProps {
+  brands: Brand[];
+  currentBrandId: string;
+  onSelectClient: (brandId: string) => void;
+  onOpenClientDetail: (brandId: string, brandName: string) => void;
+}
+
+function ClientListWindowContent({ brands, currentBrandId, onSelectClient, onOpenClientDetail }: ClientListWindowContentProps) {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [tierFilter, setTierFilter] = useState<'ALL' | 'Enterprise' | 'Mid-Market' | 'SMB'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'Active' | 'Inactive'>('ALL');
+
+  // Filter brands
+  const filteredBrands = brands.filter(b => {
+    const matchesSearch = b.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesTier = tierFilter === 'ALL' || b.tier === tierFilter;
+    const matchesStatus = statusFilter === 'ALL' || b.status === statusFilter;
+    return matchesSearch && matchesTier && matchesStatus;
+  });
+
+  // Stats
+  const totalSpend = brands.reduce((sum, b) => sum + (b.totalSpend || 0), 0);
+  const activeBrands = brands.filter(b => b.status === 'Active').length;
+
+  return (
+    <div className="p-4 h-full flex flex-col overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
+            <Users className="w-5 h-5 text-indigo-600" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">All Clients</h2>
+            <p className="text-sm text-gray-500">{brands.length} clients • ${(totalSpend / 1000000).toFixed(1)}M total spend</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Stats Row */}
+      <div className="grid grid-cols-3 gap-3 mb-4">
+        <div className="bg-green-50 rounded-lg p-3">
+          <div className="text-xs text-green-600 font-medium">Active Clients</div>
+          <div className="text-xl font-bold text-green-900">{activeBrands}</div>
+        </div>
+        <div className="bg-blue-50 rounded-lg p-3">
+          <div className="text-xs text-blue-600 font-medium">Total Budget</div>
+          <div className="text-xl font-bold text-blue-900">${(totalSpend / 1000000).toFixed(1)}M</div>
+        </div>
+        <div className="bg-purple-50 rounded-lg p-3">
+          <div className="text-xs text-purple-600 font-medium">Campaigns</div>
+          <div className="text-xl font-bold text-purple-900">{brands.reduce((sum, b) => sum + (b.campaignCount || b.campaigns.length), 0)}</div>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="flex items-center gap-3 mb-4">
+        <div className="flex-1 relative">
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Search clients..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+          />
+        </div>
+        <select
+          value={tierFilter}
+          onChange={(e) => setTierFilter(e.target.value as any)}
+          className="text-sm border border-gray-200 rounded-lg px-3 py-2"
+        >
+          <option value="ALL">All Tiers</option>
+          <option value="Enterprise">Enterprise</option>
+          <option value="Mid-Market">Mid-Market</option>
+          <option value="SMB">SMB</option>
+        </select>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as any)}
+          className="text-sm border border-gray-200 rounded-lg px-3 py-2"
+        >
+          <option value="ALL">All Status</option>
+          <option value="Active">Active</option>
+          <option value="Inactive">Inactive</option>
+        </select>
+      </div>
+
+      {/* Client List */}
+      <div className="flex-1 overflow-auto space-y-2">
+        {filteredBrands.map(b => (
+          <div
+            key={b.id}
+            className={`flex items-center justify-between p-3 rounded-lg border transition-all cursor-pointer ${
+              b.id === currentBrandId
+                ? 'bg-indigo-50 border-indigo-300'
+                : 'bg-white border-gray-200 hover:border-indigo-200 hover:shadow-sm'
+            }`}
+            onClick={() => onOpenClientDetail(b.id, b.name)}
+          >
+            <div className="flex items-center gap-3">
+              <img
+                src={b.logoUrl}
+                alt={b.name}
+                className="w-10 h-10 rounded-lg object-cover"
+              />
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-gray-900">{b.name}</span>
+                  {b.id === currentBrandId && (
+                    <span className="text-xs px-2 py-0.5 bg-indigo-100 text-indigo-600 rounded-full">Current</span>
+                  )}
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${
+                    b.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
+                  }`}>
+                    {b.status}
+                  </span>
+                  {b.tier && (
+                    <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full">
+                      {b.tier}
+                    </span>
+                  )}
+                </div>
+                <div className="text-sm text-gray-500">
+                  {b.campaigns.length} campaigns • ${((b.totalSpend || 0) / 1000).toFixed(0)}k spend
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelectClient(b.id);
+                }}
+                className="px-3 py-1.5 text-sm font-medium text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+              >
+                Switch
+              </button>
+              <ChevronRight className="w-4 h-4 text-gray-400" />
+            </div>
+          </div>
+        ))}
+        {filteredBrands.length === 0 && (
+          <div className="text-center py-8 text-gray-500">
+            No clients match your filters
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Client Detail Window - Shows a specific client's overview before switching
+interface ClientDetailWindowContentProps {
+  clientBrand: Brand;
+  isCurrentClient: boolean;
+  onSwitchToClient: () => void;
+  onOpenCampaign: (campaignId: string, campaignName: string) => void;
+}
+
+function ClientDetailWindowContent({ clientBrand, isCurrentClient, onSwitchToClient, onOpenCampaign }: ClientDetailWindowContentProps) {
+  const totalBudget = clientBrand.campaigns.reduce((sum, c) => sum + (c.budget || 0), 0);
+  const totalSpend = clientBrand.campaigns.reduce((sum, c) => sum + (c.delivery?.actualSpend || 0), 0);
+  const activeCampaigns = clientBrand.campaigns.filter(c => c.status === 'ACTIVE').length;
+
+  return (
+    <div className="p-4 h-full overflow-auto">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-4">
+          <img
+            src={clientBrand.logoUrl}
+            alt={clientBrand.name}
+            className="w-16 h-16 rounded-xl object-cover border border-gray-200"
+          />
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-xl font-bold text-gray-900">{clientBrand.name}</h2>
+              {isCurrentClient && (
+                <span className="text-xs px-2 py-0.5 bg-green-100 text-green-600 rounded-full">Active Workspace</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2 mt-1">
+              {clientBrand.tier && (
+                <span className="text-sm px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full">{clientBrand.tier}</span>
+              )}
+              {clientBrand.industry && (
+                <span className="text-sm text-gray-500">{clientBrand.industry}</span>
+              )}
+              {clientBrand.accountManager && (
+                <span className="text-sm text-gray-500">• {clientBrand.accountManager}</span>
+              )}
+            </div>
+          </div>
+        </div>
+        {!isCurrentClient && (
+          <button
+            onClick={onSwitchToClient}
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition-colors"
+          >
+            <Users className="w-4 h-4" />
+            Switch to Client
+          </button>
+        )}
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-4 gap-4 mb-6">
+        <div className="bg-blue-50 rounded-lg p-4">
+          <div className="text-xs text-blue-600 font-medium mb-1">Total Budget</div>
+          <div className="text-2xl font-bold text-blue-900">${(totalBudget / 1000000).toFixed(2)}M</div>
+        </div>
+        <div className="bg-green-50 rounded-lg p-4">
+          <div className="text-xs text-green-600 font-medium mb-1">Spend YTD</div>
+          <div className="text-2xl font-bold text-green-900">${(totalSpend / 1000000).toFixed(2)}M</div>
+        </div>
+        <div className="bg-purple-50 rounded-lg p-4">
+          <div className="text-xs text-purple-600 font-medium mb-1">Active Campaigns</div>
+          <div className="text-2xl font-bold text-purple-900">{activeCampaigns}</div>
+        </div>
+        <div className="bg-amber-50 rounded-lg p-4">
+          <div className="text-xs text-amber-600 font-medium mb-1">Total Campaigns</div>
+          <div className="text-2xl font-bold text-amber-900">{clientBrand.campaigns.length}</div>
+        </div>
+      </div>
+
+      {/* Recent Campaigns */}
+      <div>
+        <h3 className="text-sm font-semibold text-gray-700 mb-3">Recent Campaigns</h3>
+        <div className="space-y-2">
+          {clientBrand.campaigns.slice(0, 8).map(campaign => (
+            <button
+              key={campaign.id}
+              onClick={() => onOpenCampaign(campaign.id, campaign.name)}
+              className="w-full flex items-center justify-between p-3 bg-white border border-gray-200 rounded-lg hover:border-indigo-300 hover:shadow-sm transition-all"
+            >
+              <div className="flex items-center gap-3">
+                <Briefcase className="w-4 h-4 text-gray-400" />
+                <div className="text-left">
+                  <div className="font-medium text-gray-900">{campaign.name}</div>
+                  <div className="text-sm text-gray-500">
+                    ${(campaign.budget / 1000).toFixed(0)}k • {campaign.flights?.length || 0} flights
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={`text-xs px-2 py-0.5 rounded-full ${
+                  campaign.status === 'ACTIVE' ? 'bg-green-100 text-green-700' :
+                  campaign.status === 'PAUSED' ? 'bg-yellow-100 text-yellow-700' :
+                  'bg-gray-100 text-gray-600'
+                }`}>
+                  {campaign.status}
+                </span>
+                <ChevronRight className="w-4 h-4 text-gray-400" />
+              </div>
+            </button>
+          ))}
+        </div>
+        {clientBrand.campaigns.length > 8 && (
+          <div className="text-center mt-3 text-sm text-gray-500">
+            +{clientBrand.campaigns.length - 8} more campaigns
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 interface WindowedAppInnerProps {
   brand: Brand;
+  allBrands: Brand[];  // All clients/brands for multi-client support
   onBrandUpdate: (brand: Brand) => void;
+  onBrandSelect: (brandId: string) => void;  // Switch to different client
   onBack: () => void;
   onSwitchToClassic: () => void;
 }
 
-function WindowedAppInner({ brand, onBrandUpdate, onBack, onSwitchToClassic }: WindowedAppInnerProps) {
-  const { openWindow, state: canvasState, getActiveWindow, dispatch } = useCanvas();
+function WindowedAppInner({ brand, allBrands, onBrandUpdate, onBrandSelect, onBack, onSwitchToClassic }: WindowedAppInnerProps) {
+  const { openWindow, closeWindow, state: canvasState, getActiveWindow, dispatch } = useCanvas();
+
+  // Debug: log when allBrands changes
+  useEffect(() => {
+    windowLog(`allBrands updated: ${allBrands.length} brands`, allBrands.map(b => b.id));
+    windowLog(`Current brand: ${brand.id} (${brand.name})`);
+    windowLog(`Current windows:`, canvasState.windows.map(w => ({ id: w.id, type: w.type, brandId: w.brandId, entityId: w.entityId })));
+  }, [allBrands, brand]);
 
   // Agent state
   const brainRef = useRef<AgentBrain>(new AgentBrain());
@@ -551,43 +979,62 @@ function WindowedAppInner({ brand, onBrandUpdate, onBack, onSwitchToClassic }: W
   // Track active media plans per flight (for plan editor windows)
   const [mediaPlans, setMediaPlans] = useState<Record<string, MediaPlan>>({});
 
-  // Open portfolio window by default if no content windows are open
+  // Open portfolio window for the selected brand by default
   // Track if we've already tried to open the default window to prevent loops
   const hasOpenedDefaultWindow = useRef(false);
   const hasCheckedInitialState = useRef(false);
+  const lastOpenedBrandId = useRef<string | null>(null);
 
   useEffect(() => {
-    // Only run once per session
-    if (hasOpenedDefaultWindow.current) return;
+    // When brand changes, we may need to open a portfolio for the new brand
+    const brandChanged = lastOpenedBrandId.current !== null && lastOpenedBrandId.current !== brand.id;
+
+    // Only run once per brand
+    if (hasOpenedDefaultWindow.current && !brandChanged) return;
 
     // Wait longer for canvas state to stabilize after loading from localStorage
     // The localStorage load happens asynchronously in CanvasContext
     const timer = setTimeout(() => {
       // Check again if we've already opened (in case of race)
-      if (hasOpenedDefaultWindow.current) return;
+      if (hasOpenedDefaultWindow.current && !brandChanged) return;
 
-      // Mark that we've checked - only do this once
-      if (!hasCheckedInitialState.current) {
+      // Mark that we've checked - only do this once per brand
+      if (!hasCheckedInitialState.current || brandChanged) {
         hasCheckedInitialState.current = true;
 
-        // Check if there are any non-chat windows open
-        const contentWindows = canvasState.windows.filter(w => w.type !== 'chat');
-        console.log('[WindowedApp] Initial check for content windows:', contentWindows.length, 'found');
+        // Check if there's a portfolio window for THIS brand already open
+        const hasPortfolioForBrand = canvasState.windows.some(w =>
+          w.type === 'portfolio' && (w.brandId === brand.id || !w.brandId)
+        );
 
-        if (contentWindows.length === 0) {
-          console.log('[WindowedApp] No content windows found, opening portfolio by default');
+        // Also check for any content windows belonging to this brand
+        const hasBrandContentWindows = canvasState.windows.some(w =>
+          w.type !== 'chat' && w.type !== 'client-list' && w.brandId === brand.id
+        );
+
+        windowLog('Initial check for brand', brand.name, ':', {
+          hasPortfolioForBrand,
+          hasBrandContentWindows,
+          totalWindows: canvasState.windows.length
+        });
+
+        // If no portfolio or brand-specific windows, open portfolio for this brand
+        if (!hasPortfolioForBrand && !hasBrandContentWindows) {
+          windowLog('Opening portfolio for brand:', brand.name);
           hasOpenedDefaultWindow.current = true;
-          openWindow('portfolio', 'Portfolio Dashboard');
+          lastOpenedBrandId.current = brand.id;
+          openWindow('portfolio', `${brand.name} Portfolio`, undefined, brand.id);
         } else {
-          // Mark as done since we already have windows
-          console.log('[WindowedApp] Content windows exist, not opening portfolio');
+          // Mark as done since we already have windows for this brand
+          windowLog('Windows exist for brand, not opening portfolio');
           hasOpenedDefaultWindow.current = true;
+          lastOpenedBrandId.current = brand.id;
         }
       }
     }, 300); // Increased delay to ensure localStorage fully loaded
 
     return () => clearTimeout(timer);
-  }, [canvasState.windows, openWindow]);
+  }, [canvasState.windows, openWindow, brand.id, brand.name]);
 
   // Current context (derived from active window)
   const [windowContext, setWindowContext] = useState<WindowContext | undefined>(undefined);
@@ -613,9 +1060,9 @@ function WindowedAppInner({ brand, onBrandUpdate, onBack, onSwitchToClassic }: W
     const validFlightIds = new Set(brand.campaigns.flatMap(c => c.flights.map(f => f.id)));
 
     // Debug: Log what we're checking
-    console.log(`[WindowedApp] Validating ${canvasState.windows.length} windows for brand ${brand.id}`);
-    console.log(`[WindowedApp] Valid campaign IDs (first 5):`, Array.from(validCampaignIds).slice(0, 5));
-    console.log(`[WindowedApp] Valid flight IDs (first 5):`, Array.from(validFlightIds).slice(0, 5));
+    windowLog(`Validating ${canvasState.windows.length} windows for brand ${brand.id}`);
+    windowLog(`Valid campaign IDs (first 5):`, Array.from(validCampaignIds).slice(0, 5));
+    windowLog(`Valid flight IDs (first 5):`, Array.from(validFlightIds).slice(0, 5));
 
     // Log each window's status but DON'T close invalid ones
     canvasState.windows.forEach(w => {
@@ -634,7 +1081,7 @@ function WindowedAppInner({ brand, onBrandUpdate, onBack, onSwitchToClassic }: W
           (w.type === 'media-plan' && validFlightIds.has(w.entityId)) ||
           (w.type !== 'campaign' && w.type !== 'flight' && w.type !== 'media-plan');
 
-        console.log(`[WindowedApp] Window ${w.type} (${w.entityId}): ${isValid ? 'VALID' : 'INVALID but keeping open'}`);
+        windowLog(`Window ${w.type} (${w.entityId}): ${isValid ? 'VALID' : 'INVALID but keeping open'}`);
       }
     });
   }, [canvasState.windows, brand.campaigns, dispatch]); // Re-run when windows change (e.g., after loading from localStorage)
@@ -657,9 +1104,10 @@ function WindowedAppInner({ brand, onBrandUpdate, onBack, onSwitchToClassic }: W
     return { ...brandToUpdate, campaigns: updatedCampaigns };
   }, []);
 
-  // Open a flight in the plan editor
-  const openFlightInPlanEditor = useCallback((flightId: string, flightName: string, campaignName: string) => {
-    console.log('[WindowedApp] Opening flight in plan editor:', flightId, flightName);
+  // Open a flight in the plan editor (kept for chat command support)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _openFlightInPlanEditor = useCallback((flightId: string, flightName: string, campaignName: string) => {
+    windowLog('Opening flight in plan editor:', flightId, flightName);
 
     // Find the flight
     let foundFlight: Flight | undefined;
@@ -694,28 +1142,44 @@ function WindowedAppInner({ brand, onBrandUpdate, onBack, onSwitchToClassic }: W
         strategy: 'BALANCED',
         metrics: calculatePlanMetrics(foundFlight.lines)
       };
-      console.log('[WindowedApp] Created new media plan for flight:', flightId, newPlan);
+      windowLog('Created new media plan for flight:', flightId, newPlan);
       setMediaPlans(prev => ({ ...prev, [flightId]: newPlan }));
 
       // Also set it in the agent brain so commands work on this plan
       brainRef.current.setMediaPlan(newPlan);
     } else {
-      console.log('[WindowedApp] Using existing media plan for flight:', flightId);
+      windowLog('Using existing media plan for flight:', flightId);
       // Ensure brain has the current plan
       brainRef.current.setMediaPlan(existingPlan);
     }
 
     // Open the media-plan window
-    console.log('[WindowedApp] Opening media-plan window for:', campaignName, flightName);
+    windowLog('Opening media-plan window for:', campaignName, flightName);
     openWindow('media-plan', `${campaignName}\\${flightName}`, flightId);
   }, [brand.campaigns, mediaPlans, openWindow]);
 
+  // Helper to find brand containing a specific flight
+  // MULTI-CLIENT: Critical for operations that receive only flightId
+  const findBrandByFlightId = useCallback((flightId: string): Brand | undefined => {
+    for (const b of allBrands) {
+      for (const c of b.campaigns) {
+        if (c.flights.some(f => f.id === flightId)) {
+          return b;
+        }
+      }
+    }
+    return undefined;
+  }, [allBrands]);
+
   // Handle placement update
   const handleUpdatePlacement = useCallback((flightId: string, updatedPlacement: Placement) => {
+    // Find the brand containing this flight
+    const targetBrand = findBrandByFlightId(flightId) || brand;
+
     // Update brand state
     const updatedBrand = {
-      ...brand,
-      campaigns: brand.campaigns.map(c => ({
+      ...targetBrand,
+      campaigns: targetBrand.campaigns.map(c => ({
         ...c,
         flights: c.flights.map(f => {
           if (f.id === flightId) {
@@ -750,14 +1214,17 @@ function WindowedAppInner({ brand, onBrandUpdate, onBack, onSwitchToClassic }: W
         }
       };
     });
-  }, [brand, onBrandUpdate, updateBrandMetrics]);
+  }, [findBrandByFlightId, brand, onBrandUpdate, updateBrandMetrics]);
 
   // Handle placement delete
   const handleDeletePlacement = useCallback((flightId: string, placementId: string) => {
+    // Find the brand containing this flight
+    const targetBrand = findBrandByFlightId(flightId) || brand;
+
     // Update brand state
     const updatedBrand = {
-      ...brand,
-      campaigns: brand.campaigns.map(c => ({
+      ...targetBrand,
+      campaigns: targetBrand.campaigns.map(c => ({
         ...c,
         flights: c.flights.map(f => {
           if (f.id === flightId) {
@@ -791,26 +1258,33 @@ function WindowedAppInner({ brand, onBrandUpdate, onBack, onSwitchToClassic }: W
         }
       };
     });
-  }, [brand, onBrandUpdate, updateBrandMetrics]);
+  }, [findBrandByFlightId, brand, onBrandUpdate, updateBrandMetrics]);
 
-  // Handle activate/pause flight
-  const handleToggleFlightStatus = useCallback((flightId: string, newStatus: 'ACTIVE' | 'DRAFT') => {
+  // Handle activate/pause flight (global version - kept for chat commands)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _handleToggleFlightStatus = useCallback((flightId: string, newStatus: 'ACTIVE' | 'DRAFT') => {
+    // Find the brand containing this flight
+    const targetBrand = findBrandByFlightId(flightId) || brand;
+
     const updatedBrand = {
-      ...brand,
-      campaigns: brand.campaigns.map(c => ({
+      ...targetBrand,
+      campaigns: targetBrand.campaigns.map(c => ({
         ...c,
         flights: c.flights.map(f => f.id === flightId ? { ...f, status: newStatus } : f)
       }))
     };
     onBrandUpdate(updatedBrand);
-  }, [brand, onBrandUpdate]);
+  }, [findBrandByFlightId, brand, onBrandUpdate]);
 
   // Handle adding a new placement to a flight
   const handleAddPlacement = useCallback((flightId: string) => {
-    // Find the flight to get context
+    // Find the brand containing this flight
+    const targetBrand = findBrandByFlightId(flightId) || brand;
+
+    // Find the flight and campaign in the target brand
     let foundFlight: Flight | undefined;
     let foundCampaign: Campaign | undefined;
-    for (const c of brand.campaigns) {
+    for (const c of targetBrand.campaigns) {
       const f = c.flights.find(fl => fl.id === flightId);
       if (f) {
         foundFlight = f;
@@ -857,8 +1331,8 @@ function WindowedAppInner({ brand, onBrandUpdate, onBack, onSwitchToClassic }: W
 
     // Update brand state
     const updatedBrand = {
-      ...brand,
-      campaigns: brand.campaigns.map(c => ({
+      ...targetBrand,
+      campaigns: targetBrand.campaigns.map(c => ({
         ...c,
         flights: c.flights.map(f => {
           if (f.id === flightId) {
@@ -893,15 +1367,34 @@ function WindowedAppInner({ brand, onBrandUpdate, onBack, onSwitchToClassic }: W
       };
     });
 
-    console.log('[WindowedApp] Added new DRAFT placement to flight:', flightId);
-  }, [brand, onBrandUpdate, updateBrandMetrics]);
+    windowLog('Added new DRAFT placement to flight:', flightId);
+  }, [findBrandByFlightId, brand, onBrandUpdate, updateBrandMetrics]);
 
   // Sync placements from agent's media plan back to brand state
   // This is critical for keeping the flight detail window in sync with chat changes
+  // MULTI-CLIENT: Find which brand contains the flight rather than assuming global brand
   const syncPlacementsToBrand = useCallback((flightId: string, placements: Placement[]) => {
+    // Find the brand that contains this flight
+    let targetBrand: Brand | undefined;
+    for (const b of allBrands) {
+      for (const c of b.campaigns) {
+        if (c.flights.some(f => f.id === flightId)) {
+          targetBrand = b;
+          break;
+        }
+      }
+      if (targetBrand) break;
+    }
+
+    // Fall back to current brand if not found (shouldn't happen, but safe fallback)
+    if (!targetBrand) {
+      console.warn('[syncPlacementsToBrand] Flight not found in any brand, using current brand:', flightId);
+      targetBrand = brand;
+    }
+
     const updatedBrand = {
-      ...brand,
-      campaigns: brand.campaigns.map(c => ({
+      ...targetBrand,
+      campaigns: targetBrand.campaigns.map(c => ({
         ...c,
         flights: c.flights.map(f => {
           if (f.id === flightId) {
@@ -916,7 +1409,7 @@ function WindowedAppInner({ brand, onBrandUpdate, onBack, onSwitchToClassic }: W
     };
     const finalBrand = updateBrandMetrics(updatedBrand);
     onBrandUpdate(finalBrand);
-  }, [brand, onBrandUpdate, updateBrandMetrics]);
+  }, [allBrands, brand, onBrandUpdate, updateBrandMetrics]);
 
   // Sync brand with AgentBrain
   useEffect(() => {
@@ -927,11 +1420,22 @@ function WindowedAppInner({ brand, onBrandUpdate, onBack, onSwitchToClassic }: W
 
   // Update window context based on active CONTENT window (not chat)
   // This ensures clicking on chat doesn't lose the context
+  // IMPORTANT: Use the window's brandId to get the correct brand context
   useEffect(() => {
     const activeWindow = getActiveWindow();
 
+    windowLog('Active window changed:', {
+      id: activeWindow?.id,
+      type: activeWindow?.type,
+      entityId: activeWindow?.entityId,
+      brandId: activeWindow?.brandId,
+      title: activeWindow?.title,
+      activeWindowId: canvasState.activeWindowId
+    });
+
     // Skip if active window is chat - keep previous context
     if (activeWindow?.type === 'chat') {
+      windowLog('Skipping chat window, keeping previous context');
       return;
     }
 
@@ -939,18 +1443,26 @@ function WindowedAppInner({ brand, onBrandUpdate, onBack, onSwitchToClassic }: W
       // Only clear context if there are no content windows at all
       const hasContentWindows = canvasState.windows.some(w => w.type !== 'chat');
       if (!hasContentWindows) {
+        windowLog('No content windows, clearing context');
         setWindowContext(undefined);
         brainRef.current?.setWindowContext(undefined);
       }
       return;
     }
 
+    // Get the brand for this window (uses window's brandId, falls back to current brand)
+    const windowBrand = activeWindow.brandId
+      ? allBrands.find(b => b.id === activeWindow.brandId) || brand
+      : brand;
+
     let newContext: WindowContext = {
-      windowType: activeWindow.type as WindowContext['windowType']
+      windowType: activeWindow.type as WindowContext['windowType'],
+      brandId: windowBrand.id,
+      brandName: windowBrand.name
     };
 
     if (activeWindow.type === 'campaign' && activeWindow.entityId) {
-      const campaign = brand.campaigns.find(c => c.id === activeWindow.entityId);
+      const campaign = windowBrand.campaigns.find(c => c.id === activeWindow.entityId);
       if (campaign) {
         newContext = {
           ...newContext,
@@ -959,8 +1471,8 @@ function WindowedAppInner({ brand, onBrandUpdate, onBack, onSwitchToClassic }: W
         };
       }
     } else if (activeWindow.type === 'flight' && activeWindow.entityId) {
-      // Find flight and its parent campaign
-      for (const campaign of brand.campaigns) {
+      // Find flight and its parent campaign in the WINDOW's brand
+      for (const campaign of windowBrand.campaigns) {
         const flight = campaign.flights.find(f => f.id === activeWindow.entityId);
         if (flight) {
           newContext = {
@@ -973,15 +1485,81 @@ function WindowedAppInner({ brand, onBrandUpdate, onBack, onSwitchToClassic }: W
           break;
         }
       }
+    } else if (activeWindow.type === 'media-plan' && activeWindow.entityId) {
+      // Find the flight for this media plan in the WINDOW's brand
+      const flightId = activeWindow.entityId;
+      for (const campaign of windowBrand.campaigns) {
+        const flight = campaign.flights.find(f => f.id === flightId);
+        if (flight) {
+          newContext = {
+            ...newContext,
+            campaignId: campaign.id,
+            campaignName: campaign.name,
+            flightId: flight.id,
+            flightName: flight.name
+          };
+
+          // CRITICAL: Sync the media plan to AgentBrain so chat commands work
+          // First check if we have a cached plan, otherwise create one
+          const existingPlan = mediaPlans[flightId];
+          if (existingPlan) {
+            windowLog('Setting AgentBrain media plan for:', flightId);
+            brainRef.current?.setMediaPlan(existingPlan);
+          } else {
+            // Create a media plan on-the-fly for the brain
+            const newPlan: MediaPlan = {
+              id: `plan-${flightId}`,
+              campaign: {
+                ...campaign,
+                placements: flight.lines
+              },
+              activeFlightId: flightId,
+              totalSpend: flight.lines.reduce((sum, l) => sum + l.totalCost, 0),
+              remainingBudget: flight.budget - flight.lines.reduce((sum, l) => sum + l.totalCost, 0),
+              version: 1,
+              groupingMode: 'DETAILED',
+              strategy: 'BALANCED',
+              metrics: calculatePlanMetrics(flight.lines)
+            };
+            windowLog('Creating and setting AgentBrain media plan for:', flightId);
+            brainRef.current?.setMediaPlan(newPlan);
+          }
+          break;
+        }
+      }
     } else if (activeWindow.type === 'portfolio') {
       newContext = {
-        windowType: 'portfolio'
+        windowType: 'portfolio',
+        brandId: windowBrand.id,
+        brandName: windowBrand.name
       };
+    } else if (activeWindow.type === 'client-list') {
+      // Client list window - no specific brand context, it's an agency-level view
+      // Keep the last valid context from the previously focused content window
+      // This allows chat commands to still work with the last focused client's data
+      windowLog('Client-list window - keeping previous context or using global brand');
+      // Don't update context - keep previous one so user can still chat about last focused client
+      return;
+    } else if (activeWindow.type === 'client') {
+      // Client detail window - show the client being viewed
+      const clientBrand = allBrands.find(b => b.id === activeWindow.entityId);
+      windowLog('Client window - looking up brand:', {
+        entityId: activeWindow.entityId,
+        foundBrand: clientBrand?.name
+      });
+      if (clientBrand) {
+        newContext = {
+          windowType: 'client',
+          brandId: clientBrand.id,
+          brandName: clientBrand.name
+        };
+      }
     }
 
+    windowLog('Setting new context:', newContext);
     setWindowContext(newContext);
     brainRef.current?.setWindowContext(newContext);
-  }, [canvasState.activeWindowId, canvasState.windows, brand.campaigns, getActiveWindow]);
+  }, [canvasState.activeWindowId, canvasState.windows, brand, allBrands, getActiveWindow, mediaPlans]);
 
   // Handle message sending
   const handleSendMessage = async (text: string) => {
@@ -996,6 +1574,13 @@ function WindowedAppInner({ brand, onBrandUpdate, onBack, onSwitchToClassic }: W
 
     await new Promise(resolve => setTimeout(resolve, 500));
 
+    // Get the WINDOW's brand for context-aware commands (not the global brand)
+    // This is critical for multi-client support - chat commands should operate
+    // on the brand of the currently focused window
+    const contextBrand = windowContext?.brandId
+      ? allBrands.find(b => b.id === windowContext.brandId) || brand
+      : brand;
+
     // Check for window management and context-aware commands
     const lowerText = text.toLowerCase();
 
@@ -1005,7 +1590,7 @@ function WindowedAppInner({ brand, onBrandUpdate, onBack, onSwitchToClassic }: W
 
     // If user refers to "this campaign" and we have context, use it
     if (hasContextRef && windowContext?.campaignId) {
-      const campaign = brand.campaigns.find(c => c.id === windowContext.campaignId);
+      const campaign = contextBrand.campaigns.find(c => c.id === windowContext.campaignId);
       const flight = windowContext.flightId
         ? campaign?.flights.find(f => f.id === windowContext.flightId)
         : undefined;
@@ -1013,7 +1598,7 @@ function WindowedAppInner({ brand, onBrandUpdate, onBack, onSwitchToClassic }: W
       // "Show flights" or "show flights for this campaign"
       if (lowerText.includes('flight') && (lowerText.includes('show') || lowerText.includes('list'))) {
         if (campaign) {
-          openWindow('campaign', campaign.name, campaign.id);
+          openWindow('campaign', campaign.name, campaign.id, contextBrand.id);
           const responseMsg: AgentMessage = {
             id: `agent-${Date.now()}`,
             role: 'agent',
@@ -1060,16 +1645,49 @@ function WindowedAppInner({ brand, onBrandUpdate, onBack, onSwitchToClassic }: W
         setIsTyping(false);
         return;
       }
+
+      // "Show attribution" for current context
+      if (lowerText.includes('attribution')) {
+        const entityName = flight ? `${campaign?.name} › ${flight.name}` : campaign?.name;
+        const entityType = flight ? 'flight' : 'campaign';
+
+        // Generate sample attribution data based on context
+        const channels = flight
+          ? [...new Set(flight.lines.map(l => l.channel))]
+          : ['Search', 'Social', 'Display'];
+
+        const attributionData = channels.map(ch => ({
+          channel: ch,
+          firstTouch: Math.floor(Math.random() * 30 + 10),
+          lastTouch: Math.floor(Math.random() * 40 + 15),
+          linear: Math.floor(Math.random() * 25 + 20)
+        }));
+
+        const attributionContent = attributionData.map(a =>
+          `• **${a.channel}**: First Touch ${a.firstTouch}% | Last Touch ${a.lastTouch}% | Linear ${a.linear}%`
+        ).join('\n');
+
+        const responseMsg: AgentMessage = {
+          id: `agent-${Date.now()}`,
+          role: 'agent',
+          content: `**Attribution Analysis for ${entityName}:**\n\n${attributionContent}\n\n*Attribution models show how credit for conversions is distributed across channels in this ${entityType}.*\n\n📈 **Recommendation:** Consider increasing investment in channels with high first-touch attribution to expand reach.`,
+          timestamp: Date.now(),
+          suggestedActions: ['View full attribution report', 'Compare models', 'Export data']
+        };
+        setMessages(prev => [...prev, responseMsg]);
+        setIsTyping(false);
+        return;
+      }
     }
 
     // Window open commands
     if (lowerText.includes('open') && lowerText.includes('campaign')) {
       const campaignName = text.replace(/open|campaign|the/gi, '').trim();
-      const campaign = brand.campaigns.find(c =>
+      const campaign = contextBrand.campaigns.find(c =>
         c.name.toLowerCase().includes(campaignName.toLowerCase())
       );
       if (campaign) {
-        openWindow('campaign', campaign.name, campaign.id);
+        openWindow('campaign', campaign.name, campaign.id, contextBrand.id);
         const responseMsg: AgentMessage = {
           id: `agent-${Date.now()}`,
           role: 'agent',
@@ -1083,6 +1701,85 @@ function WindowedAppInner({ brand, onBrandUpdate, onBack, onSwitchToClassic }: W
       }
     }
 
+    // "Show attribution" - using window context even without explicit "this" reference
+    if (lowerText.includes('attribution') && windowContext) {
+      // Try to find campaign/flight from current window context
+      const ctxCampaign = windowContext.campaignId
+        ? contextBrand.campaigns.find(c => c.id === windowContext.campaignId)
+        : contextBrand.campaigns[0];
+      const ctxFlight = windowContext.flightId && ctxCampaign
+        ? ctxCampaign.flights.find(f => f.id === windowContext.flightId)
+        : undefined;
+
+      const entityName = ctxFlight
+        ? `${ctxCampaign?.name} › ${ctxFlight.name}`
+        : ctxCampaign?.name || contextBrand.name;
+      const entityType = ctxFlight ? 'flight' : ctxCampaign ? 'campaign' : 'brand';
+
+      // Generate sample attribution data based on context
+      const channels = ctxFlight
+        ? [...new Set(ctxFlight.lines.map(l => l.channel))]
+        : ctxCampaign?.flights.flatMap(f => f.lines.map(l => l.channel)).filter((v, i, a) => a.indexOf(v) === i).slice(0, 4)
+        || ['Search', 'Social', 'Display'];
+
+      const attributionData = (channels.length > 0 ? channels : ['Search', 'Social', 'Display']).map(ch => ({
+        channel: ch,
+        firstTouch: Math.floor(Math.random() * 30 + 10),
+        lastTouch: Math.floor(Math.random() * 40 + 15),
+        linear: Math.floor(Math.random() * 25 + 20)
+      }));
+
+      const attributionContent = attributionData.map(a =>
+        `• **${a.channel}**: First Touch ${a.firstTouch}% | Last Touch ${a.lastTouch}% | Linear ${a.linear}%`
+      ).join('\n');
+
+      const responseMsg: AgentMessage = {
+        id: `agent-${Date.now()}`,
+        role: 'agent',
+        content: `**Attribution Analysis for ${entityName}:**\n\n${attributionContent}\n\n*Attribution models show how credit for conversions is distributed across channels in this ${entityType}.*\n\n📈 **Recommendation:** Consider increasing investment in channels with high first-touch attribution to expand reach.`,
+        timestamp: Date.now(),
+        suggestedActions: ['View full attribution report', 'Compare models', 'Export data']
+      };
+      setMessages(prev => [...prev, responseMsg]);
+      setIsTyping(false);
+      return;
+    }
+
+    // "Show insights" or "show audience insights" command
+    if ((lowerText.includes('insight') || lowerText.includes('audience')) &&
+        (lowerText.includes('show') || lowerText.includes('open') || lowerText.includes('view'))) {
+      // Need a flight context to show insights
+      if (windowContext?.flightId) {
+        const flightId = windowContext.flightId;
+        const plan = mediaPlans[flightId];
+        if (plan) {
+          const flightName = plan.campaign.name || 'Media Plan';
+          openWindow('audience-insights', `Audience Insights: ${flightName}`, flightId, contextBrand.id);
+          const responseMsg: AgentMessage = {
+            id: `agent-${Date.now()}`,
+            role: 'agent',
+            content: `Opened **Audience Insights** for ${flightName}.\n\nThis panel shows segment overlap, reach efficiency, and recommendations for your audience targeting.`,
+            timestamp: Date.now(),
+            suggestedActions: ['Add segment', 'Optimize reach', 'Export']
+          };
+          setMessages(prev => [...prev, responseMsg]);
+          setIsTyping(false);
+          return;
+        }
+      }
+      // No flight context
+      const responseMsg: AgentMessage = {
+        id: `agent-${Date.now()}`,
+        role: 'agent',
+        content: `To view Audience Insights, please open a flight or media plan first. The insights panel analyzes segment overlap and reach for your placements.`,
+        timestamp: Date.now(),
+        suggestedActions: ['Open portfolio', 'Show campaigns']
+      };
+      setMessages(prev => [...prev, responseMsg]);
+      setIsTyping(false);
+      return;
+    }
+
     // Portfolio command with fuzzy matching for common misspellings
     const portfolioPatterns = [
       'portfolio', 'porfolio', 'portflio', 'porftolio', 'protfolio',
@@ -1093,11 +1790,11 @@ function WindowedAppInner({ brand, onBrandUpdate, onBack, onSwitchToClassic }: W
       (lowerText.includes('open') && (lowerText.includes('port') || lowerText.includes('dash')));
 
     if (matchesPortfolio) {
-      openWindow('portfolio', 'Portfolio Dashboard');
+      openWindow('portfolio', `${contextBrand.name} Portfolio`, undefined, contextBrand.id);
       const responseMsg: AgentMessage = {
         id: `agent-${Date.now()}`,
         role: 'agent',
-        content: 'Opened the Portfolio Dashboard.',
+        content: `Opened the Portfolio Dashboard for **${contextBrand.name}**.`,
         timestamp: Date.now(),
         suggestedActions: ['Show budget optimization', 'View all campaigns']
       };
@@ -1107,6 +1804,9 @@ function WindowedAppInner({ brand, onBrandUpdate, onBack, onSwitchToClassic }: W
     }
 
     // Process with AgentBrain for other commands
+    // CRITICAL: Set the AgentBrain's brand to the window's brand context
+    // This ensures all agent operations work on the correct client's data
+    brainRef.current.setBrand(contextBrand);
     const agentResponse = brainRef.current.processInput(text);
     const ctx = brainRef.current.getContext();
     setMessages([...ctx.history]);
@@ -1142,35 +1842,142 @@ function WindowedAppInner({ brand, onBrandUpdate, onBack, onSwitchToClassic }: W
         generateMediaPlanPDF(ctx.mediaPlan);
       } else if (action === 'EXPORT_PPT' && ctx.mediaPlan) {
         generateMediaPlanPPT(ctx.mediaPlan);
+      } else if (action.type === 'CREATE_CAMPAIGN' && action.payload?.name) {
+        // Create the new campaign
+        const campaignName = action.payload.name;
+        const today = new Date().toISOString().split('T')[0];
+        const in90Days = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+        const newCampaign: Campaign = {
+          id: generateId(),
+          name: campaignName,
+          brandId: contextBrand.id,
+          advertiser: contextBrand.name,
+          budget: 100000, // Default budget
+          startDate: today,
+          endDate: in90Days,
+          goals: ['Brand Awareness'],
+          status: 'DRAFT',
+          flights: [],
+          tags: [],
+          forecast: { impressions: 0, spend: 0, reach: 0, frequency: 0, source: 'Internal' },
+          delivery: { actualImpressions: 0, actualSpend: 0, pacing: 0, status: 'ON_TRACK' }
+        };
+
+        // Add campaign to brand
+        const updatedBrand: Brand = {
+          ...contextBrand,
+          campaigns: [...contextBrand.campaigns, newCampaign]
+        };
+        onBrandUpdate(updatedBrand);
+
+        // Open the new campaign window
+        openWindow('campaign', newCampaign.name, newCampaign.id, contextBrand.id);
       }
     }
   };
 
-  // Render window content based on type - simplified for MVP
-  const renderWindowContent = (windowType: WindowType, entityId?: string): ReactNode => {
+  // Helper to get brand by ID, falling back to current brand
+  const getBrandById = useCallback((brandId?: string): Brand => {
+    if (brandId) {
+      const found = allBrands.find(b => b.id === brandId);
+      if (found) {
+        console.log(`[getBrandById] Found brand ${brandId} with ${found.campaigns.length} campaigns`);
+        return found;
+      }
+      console.warn(`[getBrandById] Brand ${brandId} not found in allBrands (${allBrands.length} brands). Available IDs:`, allBrands.map(b => b.id));
+    }
+    console.log(`[getBrandById] Falling back to current brand: ${brand.id}`);
+    return brand; // Fall back to current brand
+  }, [allBrands, brand]);
+
+  // Helper to update a specific brand (not necessarily the current one)
+  const updateBrandById = useCallback((brandId: string, updater: (b: Brand) => Brand) => {
+    const targetBrand = allBrands.find(b => b.id === brandId);
+    if (!targetBrand) return;
+
+    const updatedBrand = updater(targetBrand);
+
+    // If this is the current brand, use the standard update path
+    if (brandId === brand.id) {
+      onBrandUpdate(updatedBrand);
+    } else {
+      // For other brands, we need a way to update them
+      // This requires App.tsx to support updating any brand, not just current
+      // For now, we'll use the onBrandUpdate with the updated brand
+      // App.tsx should handle this by checking the brand.id
+      onBrandUpdate(updatedBrand);
+    }
+  }, [allBrands, brand.id, onBrandUpdate]);
+
+  // Helper to find which brand contains a given entity
+  const findBrandForEntity = useCallback((entityId: string, windowType: WindowType): Brand | undefined => {
+    for (const b of allBrands) {
+      if (windowType === 'campaign' && b.campaigns.some(c => c.id === entityId)) {
+        return b;
+      }
+      if ((windowType === 'flight' || windowType === 'media-plan') &&
+          b.campaigns.some(c => c.flights.some(f => f.id === entityId))) {
+        return b;
+      }
+      if (windowType === 'portfolio' && b.id === entityId) {
+        return b;
+      }
+    }
+    return undefined;
+  }, [allBrands]);
+
+  // Render window content based on type - each window maintains its own brand context
+  const renderWindowContent = (windowType: WindowType, entityId?: string, windowBrandId?: string): ReactNode => {
+    windowLog(`renderWindowContent type=${windowType}, entityId=${entityId}, windowBrandId=${windowBrandId}`);
+
+    // Get the brand for THIS window (may be different from current active brand)
+    // If windowBrandId is not set, try to find the brand that contains the entity
+    let windowBrand = getBrandById(windowBrandId);
+
+    // Fallback: if brand lookup failed or brand doesn't contain the entity, search all brands
+    if (!windowBrandId && entityId) {
+      const foundBrand = findBrandForEntity(entityId, windowType);
+      if (foundBrand) {
+        windowLog(`Found brand ${foundBrand.id} for entity ${entityId}`);
+        windowBrand = foundBrand;
+      }
+    }
+
     switch (windowType) {
       case 'campaign': {
-        const campaign = brand.campaigns.find(c => c.id === entityId);
-        if (!campaign) return <div className="p-4 text-gray-500">Campaign not found</div>;
+        let campaign = windowBrand.campaigns.find(c => c.id === entityId);
+
+        // If not found in windowBrand, search all brands (handles legacy pinned windows)
+        if (!campaign && entityId) {
+          for (const b of allBrands) {
+            const found = b.campaigns.find(c => c.id === entityId);
+            if (found) {
+              windowLog(`Found campaign ${entityId} in brand ${b.id} (searched all brands)`);
+              windowBrand = b;
+              campaign = found;
+              break;
+            }
+          }
+        }
+
+        if (!campaign) {
+          console.warn(`[renderWindowContent] Campaign ${entityId} not found in any brand`);
+          return <div className="p-4 text-gray-500">Campaign not found</div>;
+        }
 
         // Handler for creating a new flight in this campaign
-        const handleCreateFlight = () => {
-          const flightName = prompt('Enter flight name:');
-          if (!flightName) return;
-
-          const budgetStr = prompt('Enter flight budget (e.g., 25000):', String(Math.floor(campaign.budget * 0.25)));
-          const budget = parseInt(budgetStr || '25000', 10);
-
+        const handleCreateFlight = (name: string, budget?: number, startDateParam?: string, endDateParam?: string) => {
           const today = new Date().toISOString().split('T')[0];
           const in30Days = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
           const newFlight: Flight = {
             id: generateId(),
             campaignId: campaign.id,
-            name: flightName,
-            budget: budget,
-            startDate: today,
-            endDate: in30Days,
+            name: name,
+            budget: budget || Math.floor(campaign.budget * 0.25),
+            startDate: startDateParam || today,
+            endDate: endDateParam || in30Days,
             lines: [],
             status: 'DRAFT',
             tags: [],
@@ -1178,32 +1985,41 @@ function WindowedAppInner({ brand, onBrandUpdate, onBack, onSwitchToClassic }: W
             delivery: { actualImpressions: 0, actualSpend: 0, pacing: 0, status: 'ON_TRACK' }
           };
 
-          const updatedBrand = {
-            ...brand,
-            campaigns: brand.campaigns.map(c =>
+          // Update the window's brand (which may not be the current brand)
+          updateBrandById(windowBrand.id, (b) => ({
+            ...b,
+            campaigns: b.campaigns.map(c =>
               c.id === campaign.id
                 ? { ...c, flights: [...c.flights, newFlight] }
                 : c
             )
-          };
-          onBrandUpdate(updatedBrand);
+          }));
 
-          // Open the new flight
-          openWindow('flight', `${campaign.name}\\${newFlight.name}`, newFlight.id);
+          // Open the new flight with the window's brand context
+          openWindow('flight', `${campaign.name}\\${newFlight.name}`, newFlight.id, windowBrand.id);
+        };
+
+        // Handler for opening template library (TODO: implement template library window)
+        const handleOpenTemplateLibrary = () => {
+          // For now, just show an alert - template library integration pending
+          alert('Template Library coming soon! For now, create a blank flight and use chat to help design your media plan.');
         };
 
         return <CampaignWindowContent
           campaign={campaign}
           onCreateFlight={handleCreateFlight}
-          onOpenFlight={(flightId, flightName) => openWindow('flight', `${campaign.name}\\${flightName}`, flightId)}
+          onOpenFlight={(flightId, flightName) => openWindow('flight', `${campaign.name}\\${flightName}`, flightId, windowBrand.id)}
+          onOpenTemplateLibrary={handleOpenTemplateLibrary}
         />;
       }
 
       case 'flight': {
-        // Find the flight and its parent campaign
+        // Find the flight and its parent campaign in the WINDOW's brand
         let foundCampaign: Campaign | undefined;
         let foundFlight: Flight | undefined;
-        for (const c of brand.campaigns) {
+        let actualBrand = windowBrand;
+
+        for (const c of windowBrand.campaigns) {
           const f = c.flights.find(fl => fl.id === entityId);
           if (f) {
             foundCampaign = c;
@@ -1211,29 +2027,61 @@ function WindowedAppInner({ brand, onBrandUpdate, onBack, onSwitchToClassic }: W
             break;
           }
         }
+
+        // If not found in windowBrand, search all brands (handles legacy pinned windows)
+        if (!foundFlight && entityId) {
+          for (const b of allBrands) {
+            for (const c of b.campaigns) {
+              const f = c.flights.find(fl => fl.id === entityId);
+              if (f) {
+                windowLog(`Found flight ${entityId} in brand ${b.id} (searched all brands)`);
+                actualBrand = b;
+                foundCampaign = c;
+                foundFlight = f;
+                break;
+              }
+            }
+            if (foundFlight) break;
+          }
+        }
+
         if (!foundFlight || !foundCampaign) {
-          // Show loading state if brand data may not be fully loaded yet
+          console.warn(`[renderWindowContent] Flight ${entityId} not found in any brand`);
           return (
             <div className="p-4 h-full flex items-center justify-center">
               <div className="text-center">
                 <Calendar className="w-12 h-12 mx-auto mb-2 text-gray-300" />
-                <p className="text-gray-500">Loading flight data...</p>
+                <p className="text-gray-500">Flight not found</p>
                 <p className="text-xs text-gray-400 mt-1">Flight ID: {entityId}</p>
               </div>
             </div>
           );
         }
 
+        // Use the actual brand we found for operations
+        windowBrand = actualBrand;
+
+        // Create handlers that operate on the window's brand
+        const handleWindowToggleStatus = (flightId: string, newStatus: 'ACTIVE' | 'DRAFT') => {
+          updateBrandById(windowBrand.id, (b) => ({
+            ...b,
+            campaigns: b.campaigns.map(c => ({
+              ...c,
+              flights: c.flights.map(f => f.id === flightId ? { ...f, status: newStatus } : f)
+            }))
+          }));
+        };
+
         return <FlightWindowContent
           flight={foundFlight}
           campaignName={foundCampaign.name}
-          onToggleStatus={(newStatus) => handleToggleFlightStatus(foundFlight!.id, newStatus)}
-          onEditPlan={() => openFlightInPlanEditor(foundFlight!.id, foundFlight!.name, foundCampaign!.name)}
+          onToggleStatus={(newStatus) => handleWindowToggleStatus(foundFlight!.id, newStatus)}
+          onEditPlan={() => openWindow('media-plan', `${foundCampaign!.name}\\${foundFlight!.name}`, foundFlight!.id, windowBrand.id)}
         />;
       }
 
       case 'portfolio': {
-        // Handler for creating a new campaign
+        // Handler for creating a new campaign in the window's brand
         const handleCreateCampaign = () => {
           const campaignName = prompt('Enter campaign name:');
           if (!campaignName) return;
@@ -1247,8 +2095,8 @@ function WindowedAppInner({ brand, onBrandUpdate, onBack, onSwitchToClassic }: W
           const newCampaign: Campaign = {
             id: generateId(),
             name: campaignName,
-            brandId: brand.id,
-            advertiser: brand.name,
+            brandId: windowBrand.id,
+            advertiser: windowBrand.name,
             budget: budget,
             startDate: today,
             endDate: in90Days,
@@ -1261,20 +2109,20 @@ function WindowedAppInner({ brand, onBrandUpdate, onBack, onSwitchToClassic }: W
             placements: []
           };
 
-          const updatedBrand = {
-            ...brand,
-            campaigns: [...brand.campaigns, newCampaign]
-          };
-          onBrandUpdate(updatedBrand);
+          // Update the window's brand
+          updateBrandById(windowBrand.id, (b) => ({
+            ...b,
+            campaigns: [...b.campaigns, newCampaign]
+          }));
 
-          // Open the new campaign
-          openWindow('campaign', newCampaign.name, newCampaign.id);
+          // Open the new campaign with the window's brand context
+          openWindow('campaign', newCampaign.name, newCampaign.id, windowBrand.id);
         };
 
         return <PortfolioWindowContent
-          brand={brand}
+          brand={windowBrand}
           onCreateCampaign={handleCreateCampaign}
-          onOpenCampaign={(campaignId, campaignName) => openWindow('campaign', campaignName, campaignId)}
+          onOpenCampaign={(campaignId, campaignName) => openWindow('campaign', campaignName, campaignId, windowBrand.id)}
         />;
       }
 
@@ -1282,12 +2130,15 @@ function WindowedAppInner({ brand, onBrandUpdate, onBack, onSwitchToClassic }: W
         // entityId is the flightId for media-plan windows
         const flightId = entityId;
         let plan = flightId ? mediaPlans[flightId] : null;
+        let actualPlanBrand = windowBrand;
 
-        // If plan not in state yet, try to create it from brand data (handles race condition)
+        // If plan not in state yet, try to create it from the WINDOW's brand data (handles race condition)
         if (!plan && flightId) {
           let foundFlight: Flight | undefined;
           let foundCampaign: Campaign | undefined;
-          for (const c of brand.campaigns) {
+
+          // First try windowBrand
+          for (const c of windowBrand.campaigns) {
             const f = c.flights.find(fl => fl.id === flightId);
             if (f) {
               foundFlight = f;
@@ -1295,6 +2146,24 @@ function WindowedAppInner({ brand, onBrandUpdate, onBack, onSwitchToClassic }: W
               break;
             }
           }
+
+          // If not found, search all brands
+          if (!foundFlight) {
+            for (const b of allBrands) {
+              for (const c of b.campaigns) {
+                const f = c.flights.find(fl => fl.id === flightId);
+                if (f) {
+                  windowLog(`Found flight ${flightId} for media-plan in brand ${b.id} (searched all brands)`);
+                  actualPlanBrand = b;
+                  foundFlight = f;
+                  foundCampaign = c;
+                  break;
+                }
+              }
+              if (foundFlight) break;
+            }
+          }
+
           if (foundFlight && foundCampaign) {
             // Create the plan on-the-fly for rendering
             plan = {
@@ -1334,6 +2203,9 @@ function WindowedAppInner({ brand, onBrandUpdate, onBack, onSwitchToClassic }: W
             </div>
           );
         }
+
+        // Use the actual brand we found for operations
+        windowBrand = actualPlanBrand;
 
         // Export handlers
         const handleExportPDF = () => {
@@ -1384,9 +2256,133 @@ function WindowedAppInner({ brand, onBrandUpdate, onBack, onSwitchToClassic }: W
                 onUpdatePlacement={(placement) => handleUpdatePlacement(flightId!, placement)}
                 onDeletePlacement={(placementId) => handleDeletePlacement(flightId!, placementId)}
                 onAddPlacement={() => handleAddPlacement(flightId!)}
+                onOpenAudienceInsights={() => {
+                  // Open audience insights as a separate window
+                  // Use flightId as entityId to associate with the current plan
+                  const flightName = plan?.campaign.name || 'Media Plan';
+                  openWindow('audience-insights', `Audience Insights: ${flightName}`, flightId!, windowBrand.id);
+                }}
               />
             </div>
           </div>
+        );
+      }
+
+      case 'audience-insights': {
+        // entityId is the flightId - get the media plan for this flight
+        const plan = entityId ? mediaPlans[entityId] : null;
+        if (!plan) {
+          return (
+            <div className="p-4 h-full flex items-center justify-center">
+              <div className="text-center">
+                <Users className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+                <p className="text-gray-500">No media plan found for this flight</p>
+                <p className="text-xs text-gray-400 mt-1">Flight ID: {entityId}</p>
+              </div>
+            </div>
+          );
+        }
+
+        const campaign = plan.campaign;
+        const placements = campaign.placements || [];
+
+        // Get all unique segments from placements
+        const getAllCurrentSegments = (): Segment[] => {
+          const segmentMap = new Map<string, Segment>();
+          placements.forEach(p => {
+            if (p.segments) {
+              p.segments.forEach(s => segmentMap.set(s.id, s));
+            }
+          });
+          return Array.from(segmentMap.values());
+        };
+
+        // Handler for adding segment to all placements (simplified)
+        const handleQuickAddSegment = (segment: Segment) => {
+          placements.forEach(placement => {
+            const existingSegments = placement.segments || [];
+            if (!existingSegments.some(s => s.id === segment.id)) {
+              handleUpdatePlacement(entityId!, {
+                ...placement,
+                segments: [...existingSegments, segment]
+              });
+            }
+          });
+        };
+
+        // Handler for removing segment from all placements
+        const handleRemoveSegment = (segment: Segment) => {
+          placements.forEach(placement => {
+            const existingSegments = placement.segments || [];
+            if (existingSegments.some(s => s.id === segment.id)) {
+              handleUpdatePlacement(entityId!, {
+                ...placement,
+                segments: existingSegments.filter(s => s.id !== segment.id)
+              });
+            }
+          });
+        };
+
+        return (
+          <div className="h-full overflow-hidden">
+            <AudienceInsightsPanel
+              isOpen={true}
+              embedded={true}
+              onClose={() => {
+                // Find and close this window
+                const windowToClose = canvasState.windows.find(
+                  w => w.type === 'audience-insights' && w.entityId === entityId
+                );
+                if (windowToClose) {
+                  closeWindow(windowToClose.id);
+                }
+              }}
+              placements={placements}
+              currentSegments={getAllCurrentSegments()}
+              goals={campaign.numericGoals}
+              onAddSegment={handleQuickAddSegment}
+              onRemoveSegment={handleRemoveSegment}
+            />
+          </div>
+        );
+      }
+
+      case 'client-list': {
+        return (
+          <ClientListWindowContent
+            brands={allBrands}
+            currentBrandId={brand.id}
+            onSelectClient={onBrandSelect}
+            onOpenClientDetail={(brandId, brandName) => openWindow('client', brandName, brandId, brandId)}
+          />
+        );
+      }
+
+      case 'client': {
+        const clientBrand = allBrands.find(b => b.id === entityId);
+        if (!clientBrand) {
+          return (
+            <div className="p-4 h-full flex items-center justify-center">
+              <div className="text-center">
+                <Users className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+                <p className="text-gray-500">Client not found</p>
+                <p className="text-xs text-gray-400 mt-1">Client ID: {entityId}</p>
+              </div>
+            </div>
+          );
+        }
+
+        return (
+          <ClientDetailWindowContent
+            clientBrand={clientBrand}
+            isCurrentClient={clientBrand.id === brand.id}
+            onSwitchToClient={() => onBrandSelect(clientBrand.id)}
+            onOpenCampaign={(campaignId, campaignName) => {
+              // Open campaign window with the CLIENT's brand context
+              // No need to switch brands - the window will have its own context
+              openWindow('campaign', campaignName, campaignId, clientBrand.id);
+            }}
+          />
         );
       }
 
@@ -1399,23 +2395,125 @@ function WindowedAppInner({ brand, onBrandUpdate, onBack, onSwitchToClassic }: W
     }
   };
 
-  // Generate context display text
+  // Generate context display text - includes brand name if different from current
+  // IMPORTANT: Also check the active window directly for immediate responsiveness
   const getContextDisplayText = () => {
+    const activeWin = getActiveWindow();
+
+    // If we have an active content window, derive context directly from it
+    // This ensures immediate updates when clicking on windows
+    if (activeWin && activeWin.type !== 'chat') {
+      // Get brand info directly from window
+      // For client windows, entityId IS the brandId
+      const winBrandId = activeWin.type === 'client'
+        ? (activeWin.brandId || activeWin.entityId)
+        : activeWin.brandId;
+      const winBrand = winBrandId ? allBrands.find(b => b.id === winBrandId) : null;
+      const brandName = winBrand?.name || brand.name;
+      const isDifferentBrand = winBrandId && winBrandId !== brand.id;
+
+      let contextPath = '';
+
+      if (activeWin.type === 'client-list') {
+        return 'All Clients';
+      } else if (activeWin.type === 'portfolio') {
+        contextPath = 'Portfolio Dashboard';
+      } else if (activeWin.type === 'client') {
+        // For client windows, get the brand name from entityId (which is the brandId)
+        const clientBrand = allBrands.find(b => b.id === activeWin.entityId);
+        contextPath = `Client: ${clientBrand?.name || activeWin.title}`;
+      } else if (activeWin.type === 'flight' || activeWin.type === 'media-plan') {
+        // Look up flight and campaign info
+        if (winBrand && activeWin.entityId) {
+          for (const campaign of winBrand.campaigns) {
+            const flight = campaign.flights.find(f => f.id === activeWin.entityId);
+            if (flight) {
+              contextPath = `${campaign.name} › ${flight.name}`;
+              break;
+            }
+          }
+        }
+        if (!contextPath) {
+          contextPath = activeWin.title || activeWin.type;
+        }
+      } else if (activeWin.type === 'campaign') {
+        if (winBrand && activeWin.entityId) {
+          const campaign = winBrand.campaigns.find(c => c.id === activeWin.entityId);
+          contextPath = campaign?.name || activeWin.title || 'Campaign';
+        } else {
+          contextPath = activeWin.title || 'Campaign';
+        }
+      } else {
+        contextPath = activeWin.title || activeWin.type.charAt(0).toUpperCase() + activeWin.type.slice(1);
+      }
+
+      // Prepend brand name if different from global brand
+      if (isDifferentBrand && brandName) {
+        return `[${brandName}] ${contextPath}`;
+      }
+      return contextPath;
+    }
+
+    // Fallback to windowContext for chat windows or when no active window
     if (!windowContext?.windowType) return null;
 
+    // Build context path
+    let contextPath = '';
+
     if (windowContext.flightName) {
-      return `${windowContext.campaignName} › ${windowContext.flightName}`;
+      contextPath = `${windowContext.campaignName} › ${windowContext.flightName}`;
+    } else if (windowContext.campaignName) {
+      contextPath = windowContext.campaignName;
+    } else if (windowContext.windowType === 'portfolio') {
+      contextPath = 'Portfolio Dashboard';
+    } else if (windowContext.windowType === 'client') {
+      contextPath = `Client: ${windowContext.brandName || 'Unknown'}`;
+    } else if (windowContext.windowType === 'client-list') {
+      contextPath = 'All Clients';
+    } else {
+      contextPath = windowContext.windowType.charAt(0).toUpperCase() + windowContext.windowType.slice(1);
     }
-    if (windowContext.campaignName) {
-      return windowContext.campaignName;
+
+    // Prepend brand name if it's different from the current brand
+    if (windowContext.brandName && windowContext.brandId !== brand.id) {
+      return `[${windowContext.brandName}] ${contextPath}`;
     }
-    if (windowContext.windowType === 'portfolio') {
-      return 'Portfolio Dashboard';
-    }
-    return windowContext.windowType.charAt(0).toUpperCase() + windowContext.windowType.slice(1);
+
+    return contextPath;
   };
 
   const contextDisplayText = getContextDisplayText();
+
+  // Get the active window for header display
+  const currentActiveWindow = getActiveWindow();
+
+  // Get the active window's brand name for the header
+  // IMPORTANT: Derive directly from the active window's brandId, NOT from windowContext
+  // This ensures the header updates immediately when clicking on windows from different brands
+  // (windowContext is updated asynchronously via useEffect)
+  const activeWindowBrandName = (() => {
+    if (!currentActiveWindow) {
+      return brand.name; // No active window, use global brand
+    }
+    if (currentActiveWindow.type === 'client-list') {
+      return 'All Clients';
+    }
+    if (currentActiveWindow.type === 'chat') {
+      // Chat window: use windowContext (which preserves the last content window's brand)
+      return windowContext?.brandName || brand.name;
+    }
+    if (currentActiveWindow.type === 'client') {
+      // Client window: entityId IS the brandId - look up brand name
+      const clientBrand = allBrands.find(b => b.id === currentActiveWindow.entityId);
+      return clientBrand?.name || currentActiveWindow.title || brand.name;
+    }
+    // For all other windows: look up brand directly from window's brandId
+    if (currentActiveWindow.brandId) {
+      const windowBrand = allBrands.find(b => b.id === currentActiveWindow.brandId);
+      return windowBrand?.name || brand.name;
+    }
+    return brand.name;
+  })();
 
   // Toggle chat dock/undock
   const handleToggleChatMode = () => {
@@ -1441,7 +2539,15 @@ function WindowedAppInner({ brand, onBrandUpdate, onBack, onSwitchToClassic }: W
               <ArrowLeft size={18} className="text-gray-600" />
             </button>
             <div>
-              <div className="font-medium text-gray-900">{brand.name}</div>
+              <div className="font-medium text-gray-900 flex items-center gap-1">
+                {activeWindowBrandName}
+                {/* Show indicator if viewing a different client */}
+                {windowContext?.brandId && windowContext.brandId !== brand.id && (
+                  <span className="text-xs font-normal text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
+                    viewing
+                  </span>
+                )}
+              </div>
               <div className="text-xs text-gray-500">
                 {canvasState.windows.filter(w => w.type !== 'chat').length} window{canvasState.windows.filter(w => w.type !== 'chat').length !== 1 ? 's' : ''} open
               </div>
@@ -1449,6 +2555,17 @@ function WindowedAppInner({ brand, onBrandUpdate, onBack, onSwitchToClassic }: W
           </div>
 
           <div className="flex items-center gap-1">
+            {/* All Clients button - only show if multi-client mode */}
+            {allBrands.length > 1 && (
+              <button
+                onClick={() => openWindow('client-list', 'All Clients')}
+                className="p-1.5 hover:bg-gray-200 rounded transition-colors"
+                title="View All Clients"
+              >
+                <Users size={18} className="text-gray-600" />
+              </button>
+            )}
+
             {/* Switch to Classic Mode */}
             <button
               onClick={onSwitchToClassic}
@@ -1508,17 +2625,21 @@ function WindowedAppInner({ brand, onBrandUpdate, onBack, onSwitchToClassic }: W
 
 interface WindowedAppProps {
   brand: Brand;
+  allBrands?: Brand[];  // Optional: all clients/brands for multi-client support
   onBrandUpdate: (brand: Brand) => void;
+  onBrandSelect?: (brandId: string) => void;  // Optional: switch to different client
   onBack: () => void;
   onSwitchToClassic: () => void;
 }
 
-export function WindowedApp({ brand, onBrandUpdate, onBack, onSwitchToClassic }: WindowedAppProps) {
+export function WindowedApp({ brand, allBrands = [], onBrandUpdate, onBrandSelect, onBack, onSwitchToClassic }: WindowedAppProps) {
   return (
     <CanvasProvider>
       <WindowedAppInner
         brand={brand}
+        allBrands={allBrands.length > 0 ? allBrands : [brand]}  // Default to current brand if no list provided
         onBrandUpdate={onBrandUpdate}
+        onBrandSelect={onBrandSelect || (() => {})}
         onBack={onBack}
         onSwitchToClassic={onSwitchToClassic}
       />

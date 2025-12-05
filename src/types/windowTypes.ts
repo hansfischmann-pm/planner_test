@@ -12,7 +12,10 @@ export type WindowType =
   | 'report'
   | 'settings'
   | 'media-plan'
-  | 'chat';  // Special window type for movable chat
+  | 'audience-insights' // Audience insights panel as separate window
+  | 'chat'           // Special window type for movable chat
+  | 'client-list'    // Agency view: list of all clients/brands
+  | 'client';        // Individual client/brand detail view
 
 export type WindowStateType = 'normal' | 'maximized' | 'minimized';
 
@@ -30,6 +33,7 @@ export interface WindowState {
   id: string;                          // Unique window ID
   type: WindowType;                    // Type of window
   entityId?: string;                   // Campaign ID, Flight ID, etc.
+  brandId?: string;                    // Brand/Client ID - windows maintain their own brand context
   title: string;                       // Window title
   state: WindowStateType;              // Current window state
   position: WindowPosition;            // Position on canvas
@@ -128,9 +132,27 @@ export const WINDOW_CONFIGS: Record<WindowType, {
     isResizable: true,
     isDraggable: true
   },
+  'audience-insights': {
+    defaultSize: { width: 900, height: 700 },
+    minSize: { width: 600, height: 500 },
+    isResizable: true,
+    isDraggable: true
+  },
   'chat': {
     defaultSize: { width: 400, height: 600 },
     minSize: { width: 300, height: 400 },
+    isResizable: true,
+    isDraggable: true
+  },
+  'client-list': {
+    defaultSize: { width: 900, height: 650 },
+    minSize: { width: 500, height: 400 },
+    isResizable: true,
+    isDraggable: true
+  },
+  'client': {
+    defaultSize: { width: 950, height: 700 },
+    minSize: { width: 550, height: 450 },
     isResizable: true,
     isDraggable: true
   }
