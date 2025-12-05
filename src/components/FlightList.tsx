@@ -152,7 +152,7 @@ export const FlightList: React.FC<FlightListProps> = ({
                     {onViewAttribution && (
                         <button
                             onClick={onViewAttribution}
-                            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
+                            className="px-4 py-2 bg-white border border-blue-200 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-50 transition-colors flex items-center gap-2"
                         >
                             <TrendingUp className="h-4 w-4" />
                             View Attribution

@@ -15,6 +15,7 @@ export enum IntentCategory {
     FORECASTING = 'forecasting',
     HELP = 'help',
     CREATIVE = 'creative',
+    NAVIGATION = 'navigation',
     UNKNOWN = 'unknown'
 }
 
@@ -184,6 +185,60 @@ const INTENT_PATTERNS: IntentPattern[] = [
             /(?:which|what) creative (?:is|are) (?:performing|working)/i,
             /creative (?:performance|results|metrics)/i,
             /(?:swap|change|update|rotate)\s+creative/i
+        ]
+    },
+
+    // Navigation
+    {
+        category: IntentCategory.NAVIGATION,
+        subIntent: 'view_predictive_analytics',
+        patterns: [
+            /(?:show|view|open|display)\s+(?:me\s+)?(?:the\s+)?predictive\s+analytics/i,
+            /(?:show|view|open)\s+(?:me\s+)?(?:the\s+)?predictions?/i,
+            /(?:show|view|open)\s+(?:me\s+)?(?:the\s+)?insights?/i,
+            /predictive\s+analytics?\s+(?:dashboard|view)/i,
+            /(?:go to|navigate to)\s+predictive/i,
+            /(?:show|view)\s+(?:me\s+)?(?:the\s+)?(?:ai\s+)?insights/i
+        ]
+    },
+    {
+        category: IntentCategory.NAVIGATION,
+        subIntent: 'view_attribution',
+        patterns: [
+            /(?:show|view|open|display)\s+(?:me\s+)?(?:the\s+)?attribution/i,
+            /attribution\s+(?:analysis|dashboard|view|model)/i,
+            /(?:go to|navigate to)\s+attribution/i,
+            /(?:show|view)\s+(?:me\s+)?(?:the\s+)?attribution\s+(?:data|results)/i
+        ]
+    },
+    {
+        category: IntentCategory.NAVIGATION,
+        subIntent: 'view_portfolio',
+        patterns: [
+            /(?:show|view|open|display)\s+(?:me\s+)?(?:the\s+)?portfolio/i,
+            /portfolio\s+(?:dashboard|view)/i,
+            /(?:go to|navigate to)\s+portfolio/i,
+            /(?:show|view)\s+(?:me\s+)?(?:the\s+)?portfolio\s+(?:data|analysis)/i
+        ]
+    },
+    {
+        category: IntentCategory.NAVIGATION,
+        subIntent: 'view_integrations',
+        patterns: [
+            /(?:show|view|open|display)\s+(?:me\s+)?(?:the\s+)?integrations?/i,
+            /integrations?\s+(?:dashboard|view)/i,
+            /(?:go to|navigate to)\s+integrations?/i,
+            /(?:show|view)\s+(?:me\s+)?(?:platform|system)\\s+integrations/i
+        ]
+    },
+    {
+        category: IntentCategory.NAVIGATION,
+        subIntent: 'view_analytics',
+        patterns: [
+            /(?:show|view|open|display)\s+(?:me\s+)?(?:the\s+)?(?:agency\s+)?analytics/i,
+            /analytics\s+(?:dashboard|view)/i,
+            /(?:go to|navigate to)\s+analytics/i,
+            /(?:show|view)\s+(?:me\s+)?(?:overall|agency)\s+analytics/i
         ]
     },
 
