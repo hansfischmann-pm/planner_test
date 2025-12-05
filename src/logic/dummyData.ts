@@ -1,6 +1,19 @@
 import { Campaign, Line, CostMethod, Brand, User, Flight, MediaPlan, AgentInfo, AgentExecution, PlanMetrics, ForecastMetrics, DeliveryMetrics, ForecastSource, Creative } from '../types';
 
+// Generate a random ID (for user-created entities)
 export const generateId = () => Math.random().toString(36).substr(2, 9);
+
+// Generate a deterministic ID based on a seed string (for stable dummy data)
+// This ensures IDs remain consistent across page reloads
+export const generateStableId = (seed: string): string => {
+    let hash = 0;
+    for (let i = 0; i < seed.length; i++) {
+        const char = seed.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash; // Convert to 32bit integer
+    }
+    return Math.abs(hash).toString(36).substr(0, 9).padEnd(9, '0');
+};
 
 // --- Constants & Reference Data ---
 
@@ -13,8 +26,8 @@ const VENDORS: Record<string, string[]> = {
     'Streaming Audio': ['Spotify', 'Pandora', 'Amazon Music', 'Apple Music', 'Sonos'],
     'Podcast': ['Spotify Podcasts', 'Apple Podcasts', 'Megaphone', 'Acast', 'Art19'],
     'Place-based Audio': ['Vibenomics', 'Mood Media', 'Rockbot', 'Soundtrack Your Brand'],
-    OOH: ['Clear Channel', 'Lamar', 'Outfront Media', 'JCDecaux'],
-    Print: ['The New York Times', 'WSJ', 'USA Today', 'Local Newspapers']
+    OOH: ['Clear Channel', 'Lamar', 'Outfront Media', 'JCDecaux']
+    // Print channel removed
 };
 
 const TV_NETWORKS: {
@@ -200,7 +213,7 @@ const generateForecast = (channel: string, vendor: string, budget: number): { fo
     return { forecast, delivery };
 };
 
-export function generateLine(channel: 'Search' | 'Social' | 'Display' | 'TV' | 'Radio' | 'Streaming Audio' | 'Podcast' | 'Place-based Audio' | 'OOH' | 'Print', advertiser: string, networkName?: string, programName?: string): Line {
+export function generateLine(channel: 'Search' | 'Social' | 'Display' | 'TV' | 'Radio' | 'Streaming Audio' | 'Podcast' | 'Place-based Audio' | 'OOH', advertiser: string, networkName?: string, programName?: string): Line {
     const vendors = VENDORS;
 
     const adUnits: Record<string, string[]> = {
@@ -212,8 +225,7 @@ export function generateLine(channel: 'Search' | 'Social' | 'Display' | 'TV' | '
         'Streaming Audio': ['Audio :30', 'Audio :15', 'Companion Banner'],
         'Podcast': ['Host Read :60', 'Pre-roll :15', 'Mid-roll :30', 'Baked-in'],
         'Place-based Audio': ['In-Store Audio :15', 'In-Store Audio :30', 'Checkout Audio'],
-        'OOH': ['Digital Billboard', 'Transit Shelter', 'Highway Bulletin'],
-        'Print': ['Full Page Color', 'Half Page', 'Quarter Page']
+        'OOH': ['Digital Billboard', 'Transit Shelter', 'Highway Bulletin']
     };
 
     const segments: Record<string, string[]> = {
@@ -225,8 +237,7 @@ export function generateLine(channel: 'Search' | 'Social' | 'Display' | 'TV' | '
         'Streaming Audio': ['Music Listeners', 'Workout', 'Commute', 'Focus'],
         'Podcast': ['True Crime', 'Business', 'Comedy', 'News & Politics'],
         'Place-based Audio': ['Grocery Shoppers', 'QSR Diners', 'Retail Shoppers'],
-        'OOH': ['Urban Centers', 'Highway Traffic'],
-        'Print': ['Affluent Readers', 'Local Community']
+        'OOH': ['Urban Centers', 'Highway Traffic']
     };
 
     // Rate benchmarks based on 2024-2025 industry data
@@ -240,8 +251,7 @@ export function generateLine(channel: 'Search' | 'Social' | 'Display' | 'TV' | '
         'Streaming Audio': { method: 'CPM' as const, min: 15, max: 25 },  // Spotify, Pandora: $15-25
         'Podcast': { method: 'CPM' as const, min: 18, max: 60 },     // Pre-roll: $15, Mid-roll: $25-60
         'Place-based Audio': { method: 'CPM' as const, min: 5, max: 15 }, // In-store audio
-        'OOH': { method: 'CPM' as const, min: 2, max: 15 },          // DOOH: $2-15 CPM
-        'Print': { method: 'Flat' as const, min: 500, max: 10000 }   // Print still uses flat rate
+        'OOH': { method: 'CPM' as const, min: 2, max: 15 }           // DOOH: $2-15 CPM
     };
 
     const vendorList = vendors[channel] || vendors['TV'];
@@ -351,8 +361,8 @@ export function generateLine(channel: 'Search' | 'Social' | 'Display' | 'TV' | '
         impressions = Math.floor(clicks / ctr); // Derive impressions from clicks and CTR
         impressions = Math.min(impressions, 20000000); // Cap at 20M
     } else {
-        // Flat rate (Print): estimate based on circulation
-        impressions = Math.floor(50000 + Math.random() * 200000); // 50k - 250k for print
+        // Flat rate: estimate based on units/insertions
+        impressions = Math.floor(50000 + Math.random() * 200000); // 50k - 250k
     }
 
     // Quantity represents different things per channel
@@ -478,16 +488,32 @@ export function calculatePlanMetrics(lines: Line[]): PlanMetrics {
     const impressions = lines.reduce((sum, line) => sum + (line.performance?.impressions || line.forecast?.impressions || 0), 0);
     const totalCost = lines.reduce((sum, line) => sum + line.totalCost, 0);
 
+    // Calculate data costs (segment cpmUplift) separately
+    const totalDataCost = lines.reduce((sum, line) => {
+        const lineImpressions = line.performance?.impressions || line.forecast?.impressions || 0;
+        const segmentUplift = (line.segments || []).reduce((s, seg) => s + seg.cpmUplift, 0);
+        return sum + (segmentUplift * lineImpressions / 1000);
+    }, 0);
+
+    // Inventory cost is total cost minus data costs
+    const inventoryCost = totalCost - totalDataCost;
+
     // Mock calculations for reach/frequency since we don't have real audience data
     const reach = Math.floor(impressions * 0.4); // Assume 40% unique reach
     const frequency = reach > 0 ? impressions / reach : 0;
-    const cpm = impressions > 0 ? (totalCost / impressions) * 1000 : 0;
+
+    // CPM calculations
+    const eCpm = impressions > 0 ? (totalCost / impressions) * 1000 : 0; // Effective CPM (all-in)
+    const cpm = impressions > 0 ? (inventoryCost / impressions) * 1000 : 0; // Inventory CPM (base)
+    const dataCpm = impressions > 0 ? (totalDataCost / impressions) * 1000 : 0; // Data CPM
 
     return {
         impressions,
         reach,
         frequency,
-        cpm
+        cpm,
+        eCpm,
+        dataCpm
     };
 }
 

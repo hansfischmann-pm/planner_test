@@ -1,22 +1,24 @@
 import { Brand, Campaign, Flight, Line, EntityStatus, PerformanceMetrics, ForecastMetrics, DeliveryMetrics, Segment } from '../types';
 import { getRandomSegments } from './segmentLibrary';
+import { generateStableId } from '../logic/dummyData';
 
 const CAMPAIGN_STATUSES: EntityStatus[] = ['ACTIVE', 'PAUSED', 'DRAFT', 'COMPLETED', 'ARCHIVED'];
 const TAGS = ['Q1', 'Q2', 'Q3', 'Q4', 'Holiday', 'Back to School', 'Brand Awareness', 'Performance', 'Retargeting', 'Experimental'];
-const CHANNELS = ['Search', 'Social', 'Display', 'TV', 'Radio', 'OOH', 'Print'] as const;
+// Removed Print channel - not supported
+const CHANNELS = ['Search', 'Social', 'Display', 'TV', 'Radio', 'OOH'] as const;
 
 const INDUSTRIES = ['Automotive', 'Retail', 'Financial Services', 'Technology', 'Healthcare', 'CPG', 'Travel', 'Entertainment'];
 
-const VENDORS_BY_CHANNEL = {
+const VENDORS_BY_CHANNEL: Record<string, string[]> = {
     Display: ['The Trade Desk', 'Google DV360', 'Amazon DSP', 'MediaMath', 'Xandr', 'Criteo'],
     Social: ['Meta Ads', 'LinkedIn Ads', 'TikTok Ads', 'Pinterest Ads', 'Snapchat Ads', 'Reddit Ads'],
     Search: ['Google Ads', 'Microsoft Advertising', 'Amazon Advertising'],
     TV: ['Spectrum Reach', 'Comcast Spotlight', 'Cox Media', 'Local Broadcast', 'Hulu Ad Manager', 'Roku'],
     Radio: ['iHeartMedia', 'Audacy', 'Spotify Audio Ads', 'Pandora', 'SiriusXM'],
-    OOH: ['Clear Channel', 'Lamar', 'Outfront Media', 'AdQuick', 'Vistar Media'],
-    Print: ['Local Newspapers', 'Trade Publications', 'Magazines', 'Direct Mail']
+    OOH: ['Clear Channel', 'Lamar', 'Outfront Media', 'AdQuick', 'Vistar Media']
 };
 
+// Use random ID for user-created items
 const generateId = () => Math.random().toString(36).substring(2, 9);
 
 const getRandomItem = <T>(arr: readonly T[]): T => arr[Math.floor(Math.random() * arr.length)];
@@ -111,23 +113,22 @@ const generatePerformanceMetrics = (
     return { performance, forecast, delivery };
 };
 
-const generateLineItems = (count: number, flightBudget: number, flightStatus: EntityStatus): Line[] => {
+const generateLineItems = (count: number, flightBudget: number, flightStatus: EntityStatus, flightId: string): Line[] => {
     const lines: Line[] = [];
     for (let i = 0; i < count; i++) {
         const budget = flightBudget / count;
-        const channel = getRandomItem(CHANNELS);
-        const vendor = getRandomItem(VENDORS_BY_CHANNEL[channel]);
+        // Use deterministic channel/vendor selection based on line index
+        const channelIdx = i % CHANNELS.length;
+        const channel = CHANNELS[channelIdx];
+        const vendorList = VENDORS_BY_CHANNEL[channel];
+        const vendor = vendorList[i % vendorList.length];
 
-        // Assign Segments
-        const numSegments = getRandomInt(1, 3);
-        // Cast to Segment[] because getRandomSegments returns Omit<Segment, 'id'>[]
-        // We'll just mock the ID for now or accept the type mismatch if the interface allows
-        // The Segment interface in types.ts has 'id', but segmentLibrary returns Omit<Segment, 'id'>
-        // Let's add IDs.
+        // Assign Segments with stable IDs
+        const numSegments = (i % 3) + 1; // Deterministic: 1-3 segments
         const assignedSegmentsRaw = getRandomSegments(numSegments);
-        const assignedSegments: Segment[] = assignedSegmentsRaw.map(s => ({
+        const assignedSegments: Segment[] = assignedSegmentsRaw.map((s, sIdx) => ({
             ...s,
-            id: generateId()
+            id: generateStableId(`${flightId}-line${i}-seg${sIdx}`)
         }));
 
         // Calculate Rate (CPM)
@@ -143,7 +144,7 @@ const generateLineItems = (count: number, flightBudget: number, flightStatus: En
         const { performance, forecast, delivery } = generatePerformanceMetrics(budget, flightStatus, finalCpm);
 
         lines.push({
-            id: generateId(),
+            id: generateStableId(`${flightId}-line${i}`),
             name: `${channel} - ${vendor} - ${assignedSegments[0].name}`,
             channel,
             status: flightStatus === 'DRAFT' ? 'PLANNING' : flightStatus === 'ARCHIVED' ? 'COMPLETED' : flightStatus as any,
@@ -168,29 +169,33 @@ const generateLineItems = (count: number, flightBudget: number, flightStatus: En
 
 const generateFlights = (campaignId: string, count: number, campaignBudget: number, campaignStatus: EntityStatus): Flight[] => {
     const flights: Flight[] = [];
+    const flightGoals = ['Awareness', 'Consideration', 'Conversion'];
+
     for (let i = 0; i < count; i++) {
         const budget = campaignBudget / count;
-        // If campaign is active, flights can be active, completed, or draft (future)
-        // For simplicity, let's align flight status roughly with campaign status
+        // Deterministic status based on flight index
         let status: EntityStatus = campaignStatus;
 
         if (campaignStatus === 'ACTIVE') {
-            // Randomly make some flights completed or draft if the campaign is active
-            const rand = Math.random();
-            if (rand < 0.3) status = 'COMPLETED';
-            else if (rand > 0.8) status = 'DRAFT';
+            // Deterministic status: every 4th is completed, every 5th is draft
+            if (i % 4 === 3) status = 'COMPLETED';
+            else if (i % 5 === 4) status = 'DRAFT';
         }
 
+        const flightId = generateStableId(`${campaignId}-flight${i}`);
+        const goal = flightGoals[i % flightGoals.length];
+        const lineCount = 3 + (i % 6); // Deterministic: 3-8 lines
+
         flights.push({
-            id: generateId(),
-            name: `Flight ${i + 1} - ${getRandomItem(['Awareness', 'Consideration', 'Conversion'])}`,
+            id: flightId,
+            name: `Flight ${i + 1} - ${goal}`,
             campaignId,
             startDate: '2025-01-01',
             endDate: '2025-12-31',
             budget,
             status,
-            tags: [getRandomItem(TAGS), getRandomItem(TAGS)],
-            lines: generateLineItems(getRandomInt(3, 8), budget, status)
+            tags: [TAGS[i % TAGS.length], TAGS[(i + 1) % TAGS.length]],
+            lines: generateLineItems(lineCount, budget, status, flightId)
         });
     }
     return flights;
@@ -200,28 +205,38 @@ export const generateLargeScaleData = (): Brand[] => {
     const brands: Brand[] = [];
     const brandNames = ['Coca Cola', 'Nike', 'Apple', 'Samsung', 'Toyota', 'Ford', 'Pepsi', 'Verizon', 'AT&T', 'Amazon'];
 
-    brandNames.forEach((name) => {
+    brandNames.forEach((name, brandIdx) => {
         const campaigns: Campaign[] = [];
+        const brandId = name.toLowerCase().replace(' ', '_');
+
         // Generate 50 campaigns per brand (reduced from 100 for performance, still plenty)
         for (let i = 0; i < 50; i++) {
-            const year = getRandomInt(2023, 2026);
-            const { startDate, endDate } = generateDateRange(year);
-            const budget = getRandomInt(50000, 5000000);
-            const status = getRandomItem(CAMPAIGN_STATUSES);
-            const id = generateId();
+            // Deterministic year and dates based on campaign index
+            const year = 2023 + (i % 4); // Cycles through 2023-2026
+            const startMonth = i % 12;
+            const endMonth = Math.min(11, startMonth + 2 + (i % 4));
+            const startDate = new Date(year, startMonth, 1).toISOString().split('T')[0];
+            const endDate = new Date(year, endMonth, 28).toISOString().split('T')[0];
+
+            // Deterministic budget and status
+            const budget = 50000 + ((i * 100000) % 4950000); // 50k to 5M
+            const status = CAMPAIGN_STATUSES[i % CAMPAIGN_STATUSES.length];
+
+            const campaignId = generateStableId(`${brandId}-campaign${i}`);
+            const flightCount = 2 + (i % 4); // Deterministic: 2-5 flights
 
             campaigns.push({
-                id,
+                id: campaignId,
                 name: `${name} ${year} Campaign ${i + 1}`,
-                brandId: name.toLowerCase().replace(' ', '_'),
+                brandId,
                 advertiser: name,
                 budget,
                 startDate,
                 endDate,
                 status,
-                tags: [getRandomItem(TAGS), getRandomItem(TAGS)],
+                tags: [TAGS[i % TAGS.length], TAGS[(i + 1) % TAGS.length]],
                 goals: ['Brand Awareness'],
-                flights: generateFlights(id, getRandomInt(2, 5), budget, status)
+                flights: generateFlights(campaignId, flightCount, budget, status)
             });
         }
 

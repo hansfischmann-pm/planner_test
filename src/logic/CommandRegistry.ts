@@ -390,7 +390,8 @@ export const CHANNEL_COMMANDS: CommandDefinition[] = [
         name: 'Add Channel/Placement',
         category: 'CHANNEL',
         patterns: [
-            /add\s+(search|social|display|tv|radio|ooh|print|espn|cbs|nbc|abc|fox|cnn|msnbc|hgtv|discovery|tlc|bravo|tnt|netflix|hulu|amazon|disney|hbo|apple|paramount|peacock|youtube|roku|tubi|pluto|f1|dazn|sling|nfl|nba|mlb|nhl)/i
+            // Print removed - not supported
+            /add\s+(search|social|display|tv|radio|ooh|espn|cbs|nbc|abc|fox|cnn|msnbc|hgtv|discovery|tlc|bravo|tnt|netflix|hulu|amazon|disney|hbo|apple|paramount|peacock|youtube|roku|tubi|pluto|f1|dazn|sling|nfl|nba|mlb|nhl)/i
         ],
         priority: 65,
         description: 'Add a channel or network placement',

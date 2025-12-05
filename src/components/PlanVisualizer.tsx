@@ -17,6 +17,7 @@ interface PlanVisualizerProps {
     onGroupingChange?: (mode: GroupingMode) => void;
     onUpdatePlacement?: (placement: Placement) => void;
     onDeletePlacement?: (placementId: string) => void;
+    onAddPlacement?: () => void;
 }
 
 interface EditableCellProps {
@@ -72,32 +73,48 @@ const EditableCell: React.FC<EditableCellProps> = ({ value, onSave, type = 'text
         );
     }
 
+    const displayValue = () => {
+        if (type === 'currency') {
+            return `$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        }
+        if (type === 'number') {
+            return Number(value).toLocaleString();
+        }
+        return value;
+    };
+
     return (
         <div
             onClick={(e) => {
                 e.stopPropagation();
                 setIsEditing(true);
-                setTempValue(value.toString());
+                // For currency/number types, strip formatting for editing
+                setTempValue(type === 'currency' ? String(Number(value)) : value.toString().replace(/,/g, ''));
             }}
             className={clsx(
                 "cursor-text hover:bg-gray-100 rounded px-1 -mx-1 border border-transparent hover:border-gray-200 transition-colors",
                 align === 'right' && "text-right",
                 align === 'center' && "text-center"
             )}
+            title="Click to edit"
         >
-            {type === 'currency'
-                ? `$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                : value}
+            {displayValue()}
         </div>
     );
 };
 
-export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGroupingChange, onUpdatePlacement, onDeletePlacement }) => {
+// Status filter type for plan view
+type PlanStatusFilter = 'ALL' | 'ACTIVE' | 'PAUSED' | 'DRAFT';
+
+export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGroupingChange, onUpdatePlacement, onDeletePlacement, onAddPlacement }) => {
     const [viewMode, setViewMode] = useState<'PLANNING' | 'PERFORMANCE'>('PLANNING');
     const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
     const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
     const [selectedPlacementId, setSelectedPlacementId] = useState<string | null>(null);
     const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
+
+    // Status filter for plan view
+    const [statusFilter, setStatusFilter] = useState<PlanStatusFilter>('ALL');
 
     // Segment Browser State
     const [isSegmentBrowserOpen, setIsSegmentBrowserOpen] = useState(false);
@@ -340,8 +357,40 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
         }));
     }, [campaign.placements, groupingMode]);
 
+    // Filter placements by status
+    const filteredPlacements = useMemo(() => {
+        if (!campaign.placements) return [];
+        if (statusFilter === 'ALL') return campaign.placements;
+        return campaign.placements.filter(p => {
+            const status = p.status || 'ACTIVE';
+            return status === statusFilter;
+        });
+    }, [campaign.placements, statusFilter]);
+
+    // Get status counts for filter dropdown
+    const statusCounts = useMemo(() => {
+        if (!campaign.placements) return { ALL: 0, ACTIVE: 0, PAUSED: 0, DRAFT: 0 };
+        return {
+            ALL: campaign.placements.length,
+            ACTIVE: campaign.placements.filter(p => (p.status || 'ACTIVE') === 'ACTIVE').length,
+            PAUSED: campaign.placements.filter(p => p.status === 'PAUSED').length,
+            DRAFT: campaign.placements.filter(p => p.status === 'DRAFT').length,
+        };
+    }, [campaign.placements]);
+
     const renderTableContent = () => {
-        if (!campaign.placements || campaign.placements.length === 0) return null;
+        if (!filteredPlacements || filteredPlacements.length === 0) {
+            if (statusFilter !== 'ALL' && campaign.placements && campaign.placements.length > 0) {
+                return (
+                    <tr>
+                        <td colSpan={12} className="py-8 text-center text-gray-500">
+                            No {statusFilter.toLowerCase()} placements found
+                        </td>
+                    </tr>
+                );
+            }
+            return null;
+        }
 
         if (groupingMode !== 'DETAILED' && groupedData) {
             const sortedGroups = getSortedData(groupedData);
@@ -416,12 +465,15 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
             });
         }
 
-        // Detailed View (Flat)
-        const sortedPlacements = getSortedData(campaign.placements);
+        // Detailed View (Flat) - use filtered placements
+        const sortedPlacements = getSortedData(filteredPlacements);
         return sortedPlacements.map((p: any, index: number) => renderPlacementRow(p, false, index));
     };
 
-    const renderPlacementRow = (placement: any, isChild: boolean, index?: number) => (
+    const renderPlacementRow = (placement: any, isChild: boolean, index?: number) => {
+        const isDraft = placement.status === 'DRAFT';
+
+        return (
         <tr
             key={placement.id}
             onClick={() => setSelectedPlacementId(placement.id)}
@@ -429,11 +481,16 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
                 "hover:bg-gray-50 transition-colors group cursor-pointer",
                 isChild && "bg-gray-50/50",
                 selectedPlacementId === placement.id && "bg-blue-50 hover:bg-blue-50",
-                placement.performance?.status === 'PAUSED' && "opacity-50"
+                placement.performance?.status === 'PAUSED' && "opacity-50",
+                // DRAFT visual treatment: dashed border and subtle background
+                isDraft && "bg-amber-50/50 border-l-4 border-l-amber-400"
             )}
         >
             <td className="py-3 px-6 text-sm text-gray-400 font-mono">
-                {isChild ? <span className="text-gray-300 ml-4 mr-2">↳</span> : (index !== undefined ? index + 1 : '')}
+                <div className="flex items-center gap-2">
+                    {isChild ? <span className="text-gray-300 ml-4 mr-2">↳</span> : (index !== undefined ? index + 1 : '')}
+                    {isDraft && <span className="text-[10px] font-medium text-amber-600 uppercase tracking-wide">Draft</span>}
+                </div>
             </td>
             <td className="py-3 px-6 text-sm font-medium text-gray-900">
                 {!isChild && (
@@ -445,7 +502,7 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
                         placement.channel === 'Streaming Audio' && "bg-green-100 text-green-800",
                         placement.channel === 'Podcast' && "bg-teal-100 text-teal-800",
                         placement.channel === 'Place-based Audio' && "bg-amber-100 text-amber-800",
-                        ['TV', 'Radio', 'OOH', 'Print'].includes(placement.channel) && "bg-orange-100 text-orange-800"
+                        ['TV', 'Radio', 'OOH'].includes(placement.channel) && "bg-orange-100 text-orange-800"
                     )}>
                         {placement.channel}
                     </span>
@@ -453,7 +510,11 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
             </td>
             <td className="py-3 px-6 text-sm text-gray-600">
                 <div className="flex items-center gap-2">
-                    <span>{placement.vendor}</span>
+                    <EditableCell
+                        value={placement.vendor}
+                        onSave={(val) => handlePlacementUpdate({ ...placement, vendor: val })}
+                        type="text"
+                    />
                     {placement.performance?.status === 'PAUSED' && (
                         <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium bg-gray-200 text-gray-500">
                             Paused
@@ -491,7 +552,13 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
                     </button>
                 </div>
             </td>
-            <td className="py-3 px-6 text-sm text-gray-500">{placement.adUnit}</td>
+            <td className="py-3 px-6 text-sm text-gray-500">
+                <EditableCell
+                    value={placement.adUnit}
+                    onSave={(val) => handlePlacementUpdate({ ...placement, adUnit: val })}
+                    type="text"
+                />
+            </td>
 
             {viewMode === 'PLANNING' ? (
                 <>
@@ -509,18 +576,127 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
                     </td>
                     <td className="py-3 px-6 text-sm text-gray-600 text-right tabular-nums">{(placement.forecast?.impressions || 0).toLocaleString()}</td>
                     <td className="py-3 px-6 text-sm text-gray-600 text-right tabular-nums">
-                        ${placement.rate.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-xs text-gray-400">/{placement.costMethod}</span>
+                        {(() => {
+                            const segmentUplift = (placement.segments || []).reduce((sum: number, s: Segment) => sum + s.cpmUplift, 0);
+                            const mediaCpm = placement.rate - segmentUplift;
+                            return (
+                                <div className="flex items-center justify-end gap-1">
+                                    <EditableCell
+                                        value={mediaCpm.toFixed(2)}
+                                        onSave={(val) => {
+                                            const newMediaCpm = parseFloat(val) || 0;
+                                            const newRate = newMediaCpm + segmentUplift;
+                                            // When CPM changes, recalculate impressions based on budget
+                                            // impressions = (budget / CPM) * 1000
+                                            const newImpressions = newRate > 0 ? Math.floor((placement.totalCost / newRate) * 1000) : 0;
+                                            handlePlacementUpdate({
+                                                ...placement,
+                                                rate: newRate,
+                                                quantity: newImpressions,
+                                                forecast: {
+                                                    ...placement.forecast,
+                                                    impressions: newImpressions,
+                                                    spend: placement.totalCost
+                                                }
+                                            });
+                                        }}
+                                        type="text"
+                                        align="right"
+                                    />
+                                    <span className="text-xs text-gray-400">/{placement.costMethod}</span>
+                                </div>
+                            );
+                        })()}
                     </td>
-                    <td className="py-3 px-6 text-sm text-gray-600 text-right tabular-nums">{placement.quantity.toLocaleString()}</td>
+                    <td className="py-3 px-6 text-sm text-right tabular-nums">
+                        {(() => {
+                            const segmentUplift = (placement.segments || []).reduce((sum: number, s: Segment) => sum + s.cpmUplift, 0);
+                            return segmentUplift > 0 ? (
+                                <span className="text-purple-600">+${segmentUplift.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            ) : (
+                                <span className="text-gray-400">—</span>
+                            );
+                        })()}
+                    </td>
+                    <td className="py-3 px-6 text-sm text-gray-600 text-right tabular-nums">
+                        <EditableCell
+                            value={placement.quantity}
+                            onSave={(val) => {
+                                const newQuantity = Number(val.replace(/,/g, '')) || 0;
+                                // When quantity (impressions) changes, recalculate budget
+                                // budget = (impressions * CPM) / 1000
+                                const newTotalCost = placement.rate > 0 ? (newQuantity * placement.rate) / 1000 : 0;
+                                handlePlacementUpdate({
+                                    ...placement,
+                                    quantity: newQuantity,
+                                    totalCost: newTotalCost,
+                                    forecast: {
+                                        ...placement.forecast,
+                                        impressions: newQuantity,
+                                        spend: newTotalCost
+                                    }
+                                });
+                            }}
+                            type="number"
+                            align="right"
+                        />
+                    </td>
                     <td className="py-3 px-6 text-sm font-medium text-gray-900 text-right tabular-nums">
                         <EditableCell
                             value={placement.totalCost}
-                            onSave={(val) => handlePlacementUpdate({ ...placement, totalCost: Number(val) })}
+                            onSave={(val) => {
+                                const newBudget = Number(val) || 0;
+                                // When budget changes, recalculate impressions
+                                // impressions = (budget / CPM) * 1000
+                                const newImpressions = placement.rate > 0 ? Math.floor((newBudget / placement.rate) * 1000) : 0;
+                                handlePlacementUpdate({
+                                    ...placement,
+                                    totalCost: newBudget,
+                                    quantity: newImpressions,
+                                    forecast: {
+                                        ...placement.forecast,
+                                        impressions: newImpressions,
+                                        spend: newBudget
+                                    }
+                                });
+                            }}
                             type="currency"
                             align="right"
                         />
                     </td>
-                    <td className="py-3 px-6 text-sm text-gray-400 text-center text-xs">{placement.forecast?.source || 'Internal'}</td>
+                    <td className="py-3 px-6 text-center">
+                        {/* Once a line has accumulated impressions/spend, it can't go back to DRAFT */}
+                        {(() => {
+                            const hasBeenActive = (placement.delivery?.actualImpressions || 0) > 0 ||
+                                                  (placement.delivery?.actualSpend || 0) > 0 ||
+                                                  (placement.performance?.impressions || 0) > 0;
+                            return (
+                                <select
+                                    value={placement.status || 'ACTIVE'}
+                                    onChange={(e) => {
+                                        e.stopPropagation();
+                                        const newStatus = e.target.value as 'ACTIVE' | 'PAUSED' | 'DRAFT';
+                                        handlePlacementUpdate({
+                                            ...placement,
+                                            status: newStatus
+                                        });
+                                    }}
+                                    onClick={(e) => e.stopPropagation()}
+                                    className={clsx(
+                                        "px-2 py-0.5 rounded text-xs font-medium uppercase tracking-wide border-0 cursor-pointer appearance-none",
+                                        placement.status === 'ACTIVE' && "bg-green-100 text-green-800",
+                                        placement.status === 'PAUSED' && "bg-yellow-100 text-yellow-800",
+                                        placement.status === 'DRAFT' && "bg-gray-100 text-gray-600",
+                                        (!placement.status || placement.status === 'PLANNING') && "bg-blue-100 text-blue-600"
+                                    )}
+                                >
+                                    <option value="ACTIVE">ACTIVE</option>
+                                    <option value="PAUSED">PAUSED</option>
+                                    {!hasBeenActive && <option value="DRAFT">DRAFT</option>}
+                                </select>
+                            );
+                        })()}
+                    </td>
                 </>
             ) : (
                 <>
@@ -572,12 +748,38 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
                         {placement.performance?.roas.toFixed(1) || '-'}x
                     </td>
                     <td className="py-3 px-6 text-center">
-                        <span className={clsx(
-                            "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium uppercase tracking-wide",
-                            placement.performance?.status === 'ACTIVE' ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-500"
-                        )}>
-                            {placement.performance?.status || 'PENDING'}
-                        </span>
+                        {/* In PERFORMANCE view, lines almost always have accumulated data, so DRAFT is rarely available */}
+                        {(() => {
+                            const hasBeenActive = (placement.delivery?.actualImpressions || 0) > 0 ||
+                                                  (placement.delivery?.actualSpend || 0) > 0 ||
+                                                  (placement.performance?.impressions || 0) > 0;
+                            return (
+                                <select
+                                    value={placement.status || placement.performance?.status || 'ACTIVE'}
+                                    onChange={(e) => {
+                                        e.stopPropagation();
+                                        const newStatus = e.target.value as 'ACTIVE' | 'PAUSED' | 'DRAFT';
+                                        handlePlacementUpdate({
+                                            ...placement,
+                                            status: newStatus,
+                                            performance: placement.performance ? { ...placement.performance, status: newStatus === 'DRAFT' ? 'PAUSED' : newStatus } : undefined
+                                        });
+                                    }}
+                                    onClick={(e) => e.stopPropagation()}
+                                    className={clsx(
+                                        "px-2 py-0.5 rounded text-xs font-medium uppercase tracking-wide border-0 cursor-pointer appearance-none",
+                                        (placement.status || placement.performance?.status) === 'ACTIVE' && "bg-green-100 text-green-800",
+                                        (placement.status || placement.performance?.status) === 'PAUSED' && "bg-yellow-100 text-yellow-800",
+                                        (placement.status || placement.performance?.status) === 'DRAFT' && "bg-gray-100 text-gray-600",
+                                        (!placement.status && !placement.performance?.status) && "bg-gray-100 text-gray-500"
+                                    )}
+                                >
+                                    <option value="ACTIVE">ACTIVE</option>
+                                    <option value="PAUSED">PAUSED</option>
+                                    {!hasBeenActive && <option value="DRAFT">DRAFT</option>}
+                                </select>
+                            );
+                        })()}
                     </td>
                 </>
             )}
@@ -602,6 +804,7 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
             </td>
         </tr>
     );
+    };
 
     const SortIcon = ({ columnKey }: { columnKey: string }) => {
         if (sortConfig?.key !== columnKey) return <div className="w-4 h-4 opacity-0 group-hover:opacity-20 transition-opacity"><ArrowUpDown className="w-3 h-3" /></div>;
@@ -672,6 +875,8 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
                             budget={campaign.budget}
                             totalSpend={mediaPlan.totalSpend}
                             goals={campaign.numericGoals}
+                            lines={campaign.placements}
+                            viewMode={viewMode}
                         />
                     )}
 
@@ -755,7 +960,33 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
                                     Performance
                                 </button>
                             </div>
+
+                            {/* Status Filter */}
+                            <div className="flex items-center gap-1.5">
+                                <Filter className="w-3.5 h-3.5 text-gray-400" />
+                                <select
+                                    value={statusFilter}
+                                    onChange={(e) => setStatusFilter(e.target.value as PlanStatusFilter)}
+                                    className="text-sm border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 cursor-pointer focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                                >
+                                    <option value="ALL">All ({statusCounts.ALL})</option>
+                                    <option value="ACTIVE">Active ({statusCounts.ACTIVE})</option>
+                                    <option value="PAUSED">Paused ({statusCounts.PAUSED})</option>
+                                    <option value="DRAFT">Draft ({statusCounts.DRAFT})</option>
+                                </select>
+                            </div>
                         </div>
+
+                        {/* Add Line Button */}
+                        {onAddPlacement && (
+                            <button
+                                onClick={onAddPlacement}
+                                className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                            >
+                                <Plus className="w-4 h-4" />
+                                Add Line
+                            </button>
+                        )}
                     </div>
                 </div>
 
@@ -772,10 +1003,11 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
                                     <>
                                         <HeaderCell label="Flight Dates" />
                                         <HeaderCell label="Forecasted Impressions" sortKey={groupingMode === 'DETAILED' ? "forecast.impressions" : "impressions"} align="right" />
-                                        <HeaderCell label="Rate" align="right" />
+                                        <HeaderCell label="Media CPM" align="right" />
+                                        <HeaderCell label="Data CPM" align="right" />
                                         <HeaderCell label="Quantity" align="right" />
                                         <HeaderCell label="Total Cost" sortKey="totalCost" align="right" />
-                                        <HeaderCell label="Source" align="center" />
+                                        <HeaderCell label="Status" align="center" />
                                     </>
                                 ) : (
                                     <>

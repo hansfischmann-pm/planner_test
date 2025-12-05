@@ -45,7 +45,7 @@ export interface Creative {
     };
 }
 
-export type Channel = 'Search' | 'Social' | 'Display' | 'TV' | 'Radio' | 'OOH' | 'Print';
+export type Channel = 'Search' | 'Social' | 'Display' | 'TV' | 'Radio' | 'OOH';
 
 export interface Segment {
     id: string;
@@ -76,7 +76,9 @@ export interface PlanMetrics {
     impressions: number;
     reach: number;
     frequency: number;
-    cpm: number;
+    cpm: number; // Inventory CPM (base rate without data costs)
+    eCpm: number; // Effective CPM (includes data/segment costs)
+    dataCpm: number; // Data costs portion of CPM
 }
 
 export interface AgentInfo {
@@ -265,13 +267,13 @@ export interface PerformanceMetrics {
     status: 'ACTIVE' | 'PAUSED';
 }
 
-export type PlacementStatus = 'PLANNING' | 'ACTIVE' | 'COMPLETED' | 'PAUSED';
+export type PlacementStatus = 'PLANNING' | 'DRAFT' | 'ACTIVE' | 'COMPLETED' | 'PAUSED';
 
 // Renamed from Placement to Line, keeping alias for backward compatibility
 export interface Line {
     id: string;
     name: string;
-    channel: 'Search' | 'Social' | 'Display' | 'TV' | 'Radio' | 'Streaming Audio' | 'Podcast' | 'Place-based Audio' | 'OOH' | 'Print';
+    channel: 'Search' | 'Social' | 'Display' | 'TV' | 'Radio' | 'Streaming Audio' | 'Podcast' | 'Place-based Audio' | 'OOH';
     status: PlacementStatus;
     vendor: string;
     adUnit: string;

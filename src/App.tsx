@@ -15,6 +15,7 @@ import { GlobalShortcuts } from './components/GlobalShortcuts';
 import { AgentBrain, AgentState } from './logic/agentBrain';
 import { AgentMessage, MediaPlan, User, Brand, Campaign, Flight, LayoutPosition, Placement } from './types';
 import { generateLargeScaleData } from './data/largeScaleData';
+import { WindowedApp } from './components/WindowedApp';
 import { initialPortfolio } from './data/portfolioData';
 import {
     generateFlight,
@@ -55,7 +56,7 @@ const updateBrandMetrics = (brand: Brand): Brand => {
 
 import { generateMediaPlanPDF } from './utils/pdfGenerator';
 import { generateMediaPlanPPT } from './utils/pptGenerator';
-import { Layout, LogOut, PieChart, Settings, Users, Moon, Sun, BarChart2, ChevronLeft, ChevronRight, Briefcase } from 'lucide-react';
+import { Layout, LogOut, PieChart, Settings, Users, Moon, Sun, BarChart2, ChevronLeft, ChevronRight, Briefcase, Layers } from 'lucide-react';
 
 type ViewState = 'LOGIN' | 'CLIENT_SELECTION' | 'CAMPAIGN_LIST' | 'FLIGHT_LIST' | 'MEDIA_PLAN' | 'AGENCY_ANALYTICS' | 'INTEGRATIONS' | 'PORTFOLIO';
 
@@ -93,6 +94,18 @@ function App() {
 
     // Theme State
     const [theme, setTheme] = useState<'light' | 'dark'>('light');
+
+    // Interface Mode: 'classic' (page-based) or 'windowed' (canvas-based)
+    const [interfaceMode, setInterfaceMode] = useState<'classic' | 'windowed'>(() => {
+        const saved = localStorage.getItem('fuseiq-interface-mode');
+        return (saved as 'classic' | 'windowed') || 'classic';
+    });
+
+    const toggleInterfaceMode = () => {
+        const newMode = interfaceMode === 'classic' ? 'windowed' : 'classic';
+        setInterfaceMode(newMode);
+        localStorage.setItem('fuseiq-interface-mode', newMode);
+    };
 
     useEffect(() => {
         if (theme === 'dark') {
@@ -806,7 +819,25 @@ function App() {
         );
     }
 
-    // Common Layout for Campaign/Flight/Plan views
+    // Windowed Interface Mode
+    if (interfaceMode === 'windowed' && currentBrand) {
+        return (
+            <WindowedApp
+                brand={currentBrand}
+                onBrandUpdate={(updatedBrand) => {
+                    setBrands(prev => prev.map(b => b.id === updatedBrand.id ? updatedBrand : b));
+                    setCurrentBrand(updatedBrand);
+                }}
+                onBack={() => setView('CLIENT_SELECTION')}
+                onSwitchToClassic={() => {
+                    setInterfaceMode('classic');
+                    localStorage.setItem('fuseiq-interface-mode', 'classic');
+                }}
+            />
+        );
+    }
+
+    // Common Layout for Campaign/Flight/Plan views (Classic Mode)
     return (
         <div className="flex h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
             {/* Sidebar */}
@@ -913,7 +944,15 @@ function App() {
                     </div>
                 </nav>
 
-                <div className="p-4 border-t border-gray-200 dark:border-gray-700">
+                <div className="p-4 border-t border-gray-200 dark:border-gray-700 space-y-1">
+                    <button
+                        onClick={toggleInterfaceMode}
+                        className="w-full flex items-center gap-2 px-2 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                        title={sidebarCollapsed ? 'Canvas Mode' : undefined}
+                    >
+                        <Layers className="w-4 h-4 flex-shrink-0" />
+                        {!sidebarCollapsed && 'Canvas Mode'}
+                    </button>
                     <button
                         onClick={toggleTheme}
                         className="w-full flex items-center gap-2 px-2 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"

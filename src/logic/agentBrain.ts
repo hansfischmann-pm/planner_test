@@ -34,6 +34,15 @@ export interface PendingAction {
     data?: any; // Additional data needed to execute the action
 }
 
+// Window context for context-aware chat in windowed mode
+export interface WindowContext {
+    windowType: 'campaign' | 'flight' | 'portfolio' | 'report' | 'settings' | 'media-plan' | null;
+    campaignId?: string;
+    campaignName?: string;
+    flightId?: string;
+    flightName?: string;
+}
+
 interface AgentContext {
     state: AgentState;
     mediaPlan: MediaPlan | null;
@@ -43,6 +52,7 @@ interface AgentContext {
     executions: AgentExecution[];
     pendingAction?: PendingAction;
     expressMode?: boolean; // If true, skip confirmation dialogs
+    windowContext?: WindowContext; // Context from active window in windowed mode
 }
 
 export class AgentBrain {
@@ -76,6 +86,21 @@ export class AgentBrain {
 
     setBrand(brand: Brand | null) {
         this.context.brand = brand;
+    }
+
+    setWindowContext(windowContext: WindowContext | undefined) {
+        this.context.windowContext = windowContext;
+        // Also update the contextManager focus
+        if (windowContext) {
+            contextManager.updateFocus(this.sessionId, {
+                campaignId: windowContext.campaignId,
+                flightId: windowContext.flightId
+            });
+        }
+    }
+
+    getWindowContext(): WindowContext | undefined {
+        return this.context.windowContext;
     }
 
     processInput(input: string): AgentMessage {
@@ -577,7 +602,7 @@ export class AgentBrain {
                     version: 1,
                     groupingMode: 'DETAILED',
                     activeFlightId: newCampaign.flights[0].id, // Default to first flight
-                    metrics: { impressions: 0, reach: 0, frequency: 0, cpm: 0 } // Initialize metrics
+                    metrics: { impressions: 0, reach: 0, frequency: 0, cpm: 0, eCpm: 0, dataCpm: 0 } // Initialize metrics
                 };
 
                 // Ensure placements are populated for legacy view
@@ -1784,7 +1809,7 @@ export class AgentBrain {
 
         // 2. Offline / Broad Reach Layers
         if (strategy === 'AWARENESS' || targetBudget > 50000) {
-            const offlineChannels = ['TV', 'Radio', 'OOH', 'Print'] as const;
+            const offlineChannels = ['TV', 'Radio', 'OOH'] as const;
             const count = strategy === 'AWARENESS' ? 4 : 2;
 
             for (let i = 0; i < count; i++) {

@@ -1,0 +1,1529 @@
+/**
+ * WindowedApp Component - Canvas-based windowed interface
+ *
+ * This is the windowed version of the main application where
+ * campaigns, flights, and other views are displayed as windows
+ * on a canvas with an anchored chat interface.
+ */
+
+import { useState, useRef, useEffect, ReactNode, useCallback } from 'react';
+import { Canvas } from './Canvas';
+import { ChatInterface } from './ChatInterface';
+import { PlanVisualizer } from './PlanVisualizer';
+import { CanvasProvider, useCanvas } from '../context/CanvasContext';
+import { WindowType } from '../types/windowTypes';
+import { AgentBrain, AgentState, WindowContext } from '../logic/agentBrain';
+import { AgentMessage, MediaPlan, Brand, Campaign, Flight, Placement } from '../types';
+import { generateMediaPlanPDF } from '../utils/pdfGenerator';
+import { generateMediaPlanPPT } from '../utils/pptGenerator';
+import { calculatePlanMetrics, calculateFlightForecast, calculateFlightDelivery, calculateCampaignForecast, calculateCampaignDelivery, generateId } from '../logic/dummyData';
+import { ArrowLeft, Folder, Calendar, BarChart3, FileText, DollarSign, TrendingUp, PanelRightClose, PanelRightOpen, LayoutGrid, Play, Pause, Edit3, Plus, Download, FileDown, Filter, Eye, Target } from 'lucide-react';
+
+// Status filter options
+type StatusFilter = 'ALL' | 'ACTIVE' | 'PAUSED' | 'DRAFT' | 'COMPLETED';
+
+// Campaign window content with flight filter
+interface CampaignWindowContentProps {
+  campaign: Campaign;
+  onCreateFlight: () => void;
+  onOpenFlight: (flightId: string, flightName: string) => void;
+}
+
+function CampaignWindowContent({ campaign, onCreateFlight, onOpenFlight }: CampaignWindowContentProps) {
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('ACTIVE');
+
+  // Filter flights by status
+  const filteredFlights = campaign.flights.filter(flight => {
+    if (statusFilter === 'ALL') return true;
+    return flight.status === statusFilter;
+  });
+
+  // Get status counts
+  const statusCounts = {
+    ALL: campaign.flights.length,
+    ACTIVE: campaign.flights.filter(f => f.status === 'ACTIVE').length,
+    PAUSED: campaign.flights.filter(f => f.status === 'PAUSED').length,
+    DRAFT: campaign.flights.filter(f => f.status === 'DRAFT').length,
+    COMPLETED: campaign.flights.filter(f => f.status === 'COMPLETED').length,
+  };
+
+  return (
+    <div className="p-4 h-full overflow-auto">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+            <Folder className="w-5 h-5 text-purple-600" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">{campaign.name}</h2>
+            <p className="text-sm text-gray-500">{campaign.flights.length} flights</p>
+          </div>
+        </div>
+        <button
+          onClick={onCreateFlight}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+          New Flight
+        </button>
+      </div>
+
+      <div className="grid grid-cols-3 gap-4 mb-6">
+        <div className="bg-blue-50 rounded-lg p-3">
+          <div className="text-xs text-blue-600 font-medium">Budget</div>
+          <div className="text-lg font-semibold text-blue-900">
+            ${campaign.budget?.toLocaleString() || '0'}
+          </div>
+        </div>
+        <div className="bg-green-50 rounded-lg p-3">
+          <div className="text-xs text-green-600 font-medium">Status</div>
+          <div className="text-lg font-semibold text-green-900">{campaign.status}</div>
+        </div>
+        <div className="bg-purple-50 rounded-lg p-3">
+          <div className="text-xs text-purple-600 font-medium">Impressions</div>
+          <div className="text-lg font-semibold text-purple-900">
+            {(campaign.forecast?.impressions || 0).toLocaleString()}
+          </div>
+        </div>
+      </div>
+
+      {/* Flights header with filter */}
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-sm font-semibold text-gray-700">Flights</h3>
+        <div className="flex items-center gap-1">
+          <Filter className="w-3.5 h-3.5 text-gray-400" />
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+            className="text-xs border-none bg-transparent text-gray-600 cursor-pointer focus:ring-0 pr-6"
+          >
+            <option value="ALL">All ({statusCounts.ALL})</option>
+            <option value="ACTIVE">Active ({statusCounts.ACTIVE})</option>
+            <option value="PAUSED">Paused ({statusCounts.PAUSED})</option>
+            <option value="DRAFT">Draft ({statusCounts.DRAFT})</option>
+            <option value="COMPLETED">Completed ({statusCounts.COMPLETED})</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        {filteredFlights.length === 0 ? (
+          <div className="text-center py-8 text-gray-500 text-sm">
+            No {statusFilter.toLowerCase()} flights found
+          </div>
+        ) : (
+          filteredFlights.map(flight => (
+            <button
+              key={flight.id}
+              onClick={() => onOpenFlight(flight.id, flight.name)}
+              className="w-full flex items-center justify-between p-3 bg-white border border-gray-200 rounded-lg hover:border-purple-300 hover:shadow-sm transition-all"
+            >
+              <div className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-gray-400" />
+                <span className="font-medium text-gray-900">{flight.name}</span>
+                <span className={`text-xs px-2 py-0.5 rounded-full ${
+                  flight.status === 'ACTIVE' ? 'bg-green-100 text-green-700' :
+                  flight.status === 'PAUSED' ? 'bg-yellow-100 text-yellow-700' :
+                  'bg-gray-100 text-gray-600'
+                }`}>
+                  {flight.status}
+                </span>
+              </div>
+              <div className="text-sm text-gray-500">
+                ${flight.budget?.toLocaleString() || '0'}
+              </div>
+            </button>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Portfolio window content with campaign filter
+interface PortfolioWindowContentProps {
+  brand: Brand;
+  onCreateCampaign: () => void;
+  onOpenCampaign: (campaignId: string, campaignName: string) => void;
+}
+
+function PortfolioWindowContent({ brand, onCreateCampaign, onOpenCampaign }: PortfolioWindowContentProps) {
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('ACTIVE');
+
+  const totalBudget = brand.campaigns.reduce((sum, c) => sum + (c.budget || 0), 0);
+  const totalSpend = brand.campaigns.reduce((sum, c) => sum + (c.delivery?.actualSpend || 0), 0);
+
+  // Filter campaigns by status
+  const filteredCampaigns = brand.campaigns.filter(campaign => {
+    if (statusFilter === 'ALL') return true;
+    return campaign.status === statusFilter;
+  });
+
+  // Get status counts
+  const statusCounts = {
+    ALL: brand.campaigns.length,
+    ACTIVE: brand.campaigns.filter(c => c.status === 'ACTIVE').length,
+    PAUSED: brand.campaigns.filter(c => c.status === 'PAUSED').length,
+    DRAFT: brand.campaigns.filter(c => c.status === 'DRAFT').length,
+    COMPLETED: brand.campaigns.filter(c => c.status === 'COMPLETED').length,
+  };
+
+  return (
+    <div className="p-4 h-full overflow-auto">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+            <BarChart3 className="w-5 h-5 text-green-600" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Portfolio Overview</h2>
+            <p className="text-sm text-gray-500">{brand.campaigns.length} campaigns</p>
+          </div>
+        </div>
+        <button
+          onClick={onCreateCampaign}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+          New Campaign
+        </button>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 mb-6">
+        <div className="bg-blue-50 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-1">
+            <DollarSign className="w-4 h-4 text-blue-600" />
+            <span className="text-xs text-blue-600 font-medium">Total Budget</span>
+          </div>
+          <div className="text-2xl font-bold text-blue-900">
+            ${totalBudget.toLocaleString()}
+          </div>
+        </div>
+        <div className="bg-green-50 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-1">
+            <TrendingUp className="w-4 h-4 text-green-600" />
+            <span className="text-xs text-green-600 font-medium">Total Spend</span>
+          </div>
+          <div className="text-2xl font-bold text-green-900">
+            ${totalSpend.toLocaleString()}
+          </div>
+        </div>
+      </div>
+
+      {/* Campaigns header with filter */}
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-sm font-semibold text-gray-700">Campaigns</h3>
+        <div className="flex items-center gap-1">
+          <Filter className="w-3.5 h-3.5 text-gray-400" />
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+            className="text-xs border-none bg-transparent text-gray-600 cursor-pointer focus:ring-0 pr-6"
+          >
+            <option value="ALL">All ({statusCounts.ALL})</option>
+            <option value="ACTIVE">Active ({statusCounts.ACTIVE})</option>
+            <option value="PAUSED">Paused ({statusCounts.PAUSED})</option>
+            <option value="DRAFT">Draft ({statusCounts.DRAFT})</option>
+            <option value="COMPLETED">Completed ({statusCounts.COMPLETED})</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        {filteredCampaigns.length === 0 ? (
+          <div className="text-center py-8 text-gray-500 text-sm">
+            No {statusFilter.toLowerCase()} campaigns found
+          </div>
+        ) : (
+          filteredCampaigns.map(campaign => (
+            <button
+              key={campaign.id}
+              onClick={() => onOpenCampaign(campaign.id, campaign.name)}
+              className="w-full flex items-center justify-between p-3 bg-white border border-gray-200 rounded-lg hover:border-purple-300 hover:shadow-sm transition-all"
+            >
+              <div className="flex items-center gap-2">
+                <Folder className="w-4 h-4 text-gray-400" />
+                <span className="font-medium text-gray-900">{campaign.name}</span>
+                <span className={`text-xs px-2 py-0.5 rounded-full ${
+                  campaign.status === 'ACTIVE' ? 'bg-green-100 text-green-700' :
+                  campaign.status === 'PAUSED' ? 'bg-yellow-100 text-yellow-700' :
+                  'bg-gray-100 text-gray-700'
+                }`}>
+                  {campaign.status}
+                </span>
+              </div>
+              <div className="text-sm text-gray-500">
+                ${(campaign.budget || 0).toLocaleString()}
+              </div>
+            </button>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Flight window content with performance cards (performance view)
+interface FlightWindowContentProps {
+  flight: Flight;
+  campaignName: string;
+  onToggleStatus: (newStatus: 'ACTIVE' | 'DRAFT') => void;
+  onEditPlan: () => void;
+}
+
+function FlightWindowContent({ flight, campaignName, onToggleStatus, onEditPlan }: FlightWindowContentProps) {
+  const plannedSpend = flight.lines.reduce((sum, l) => sum + l.totalCost, 0);
+  const totalImpressions = flight.lines.reduce((sum, l) => sum + (l.forecast?.impressions || 0), 0);
+
+  // Calculate actual metrics from line-level delivery/performance data
+  const lineActualImpressions = flight.lines.reduce((sum, l) => sum + (l.delivery?.actualImpressions || l.performance?.impressions || 0), 0);
+  const lineActualSpend = flight.lines.reduce((sum, l) => sum + (l.delivery?.actualSpend || 0), 0);
+
+  // Use flight-level if available, otherwise fall back to line-level aggregation
+  const actualImpressions = flight.delivery?.actualImpressions || lineActualImpressions || 0;
+  const actualSpend = flight.delivery?.actualSpend || lineActualSpend || plannedSpend * 0.7; // Use actual or simulate 70% delivered
+  const isActive = flight.status === 'ACTIVE';
+
+  // Calculate derived metrics
+  const cpm = actualImpressions > 0 ? (actualSpend / actualImpressions) * 1000 : 0;
+  const pacing = flight.budget > 0 ? (actualSpend / flight.budget) * 100 : 0;
+  const impressionPacing = totalImpressions > 0 ? (actualImpressions / totalImpressions) * 100 : 0;
+
+  // Days calculation
+  const startDate = new Date(flight.startDate);
+  const endDate = new Date(flight.endDate);
+  const now = new Date();
+  const totalDays = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)));
+  const elapsedDays = Math.max(0, Math.ceil((now.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)));
+  const remainingDays = Math.max(0, Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+  const timeProgress = Math.min(100, (elapsedDays / totalDays) * 100);
+
+  // Performance status
+  const getPerformanceStatus = () => {
+    if (pacing > timeProgress + 10) return { label: 'Over Pacing', color: 'text-yellow-600', bg: 'bg-yellow-100' };
+    if (pacing < timeProgress - 10) return { label: 'Under Pacing', color: 'text-red-600', bg: 'bg-red-100' };
+    return { label: 'On Track', color: 'text-green-600', bg: 'bg-green-100' };
+  };
+  const perfStatus = getPerformanceStatus();
+
+  return (
+    <div className="p-4 h-full overflow-auto">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+            <Calendar className="w-5 h-5 text-blue-600" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-semibold text-gray-900">{flight.name}</h2>
+              <span className={`text-xs px-2 py-0.5 rounded-full ${
+                isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
+              }`}>
+                {flight.status}
+              </span>
+              <span className={`text-xs px-2 py-0.5 rounded-full ${perfStatus.bg} ${perfStatus.color}`}>
+                {perfStatus.label}
+              </span>
+            </div>
+            <p className="text-sm text-gray-500">{campaignName} • {flight.lines.length} placements</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => onToggleStatus(isActive ? 'DRAFT' : 'ACTIVE')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+              isActive
+                ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
+                : 'bg-green-100 text-green-700 hover:bg-green-200'
+            }`}
+          >
+            {isActive ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+            {isActive ? 'Pause' : 'Activate'}
+          </button>
+          <button
+            onClick={onEditPlan}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+          >
+            <Edit3 className="w-4 h-4" />
+            Edit Plan
+          </button>
+        </div>
+      </div>
+
+      {/* Performance Cards - Top Row */}
+      <div className="grid grid-cols-4 gap-3 mb-4">
+        <div className="bg-blue-50 rounded-lg p-3">
+          <div className="flex items-center gap-1.5 mb-1">
+            <DollarSign className="w-3.5 h-3.5 text-blue-600" />
+            <span className="text-xs text-blue-600 font-medium">Budget</span>
+          </div>
+          <div className="text-lg font-bold text-blue-900">
+            ${flight.budget?.toLocaleString() || '0'}
+          </div>
+        </div>
+        <div className="bg-green-50 rounded-lg p-3">
+          <div className="flex items-center gap-1.5 mb-1">
+            <TrendingUp className="w-3.5 h-3.5 text-green-600" />
+            <span className="text-xs text-green-600 font-medium">Spend</span>
+          </div>
+          <div className="text-lg font-bold text-green-900">
+            ${actualSpend.toLocaleString()}
+          </div>
+          <div className="text-xs text-green-600 mt-0.5">
+            {pacing.toFixed(1)}% of budget
+          </div>
+        </div>
+        <div className="bg-purple-50 rounded-lg p-3">
+          <div className="flex items-center gap-1.5 mb-1">
+            <Eye className="w-3.5 h-3.5 text-purple-600" />
+            <span className="text-xs text-purple-600 font-medium">Impressions</span>
+          </div>
+          <div className="text-lg font-bold text-purple-900">
+            {(actualImpressions / 1000000).toFixed(2)}M
+          </div>
+          <div className="text-xs text-purple-600 mt-0.5">
+            of {(totalImpressions / 1000000).toFixed(2)}M forecast
+          </div>
+        </div>
+        <div className="bg-orange-50 rounded-lg p-3">
+          <div className="flex items-center gap-1.5 mb-1">
+            <Target className="w-3.5 h-3.5 text-orange-600" />
+            <span className="text-xs text-orange-600 font-medium">CPM</span>
+          </div>
+          <div className="text-lg font-bold text-orange-900">
+            ${cpm.toFixed(2)}
+          </div>
+        </div>
+      </div>
+
+      {/* Progress Bars */}
+      <div className="bg-white rounded-lg border border-gray-200 p-4 mb-4">
+        <div className="space-y-3">
+          {/* Timeline Progress */}
+          <div>
+            <div className="flex justify-between text-xs text-gray-500 mb-1">
+              <span>Flight Timeline</span>
+              <span>{remainingDays > 0 ? `${remainingDays} days remaining` : 'Completed'}</span>
+            </div>
+            <div className="w-full bg-gray-100 rounded-full h-2">
+              <div
+                className="h-2 rounded-full bg-purple-600 transition-all"
+                style={{ width: `${timeProgress}%` }}
+              />
+            </div>
+          </div>
+
+          {/* Budget Pacing */}
+          <div>
+            <div className="flex justify-between text-xs text-gray-500 mb-1">
+              <span>Budget Pacing</span>
+              <span>${actualSpend.toLocaleString()} / ${flight.budget.toLocaleString()}</span>
+            </div>
+            <div className="w-full bg-gray-100 rounded-full h-2">
+              <div
+                className={`h-2 rounded-full transition-all ${
+                  pacing > timeProgress + 10 ? 'bg-yellow-500' :
+                  pacing < timeProgress - 10 ? 'bg-red-500' : 'bg-green-500'
+                }`}
+                style={{ width: `${Math.min(100, pacing)}%` }}
+              />
+            </div>
+          </div>
+
+          {/* Impression Delivery */}
+          <div>
+            <div className="flex justify-between text-xs text-gray-500 mb-1">
+              <span>Impression Delivery</span>
+              <span>{(actualImpressions / 1000000).toFixed(2)}M / {(totalImpressions / 1000000).toFixed(2)}M</span>
+            </div>
+            <div className="w-full bg-gray-100 rounded-full h-2">
+              <div
+                className="h-2 rounded-full bg-blue-500 transition-all"
+                style={{ width: `${Math.min(100, impressionPacing)}%` }}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Placements Table */}
+      <h3 className="text-sm font-semibold text-gray-700 mb-2">Placements</h3>
+      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50 border-b border-gray-200">
+            <tr>
+              <th className="text-left px-3 py-2 text-xs font-medium text-gray-500 uppercase">Vendor</th>
+              <th className="text-left px-3 py-2 text-xs font-medium text-gray-500 uppercase">Channel</th>
+              <th className="text-right px-3 py-2 text-xs font-medium text-gray-500 uppercase">Cost</th>
+              <th className="text-right px-3 py-2 text-xs font-medium text-gray-500 uppercase">Impressions</th>
+              <th className="text-right px-3 py-2 text-xs font-medium text-gray-500 uppercase">CPM</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {flight.lines.slice(0, 10).map(line => {
+              const lineCpm = line.forecast?.impressions ? (line.totalCost / line.forecast.impressions) * 1000 : 0;
+              return (
+                <tr key={line.id} className="hover:bg-gray-50">
+                  <td className="px-3 py-2 font-medium text-gray-900">{line.vendor}</td>
+                  <td className="px-3 py-2 text-gray-600">{line.channel}</td>
+                  <td className="px-3 py-2 text-right text-gray-900">${line.totalCost?.toLocaleString() || '0'}</td>
+                  <td className="px-3 py-2 text-right text-gray-600">{((line.forecast?.impressions || 0) / 1000).toFixed(0)}K</td>
+                  <td className="px-3 py-2 text-right text-gray-600">${lineCpm.toFixed(2)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {flight.lines.length > 10 && (
+          <div className="text-center text-sm text-gray-500 py-2 border-t border-gray-100 bg-gray-50">
+            +{flight.lines.length - 10} more placements
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+interface WindowedAppInnerProps {
+  brand: Brand;
+  onBrandUpdate: (brand: Brand) => void;
+  onBack: () => void;
+  onSwitchToClassic: () => void;
+}
+
+function WindowedAppInner({ brand, onBrandUpdate, onBack, onSwitchToClassic }: WindowedAppInnerProps) {
+  const { openWindow, state: canvasState, getActiveWindow, dispatch } = useCanvas();
+
+  // Agent state
+  const brainRef = useRef<AgentBrain>(new AgentBrain());
+  const [messages, setMessages] = useState<AgentMessage[]>([]);
+  const [agentState, setAgentState] = useState<AgentState>('INIT');
+  const [isTyping, setIsTyping] = useState(false);
+
+  // Chat log persistence - store all messages for later analysis
+  const CHAT_LOG_KEY = 'fuseiq-chat-log';
+
+  // Load chat history on mount
+  useEffect(() => {
+    try {
+      const savedLog = localStorage.getItem(CHAT_LOG_KEY);
+      if (savedLog) {
+        const parsed = JSON.parse(savedLog);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // Only load recent messages (last 100)
+          const recent = parsed.slice(-100);
+          console.log(`[Chat Log] Loaded ${recent.length} messages from history`);
+        }
+      }
+    } catch (e) {
+      console.warn('[Chat Log] Failed to load chat history:', e);
+    }
+  }, []);
+
+  // Save messages to log whenever they change
+  useEffect(() => {
+    if (messages.length > 0) {
+      try {
+        // Get existing log
+        const existingLog = localStorage.getItem(CHAT_LOG_KEY);
+        const existing = existingLog ? JSON.parse(existingLog) : [];
+
+        // Get the latest message and add to log with timestamp and session info
+        const latestMsg = messages[messages.length - 1];
+        const logEntry = {
+          ...latestMsg,
+          brandId: brand.id,
+          brandName: brand.name,
+          userId: null, // TODO: Populate when user auth is implemented
+          sessionTimestamp: Date.now()
+        };
+
+        // Append to log (keep last 2000 messages max for NLP/analysis)
+        const updatedLog = [...existing, logEntry].slice(-2000);
+        localStorage.setItem(CHAT_LOG_KEY, JSON.stringify(updatedLog));
+      } catch (e) {
+        console.warn('[Chat Log] Failed to save chat message:', e);
+      }
+    }
+  }, [messages, brand.id, brand.name]);
+
+  // Track active media plans per flight (for plan editor windows)
+  const [mediaPlans, setMediaPlans] = useState<Record<string, MediaPlan>>({});
+
+  // Open portfolio window by default if no content windows are open
+  // Track if we've already tried to open the default window to prevent loops
+  const hasOpenedDefaultWindow = useRef(false);
+  const hasCheckedInitialState = useRef(false);
+
+  useEffect(() => {
+    // Only run once per session
+    if (hasOpenedDefaultWindow.current) return;
+
+    // Wait longer for canvas state to stabilize after loading from localStorage
+    // The localStorage load happens asynchronously in CanvasContext
+    const timer = setTimeout(() => {
+      // Check again if we've already opened (in case of race)
+      if (hasOpenedDefaultWindow.current) return;
+
+      // Mark that we've checked - only do this once
+      if (!hasCheckedInitialState.current) {
+        hasCheckedInitialState.current = true;
+
+        // Check if there are any non-chat windows open
+        const contentWindows = canvasState.windows.filter(w => w.type !== 'chat');
+        console.log('[WindowedApp] Initial check for content windows:', contentWindows.length, 'found');
+
+        if (contentWindows.length === 0) {
+          console.log('[WindowedApp] No content windows found, opening portfolio by default');
+          hasOpenedDefaultWindow.current = true;
+          openWindow('portfolio', 'Portfolio Dashboard');
+        } else {
+          // Mark as done since we already have windows
+          console.log('[WindowedApp] Content windows exist, not opening portfolio');
+          hasOpenedDefaultWindow.current = true;
+        }
+      }
+    }, 300); // Increased delay to ensure localStorage fully loaded
+
+    return () => clearTimeout(timer);
+  }, [canvasState.windows, openWindow]);
+
+  // Current context (derived from active window)
+  const [windowContext, setWindowContext] = useState<WindowContext | undefined>(undefined);
+
+  // Validate pinned windows - close windows with invalid entityIds
+  // This handles the case where IDs change between sessions (e.g., data regeneration)
+  // Track validated window IDs to avoid re-validating the same windows
+  const validatedWindowIds = useRef<Set<string>>(new Set());
+
+  // DISABLED: Window validation was closing pinned windows prematurely
+  // The issue is that windows are loaded from localStorage before we know if
+  // the user will select the same brand. For now, we let windows stay open
+  // even if the entity doesn't exist - the window content will show an error.
+  //
+  // TODO: Consider storing brandId with windows and only validating windows
+  // that belong to the current brand
+  useEffect(() => {
+    // Only validate if there are windows to check
+    if (canvasState.windows.length === 0) return;
+
+    // Collect all valid entity IDs from the brand
+    const validCampaignIds = new Set(brand.campaigns.map(c => c.id));
+    const validFlightIds = new Set(brand.campaigns.flatMap(c => c.flights.map(f => f.id)));
+
+    // Debug: Log what we're checking
+    console.log(`[WindowedApp] Validating ${canvasState.windows.length} windows for brand ${brand.id}`);
+    console.log(`[WindowedApp] Valid campaign IDs (first 5):`, Array.from(validCampaignIds).slice(0, 5));
+    console.log(`[WindowedApp] Valid flight IDs (first 5):`, Array.from(validFlightIds).slice(0, 5));
+
+    // Log each window's status but DON'T close invalid ones
+    canvasState.windows.forEach(w => {
+      // Skip if already validated
+      if (validatedWindowIds.current.has(w.id)) {
+        return;
+      }
+
+      // Mark as validated
+      validatedWindowIds.current.add(w.id);
+
+      if (w.entityId) {
+        const isValid =
+          (w.type === 'campaign' && validCampaignIds.has(w.entityId)) ||
+          (w.type === 'flight' && validFlightIds.has(w.entityId)) ||
+          (w.type === 'media-plan' && validFlightIds.has(w.entityId)) ||
+          (w.type !== 'campaign' && w.type !== 'flight' && w.type !== 'media-plan');
+
+        console.log(`[WindowedApp] Window ${w.type} (${w.entityId}): ${isValid ? 'VALID' : 'INVALID but keeping open'}`);
+      }
+    });
+  }, [canvasState.windows, brand.campaigns, dispatch]); // Re-run when windows change (e.g., after loading from localStorage)
+
+  // Helper to recalculate metrics for brand
+  const updateBrandMetrics = useCallback((brandToUpdate: Brand): Brand => {
+    const updatedCampaigns = brandToUpdate.campaigns.map(campaign => {
+      const updatedFlights = campaign.flights.map(flight => ({
+        ...flight,
+        forecast: calculateFlightForecast(flight.lines),
+        delivery: calculateFlightDelivery(flight.lines)
+      }));
+      return {
+        ...campaign,
+        flights: updatedFlights,
+        forecast: calculateCampaignForecast(updatedFlights),
+        delivery: calculateCampaignDelivery(updatedFlights)
+      };
+    });
+    return { ...brandToUpdate, campaigns: updatedCampaigns };
+  }, []);
+
+  // Open a flight in the plan editor
+  const openFlightInPlanEditor = useCallback((flightId: string, flightName: string, campaignName: string) => {
+    console.log('[WindowedApp] Opening flight in plan editor:', flightId, flightName);
+
+    // Find the flight
+    let foundFlight: Flight | undefined;
+    let foundCampaign: Campaign | undefined;
+    for (const c of brand.campaigns) {
+      const f = c.flights.find(fl => fl.id === flightId);
+      if (f) {
+        foundFlight = f;
+        foundCampaign = c;
+        break;
+      }
+    }
+    if (!foundFlight || !foundCampaign) {
+      console.warn('[WindowedApp] Flight or campaign not found:', flightId);
+      return;
+    }
+
+    // Create media plan if not exists and set it synchronously
+    const existingPlan = mediaPlans[flightId];
+    if (!existingPlan) {
+      const newPlan: MediaPlan = {
+        id: generateId(),
+        campaign: {
+          ...foundCampaign,
+          placements: foundFlight.lines
+        },
+        activeFlightId: flightId,
+        totalSpend: foundFlight.lines.reduce((sum, line) => sum + line.totalCost, 0),
+        remainingBudget: foundFlight.budget - foundFlight.lines.reduce((sum, line) => sum + line.totalCost, 0),
+        version: 1,
+        groupingMode: 'DETAILED',
+        strategy: 'BALANCED',
+        metrics: calculatePlanMetrics(foundFlight.lines)
+      };
+      console.log('[WindowedApp] Created new media plan for flight:', flightId, newPlan);
+      setMediaPlans(prev => ({ ...prev, [flightId]: newPlan }));
+
+      // Also set it in the agent brain so commands work on this plan
+      brainRef.current.setMediaPlan(newPlan);
+    } else {
+      console.log('[WindowedApp] Using existing media plan for flight:', flightId);
+      // Ensure brain has the current plan
+      brainRef.current.setMediaPlan(existingPlan);
+    }
+
+    // Open the media-plan window
+    console.log('[WindowedApp] Opening media-plan window for:', campaignName, flightName);
+    openWindow('media-plan', `${campaignName}\\${flightName}`, flightId);
+  }, [brand.campaigns, mediaPlans, openWindow]);
+
+  // Handle placement update
+  const handleUpdatePlacement = useCallback((flightId: string, updatedPlacement: Placement) => {
+    // Update brand state
+    const updatedBrand = {
+      ...brand,
+      campaigns: brand.campaigns.map(c => ({
+        ...c,
+        flights: c.flights.map(f => {
+          if (f.id === flightId) {
+            return {
+              ...f,
+              lines: f.lines.map(l => l.id === updatedPlacement.id ? updatedPlacement : l)
+            };
+          }
+          return f;
+        })
+      }))
+    };
+    const finalBrand = updateBrandMetrics(updatedBrand);
+    onBrandUpdate(finalBrand);
+
+    // Update media plan
+    setMediaPlans(prev => {
+      const plan = prev[flightId];
+      if (!plan) return prev;
+      const updatedPlacements = plan.campaign.placements?.map(p =>
+        p.id === updatedPlacement.id ? updatedPlacement : p
+      ) || [];
+      const flight = finalBrand.campaigns.flatMap(c => c.flights).find(f => f.id === flightId);
+      return {
+        ...prev,
+        [flightId]: {
+          ...plan,
+          campaign: { ...plan.campaign, placements: updatedPlacements },
+          metrics: calculatePlanMetrics(updatedPlacements),
+          totalSpend: updatedPlacements.reduce((sum, line) => sum + line.totalCost, 0),
+          remainingBudget: (flight?.budget || 0) - updatedPlacements.reduce((sum, line) => sum + line.totalCost, 0)
+        }
+      };
+    });
+  }, [brand, onBrandUpdate, updateBrandMetrics]);
+
+  // Handle placement delete
+  const handleDeletePlacement = useCallback((flightId: string, placementId: string) => {
+    // Update brand state
+    const updatedBrand = {
+      ...brand,
+      campaigns: brand.campaigns.map(c => ({
+        ...c,
+        flights: c.flights.map(f => {
+          if (f.id === flightId) {
+            return {
+              ...f,
+              lines: f.lines.filter(l => l.id !== placementId)
+            };
+          }
+          return f;
+        })
+      }))
+    };
+    const finalBrand = updateBrandMetrics(updatedBrand);
+    onBrandUpdate(finalBrand);
+
+    // Update media plan
+    setMediaPlans(prev => {
+      const plan = prev[flightId];
+      if (!plan) return prev;
+      const updatedPlacements = plan.campaign.placements?.filter(p => p.id !== placementId) || [];
+      const flight = finalBrand.campaigns.flatMap(c => c.flights).find(f => f.id === flightId);
+      return {
+        ...prev,
+        [flightId]: {
+          ...plan,
+          campaign: { ...plan.campaign, placements: updatedPlacements },
+          metrics: calculatePlanMetrics(updatedPlacements),
+          totalSpend: updatedPlacements.reduce((sum, line) => sum + line.totalCost, 0),
+          remainingBudget: (flight?.budget || 0) - updatedPlacements.reduce((sum, line) => sum + line.totalCost, 0),
+          version: (plan.version || 0) + 1
+        }
+      };
+    });
+  }, [brand, onBrandUpdate, updateBrandMetrics]);
+
+  // Handle activate/pause flight
+  const handleToggleFlightStatus = useCallback((flightId: string, newStatus: 'ACTIVE' | 'DRAFT') => {
+    const updatedBrand = {
+      ...brand,
+      campaigns: brand.campaigns.map(c => ({
+        ...c,
+        flights: c.flights.map(f => f.id === flightId ? { ...f, status: newStatus } : f)
+      }))
+    };
+    onBrandUpdate(updatedBrand);
+  }, [brand, onBrandUpdate]);
+
+  // Handle adding a new placement to a flight
+  const handleAddPlacement = useCallback((flightId: string) => {
+    // Find the flight to get context
+    let foundFlight: Flight | undefined;
+    let foundCampaign: Campaign | undefined;
+    for (const c of brand.campaigns) {
+      const f = c.flights.find(fl => fl.id === flightId);
+      if (f) {
+        foundFlight = f;
+        foundCampaign = c;
+        break;
+      }
+    }
+
+    if (!foundFlight || !foundCampaign) {
+      console.warn('[WindowedApp] Cannot add placement: flight not found', flightId);
+      return;
+    }
+
+    // Create a new DRAFT placement with default values
+    const newPlacement: Placement = {
+      id: generateId(),
+      name: 'New Line',
+      channel: 'Display', // Default channel
+      vendor: 'New Vendor',
+      adUnit: 'New Placement',
+      segment: 'General Audience',
+      costMethod: 'CPM',
+      rate: 10.00, // Default CPM
+      quantity: 100000, // Default 100k impressions
+      totalCost: 1000, // $1k default
+      startDate: foundFlight.startDate,
+      endDate: foundFlight.endDate,
+      status: 'DRAFT', // New lines default to DRAFT
+      segments: [],
+      forecast: {
+        impressions: 100000,
+        spend: 1000,
+        reach: 50000,
+        frequency: 2,
+        source: 'Internal'
+      },
+      delivery: {
+        actualImpressions: 0,
+        actualSpend: 0,
+        pacing: 0,
+        status: 'ON_TRACK'
+      }
+    };
+
+    // Update brand state
+    const updatedBrand = {
+      ...brand,
+      campaigns: brand.campaigns.map(c => ({
+        ...c,
+        flights: c.flights.map(f => {
+          if (f.id === flightId) {
+            return {
+              ...f,
+              lines: [...f.lines, newPlacement]
+            };
+          }
+          return f;
+        })
+      }))
+    };
+    const finalBrand = updateBrandMetrics(updatedBrand);
+    onBrandUpdate(finalBrand);
+
+    // Update media plan
+    setMediaPlans(prev => {
+      const plan = prev[flightId];
+      if (!plan) return prev;
+      const updatedPlacements = [...(plan.campaign.placements || []), newPlacement];
+      const flight = finalBrand.campaigns.flatMap(c => c.flights).find(f => f.id === flightId);
+      return {
+        ...prev,
+        [flightId]: {
+          ...plan,
+          campaign: { ...plan.campaign, placements: updatedPlacements },
+          metrics: calculatePlanMetrics(updatedPlacements),
+          totalSpend: updatedPlacements.reduce((sum, line) => sum + line.totalCost, 0),
+          remainingBudget: (flight?.budget || 0) - updatedPlacements.reduce((sum, line) => sum + line.totalCost, 0),
+          version: (plan.version || 0) + 1
+        }
+      };
+    });
+
+    console.log('[WindowedApp] Added new DRAFT placement to flight:', flightId);
+  }, [brand, onBrandUpdate, updateBrandMetrics]);
+
+  // Sync placements from agent's media plan back to brand state
+  // This is critical for keeping the flight detail window in sync with chat changes
+  const syncPlacementsToBrand = useCallback((flightId: string, placements: Placement[]) => {
+    const updatedBrand = {
+      ...brand,
+      campaigns: brand.campaigns.map(c => ({
+        ...c,
+        flights: c.flights.map(f => {
+          if (f.id === flightId) {
+            return {
+              ...f,
+              lines: placements
+            };
+          }
+          return f;
+        })
+      }))
+    };
+    const finalBrand = updateBrandMetrics(updatedBrand);
+    onBrandUpdate(finalBrand);
+  }, [brand, onBrandUpdate, updateBrandMetrics]);
+
+  // Sync brand with AgentBrain
+  useEffect(() => {
+    if (brainRef.current) {
+      brainRef.current.setBrand(brand);
+    }
+  }, [brand]);
+
+  // Update window context based on active CONTENT window (not chat)
+  // This ensures clicking on chat doesn't lose the context
+  useEffect(() => {
+    const activeWindow = getActiveWindow();
+
+    // Skip if active window is chat - keep previous context
+    if (activeWindow?.type === 'chat') {
+      return;
+    }
+
+    if (!activeWindow) {
+      // Only clear context if there are no content windows at all
+      const hasContentWindows = canvasState.windows.some(w => w.type !== 'chat');
+      if (!hasContentWindows) {
+        setWindowContext(undefined);
+        brainRef.current?.setWindowContext(undefined);
+      }
+      return;
+    }
+
+    let newContext: WindowContext = {
+      windowType: activeWindow.type as WindowContext['windowType']
+    };
+
+    if (activeWindow.type === 'campaign' && activeWindow.entityId) {
+      const campaign = brand.campaigns.find(c => c.id === activeWindow.entityId);
+      if (campaign) {
+        newContext = {
+          ...newContext,
+          campaignId: campaign.id,
+          campaignName: campaign.name
+        };
+      }
+    } else if (activeWindow.type === 'flight' && activeWindow.entityId) {
+      // Find flight and its parent campaign
+      for (const campaign of brand.campaigns) {
+        const flight = campaign.flights.find(f => f.id === activeWindow.entityId);
+        if (flight) {
+          newContext = {
+            ...newContext,
+            campaignId: campaign.id,
+            campaignName: campaign.name,
+            flightId: flight.id,
+            flightName: flight.name
+          };
+          break;
+        }
+      }
+    } else if (activeWindow.type === 'portfolio') {
+      newContext = {
+        windowType: 'portfolio'
+      };
+    }
+
+    setWindowContext(newContext);
+    brainRef.current?.setWindowContext(newContext);
+  }, [canvasState.activeWindowId, canvasState.windows, brand.campaigns, getActiveWindow]);
+
+  // Handle message sending
+  const handleSendMessage = async (text: string) => {
+    const userMsg: AgentMessage = {
+      id: `user-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      role: 'user',
+      content: text,
+      timestamp: Date.now()
+    };
+    setMessages(prev => [...prev, userMsg]);
+    setIsTyping(true);
+
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // Check for window management and context-aware commands
+    const lowerText = text.toLowerCase();
+
+    // Context-aware commands - interpret "this campaign", "this flight", etc.
+    const thisPattern = /\b(this|current|the|my)\s+(campaign|flight)\b/i;
+    const hasContextRef = thisPattern.test(lowerText);
+
+    // If user refers to "this campaign" and we have context, use it
+    if (hasContextRef && windowContext?.campaignId) {
+      const campaign = brand.campaigns.find(c => c.id === windowContext.campaignId);
+      const flight = windowContext.flightId
+        ? campaign?.flights.find(f => f.id === windowContext.flightId)
+        : undefined;
+
+      // "Show flights" or "show flights for this campaign"
+      if (lowerText.includes('flight') && (lowerText.includes('show') || lowerText.includes('list'))) {
+        if (campaign) {
+          openWindow('campaign', campaign.name, campaign.id);
+          const responseMsg: AgentMessage = {
+            id: `agent-${Date.now()}`,
+            role: 'agent',
+            content: `Here are the flights for **${campaign.name}**:\n\n${campaign.flights.map(f => `• ${f.name} - $${f.budget?.toLocaleString() || 0}`).join('\n')}`,
+            timestamp: Date.now(),
+            suggestedActions: campaign.flights.slice(0, 3).map(f => `Open ${f.name}`)
+          };
+          setMessages(prev => [...prev, responseMsg]);
+          setIsTyping(false);
+          return;
+        }
+      }
+
+      // "Add a flight" to current campaign
+      if (lowerText.includes('add') && lowerText.includes('flight') && campaign) {
+        const responseMsg: AgentMessage = {
+          id: `agent-${Date.now()}`,
+          role: 'agent',
+          content: `I can add a flight to **${campaign.name}**. What would you like to name it, and what's the budget?`,
+          timestamp: Date.now(),
+          suggestedActions: ['Q1 Awareness - $50k', 'Holiday Push - $100k']
+        };
+        setMessages(prev => [...prev, responseMsg]);
+        setIsTyping(false);
+        return;
+      }
+
+      // "Show performance" for current context
+      if (lowerText.includes('performance') || lowerText.includes('metrics') || lowerText.includes('stats')) {
+        const entityName = flight ? `${campaign?.name} › ${flight.name}` : campaign?.name;
+        const entityType = flight ? 'flight' : 'campaign';
+        const metrics = flight
+          ? { impressions: flight.lines.reduce((s, l) => s + (l.forecast?.impressions || 0), 0), spend: flight.lines.reduce((s, l) => s + l.totalCost, 0) }
+          : { impressions: campaign?.forecast?.impressions || 0, spend: campaign?.delivery?.actualSpend || 0 };
+
+        const responseMsg: AgentMessage = {
+          id: `agent-${Date.now()}`,
+          role: 'agent',
+          content: `**Performance for ${entityName}:**\n\n📊 **Impressions:** ${metrics.impressions.toLocaleString()}\n💰 **Spend:** $${metrics.spend.toLocaleString()}\n\n*This ${entityType} is performing within expected parameters.*`,
+          timestamp: Date.now(),
+          suggestedActions: ['Optimize placements', 'Compare to benchmark', 'Export report']
+        };
+        setMessages(prev => [...prev, responseMsg]);
+        setIsTyping(false);
+        return;
+      }
+    }
+
+    // Window open commands
+    if (lowerText.includes('open') && lowerText.includes('campaign')) {
+      const campaignName = text.replace(/open|campaign|the/gi, '').trim();
+      const campaign = brand.campaigns.find(c =>
+        c.name.toLowerCase().includes(campaignName.toLowerCase())
+      );
+      if (campaign) {
+        openWindow('campaign', campaign.name, campaign.id);
+        const responseMsg: AgentMessage = {
+          id: `agent-${Date.now()}`,
+          role: 'agent',
+          content: `Opened campaign: **${campaign.name}**`,
+          timestamp: Date.now(),
+          suggestedActions: ['Show flights', 'View performance']
+        };
+        setMessages(prev => [...prev, responseMsg]);
+        setIsTyping(false);
+        return;
+      }
+    }
+
+    // Portfolio command with fuzzy matching for common misspellings
+    const portfolioPatterns = [
+      'portfolio', 'porfolio', 'portflio', 'porftolio', 'protfolio',
+      'portoflio', 'portofolio', 'portfolo', 'potfolio', 'protofolio',
+      'dashboard', 'dashbord', 'dashbaord', 'dasbhoard'
+    ];
+    const matchesPortfolio = portfolioPatterns.some(p => lowerText.includes(p)) ||
+      (lowerText.includes('open') && (lowerText.includes('port') || lowerText.includes('dash')));
+
+    if (matchesPortfolio) {
+      openWindow('portfolio', 'Portfolio Dashboard');
+      const responseMsg: AgentMessage = {
+        id: `agent-${Date.now()}`,
+        role: 'agent',
+        content: 'Opened the Portfolio Dashboard.',
+        timestamp: Date.now(),
+        suggestedActions: ['Show budget optimization', 'View all campaigns']
+      };
+      setMessages(prev => [...prev, responseMsg]);
+      setIsTyping(false);
+      return;
+    }
+
+    // Process with AgentBrain for other commands
+    const agentResponse = brainRef.current.processInput(text);
+    const ctx = brainRef.current.getContext();
+    setMessages([...ctx.history]);
+
+    // Handle agent media plan updates - store by flight ID and sync to brand
+    if (agentResponse.updatedMediaPlan) {
+      const flightId = agentResponse.updatedMediaPlan.activeFlightId;
+      if (flightId) {
+        setMediaPlans(prev => ({ ...prev, [flightId]: agentResponse.updatedMediaPlan! }));
+
+        // CRITICAL: Sync placements from agent's media plan back to brand state
+        const agentPlacements = agentResponse.updatedMediaPlan.campaign.placements || [];
+        syncPlacementsToBrand(flightId, agentPlacements);
+      }
+      brainRef.current.setMediaPlan(agentResponse.updatedMediaPlan);
+    } else if (ctx.mediaPlan?.activeFlightId) {
+      const flightId = ctx.mediaPlan.activeFlightId;
+      const plan = ctx.mediaPlan;
+      setMediaPlans(prev => ({ ...prev, [flightId]: { ...plan } }));
+
+      // CRITICAL: Sync placements from agent's media plan back to brand state
+      const agentPlacements = plan.campaign.placements || [];
+      syncPlacementsToBrand(flightId, agentPlacements);
+    }
+
+    setAgentState(ctx.state);
+    setIsTyping(false);
+
+    // Handle actions
+    const action = agentResponse.action as any;
+    if (action) {
+      if (action === 'EXPORT_PDF' && ctx.mediaPlan) {
+        generateMediaPlanPDF(ctx.mediaPlan);
+      } else if (action === 'EXPORT_PPT' && ctx.mediaPlan) {
+        generateMediaPlanPPT(ctx.mediaPlan);
+      }
+    }
+  };
+
+  // Render window content based on type - simplified for MVP
+  const renderWindowContent = (windowType: WindowType, entityId?: string): ReactNode => {
+    switch (windowType) {
+      case 'campaign': {
+        const campaign = brand.campaigns.find(c => c.id === entityId);
+        if (!campaign) return <div className="p-4 text-gray-500">Campaign not found</div>;
+
+        // Handler for creating a new flight in this campaign
+        const handleCreateFlight = () => {
+          const flightName = prompt('Enter flight name:');
+          if (!flightName) return;
+
+          const budgetStr = prompt('Enter flight budget (e.g., 25000):', String(Math.floor(campaign.budget * 0.25)));
+          const budget = parseInt(budgetStr || '25000', 10);
+
+          const today = new Date().toISOString().split('T')[0];
+          const in30Days = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+          const newFlight: Flight = {
+            id: generateId(),
+            campaignId: campaign.id,
+            name: flightName,
+            budget: budget,
+            startDate: today,
+            endDate: in30Days,
+            lines: [],
+            status: 'DRAFT',
+            tags: [],
+            forecast: { impressions: 0, spend: 0, reach: 0, frequency: 0, source: 'Internal' },
+            delivery: { actualImpressions: 0, actualSpend: 0, pacing: 0, status: 'ON_TRACK' }
+          };
+
+          const updatedBrand = {
+            ...brand,
+            campaigns: brand.campaigns.map(c =>
+              c.id === campaign.id
+                ? { ...c, flights: [...c.flights, newFlight] }
+                : c
+            )
+          };
+          onBrandUpdate(updatedBrand);
+
+          // Open the new flight
+          openWindow('flight', `${campaign.name}\\${newFlight.name}`, newFlight.id);
+        };
+
+        return <CampaignWindowContent
+          campaign={campaign}
+          onCreateFlight={handleCreateFlight}
+          onOpenFlight={(flightId, flightName) => openWindow('flight', `${campaign.name}\\${flightName}`, flightId)}
+        />;
+      }
+
+      case 'flight': {
+        // Find the flight and its parent campaign
+        let foundCampaign: Campaign | undefined;
+        let foundFlight: Flight | undefined;
+        for (const c of brand.campaigns) {
+          const f = c.flights.find(fl => fl.id === entityId);
+          if (f) {
+            foundCampaign = c;
+            foundFlight = f;
+            break;
+          }
+        }
+        if (!foundFlight || !foundCampaign) {
+          // Show loading state if brand data may not be fully loaded yet
+          return (
+            <div className="p-4 h-full flex items-center justify-center">
+              <div className="text-center">
+                <Calendar className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+                <p className="text-gray-500">Loading flight data...</p>
+                <p className="text-xs text-gray-400 mt-1">Flight ID: {entityId}</p>
+              </div>
+            </div>
+          );
+        }
+
+        return <FlightWindowContent
+          flight={foundFlight}
+          campaignName={foundCampaign.name}
+          onToggleStatus={(newStatus) => handleToggleFlightStatus(foundFlight!.id, newStatus)}
+          onEditPlan={() => openFlightInPlanEditor(foundFlight!.id, foundFlight!.name, foundCampaign!.name)}
+        />;
+      }
+
+      case 'portfolio': {
+        // Handler for creating a new campaign
+        const handleCreateCampaign = () => {
+          const campaignName = prompt('Enter campaign name:');
+          if (!campaignName) return;
+
+          const budgetStr = prompt('Enter campaign budget (e.g., 100000):', '100000');
+          const budget = parseInt(budgetStr || '100000', 10);
+
+          const today = new Date().toISOString().split('T')[0];
+          const in90Days = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+          const newCampaign: Campaign = {
+            id: generateId(),
+            name: campaignName,
+            brandId: brand.id,
+            advertiser: brand.name,
+            budget: budget,
+            startDate: today,
+            endDate: in90Days,
+            goals: ['Brand Awareness'],
+            flights: [],
+            status: 'DRAFT',
+            tags: [],
+            forecast: { impressions: 0, spend: 0, reach: 0, frequency: 0, source: 'Internal' },
+            delivery: { actualImpressions: 0, actualSpend: 0, pacing: 0, status: 'ON_TRACK' },
+            placements: []
+          };
+
+          const updatedBrand = {
+            ...brand,
+            campaigns: [...brand.campaigns, newCampaign]
+          };
+          onBrandUpdate(updatedBrand);
+
+          // Open the new campaign
+          openWindow('campaign', newCampaign.name, newCampaign.id);
+        };
+
+        return <PortfolioWindowContent
+          brand={brand}
+          onCreateCampaign={handleCreateCampaign}
+          onOpenCampaign={(campaignId, campaignName) => openWindow('campaign', campaignName, campaignId)}
+        />;
+      }
+
+      case 'media-plan': {
+        // entityId is the flightId for media-plan windows
+        const flightId = entityId;
+        let plan = flightId ? mediaPlans[flightId] : null;
+
+        // If plan not in state yet, try to create it from brand data (handles race condition)
+        if (!plan && flightId) {
+          let foundFlight: Flight | undefined;
+          let foundCampaign: Campaign | undefined;
+          for (const c of brand.campaigns) {
+            const f = c.flights.find(fl => fl.id === flightId);
+            if (f) {
+              foundFlight = f;
+              foundCampaign = c;
+              break;
+            }
+          }
+          if (foundFlight && foundCampaign) {
+            // Create the plan on-the-fly for rendering
+            plan = {
+              id: generateId(),
+              campaign: {
+                ...foundCampaign,
+                placements: foundFlight.lines
+              },
+              activeFlightId: flightId,
+              totalSpend: foundFlight.lines.reduce((sum, line) => sum + line.totalCost, 0),
+              remainingBudget: foundFlight.budget - foundFlight.lines.reduce((sum, line) => sum + line.totalCost, 0),
+              version: 1,
+              groupingMode: 'DETAILED',
+              strategy: 'BALANCED',
+              metrics: calculatePlanMetrics(foundFlight.lines)
+            };
+            // Schedule state update for next tick
+            setTimeout(() => {
+              setMediaPlans(prev => {
+                if (!prev[flightId]) {
+                  return { ...prev, [flightId]: plan! };
+                }
+                return prev;
+              });
+            }, 0);
+          }
+        }
+
+        if (!plan) {
+          return (
+            <div className="h-full flex items-center justify-center text-gray-500">
+              <div className="text-center">
+                <FileText className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+                <p>No media plan loaded</p>
+                <p className="text-sm mt-1">Open a flight and click "Edit Plan" to start</p>
+              </div>
+            </div>
+          );
+        }
+
+        // Export handlers
+        const handleExportPDF = () => {
+          if (plan) {
+            generateMediaPlanPDF(plan);
+          }
+        };
+
+        const handleExportPPT = () => {
+          if (plan) {
+            generateMediaPlanPPT(plan);
+          }
+        };
+
+        return (
+          <div className="h-full flex flex-col bg-gray-50">
+            {/* Export toolbar */}
+            <div className="flex items-center justify-between px-4 py-2 bg-white border-b border-gray-200">
+              <div className="text-sm text-gray-600">
+                {plan.campaign.placements?.length || 0} placements | ${plan.totalSpend?.toLocaleString() || '0'} spend
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleExportPDF}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  <FileDown className="w-4 h-4" />
+                  Export PDF
+                </button>
+                <button
+                  onClick={handleExportPPT}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  <Download className="w-4 h-4" />
+                  Export PPT
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <PlanVisualizer
+                mediaPlan={plan}
+                onGroupingChange={(mode) => {
+                  setMediaPlans(prev => ({
+                    ...prev,
+                    [flightId!]: { ...prev[flightId!], groupingMode: mode }
+                  }));
+                }}
+                onUpdatePlacement={(placement) => handleUpdatePlacement(flightId!, placement)}
+                onDeletePlacement={(placementId) => handleDeletePlacement(flightId!, placementId)}
+                onAddPlacement={() => handleAddPlacement(flightId!)}
+              />
+            </div>
+          </div>
+        );
+      }
+
+      default:
+        return (
+          <div className="p-4 text-gray-500">
+            Content for {windowType} will be displayed here.
+          </div>
+        );
+    }
+  };
+
+  // Generate context display text
+  const getContextDisplayText = () => {
+    if (!windowContext?.windowType) return null;
+
+    if (windowContext.flightName) {
+      return `${windowContext.campaignName} › ${windowContext.flightName}`;
+    }
+    if (windowContext.campaignName) {
+      return windowContext.campaignName;
+    }
+    if (windowContext.windowType === 'portfolio') {
+      return 'Portfolio Dashboard';
+    }
+    return windowContext.windowType.charAt(0).toUpperCase() + windowContext.windowType.slice(1);
+  };
+
+  const contextDisplayText = getContextDisplayText();
+
+  // Toggle chat dock/undock
+  const handleToggleChatMode = () => {
+    if (canvasState.chatMode === 'docked') {
+      dispatch({ type: 'UNDOCK_CHAT' });
+    } else {
+      dispatch({ type: 'DOCK_CHAT' });
+    }
+  };
+
+  // Chat component
+  const chatComponent = (
+    <div className="flex flex-col h-full">
+      {/* Chat Header */}
+      <div className="p-3 border-b border-gray-200 bg-gray-50">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onBack}
+              className="p-1 hover:bg-gray-200 rounded transition-colors"
+              title="Back to Client Selection"
+            >
+              <ArrowLeft size={18} className="text-gray-600" />
+            </button>
+            <div>
+              <div className="font-medium text-gray-900">{brand.name}</div>
+              <div className="text-xs text-gray-500">
+                {canvasState.windows.filter(w => w.type !== 'chat').length} window{canvasState.windows.filter(w => w.type !== 'chat').length !== 1 ? 's' : ''} open
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1">
+            {/* Switch to Classic Mode */}
+            <button
+              onClick={onSwitchToClassic}
+              className="p-1.5 hover:bg-gray-200 rounded transition-colors"
+              title="Switch to Classic Mode"
+            >
+              <LayoutGrid size={18} className="text-gray-600" />
+            </button>
+
+            {/* Dock/Undock button */}
+            <button
+              onClick={handleToggleChatMode}
+              className="p-1.5 hover:bg-gray-200 rounded transition-colors"
+              title={canvasState.chatMode === 'docked' ? 'Undock chat (make movable)' : 'Dock chat (anchor to side)'}
+            >
+              {canvasState.chatMode === 'docked'
+                ? <PanelRightClose size={18} className="text-gray-600" />
+                : <PanelRightOpen size={18} className="text-gray-600" />
+              }
+            </button>
+          </div>
+        </div>
+
+        {/* Context Indicator */}
+        {contextDisplayText && (
+          <div className="mt-2 flex items-center gap-2 px-2 py-1.5 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+            <span className="text-xs text-blue-700 font-medium">
+              Context: <span className="text-blue-900">{contextDisplayText}</span>
+            </span>
+            <span className="text-xs text-blue-600 ml-auto">
+              Try "add a flight" or "show performance"
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Chat Interface */}
+      <div className="flex-1 overflow-hidden">
+        <ChatInterface
+          messages={messages}
+          onSendMessage={handleSendMessage}
+          isTyping={isTyping}
+          agentState={agentState}
+        />
+      </div>
+    </div>
+  );
+
+  return (
+    <Canvas
+      chatComponent={chatComponent}
+      renderWindowContent={renderWindowContent}
+    />
+  );
+}
+
+interface WindowedAppProps {
+  brand: Brand;
+  onBrandUpdate: (brand: Brand) => void;
+  onBack: () => void;
+  onSwitchToClassic: () => void;
+}
+
+export function WindowedApp({ brand, onBrandUpdate, onBack, onSwitchToClassic }: WindowedAppProps) {
+  return (
+    <CanvasProvider>
+      <WindowedAppInner
+        brand={brand}
+        onBrandUpdate={onBrandUpdate}
+        onBack={onBack}
+        onSwitchToClassic={onSwitchToClassic}
+      />
+    </CanvasProvider>
+  );
+}
+
+export default WindowedApp;

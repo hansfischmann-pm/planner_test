@@ -119,7 +119,7 @@ export const PlacementDetailPanel: React.FC<PlacementDetailPanelProps> = ({ plac
                             placement.channel === 'Search' && "bg-blue-100 text-blue-800",
                             placement.channel === 'Social' && "bg-pink-100 text-pink-800",
                             placement.channel === 'Display' && "bg-purple-100 text-purple-800",
-                            ['TV', 'Radio', 'OOH', 'Print'].includes(placement.channel) && "bg-orange-100 text-orange-800"
+                            ['TV', 'Radio', 'OOH'].includes(placement.channel) && "bg-orange-100 text-orange-800"
                         )}>
                             {placement.channel}
                         </span>

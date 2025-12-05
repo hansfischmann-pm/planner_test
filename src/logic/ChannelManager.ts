@@ -12,6 +12,15 @@ import { generateBatchPlacements } from '../utils/placementGenerator';
 import { actionHistory } from '../utils/actionHistory';
 
 /**
+ * Unsupported channels that should be rejected with helpful error messages
+ */
+const UNSUPPORTED_CHANNELS = [
+    'print', 'newspaper', 'magazine', 'direct mail', 'mailer', 'flyer',
+    'email', 'sms', 'text message', 'telemarketing', 'cold call',
+    'billboard', 'cinema', 'movie theater'  // Note: OOH supports digital billboards
+];
+
+/**
  * TV Networks that trigger TV channel placements
  */
 const TV_NETWORKS = [
@@ -92,8 +101,7 @@ const CHANNEL_MAP: Record<string, PlacementTemplate['channel']> = {
     'radio': 'Radio',
     'video': 'TV',
     'native': 'Display',
-    'ooh': 'OOH',
-    'print': 'Print'
+    'ooh': 'OOH'
 };
 
 /**
@@ -374,9 +382,9 @@ export class ChannelManager {
     ): AgentMessage | null {
         const lowerInput = input.toLowerCase();
 
-        // Match channel or network
+        // Match channel or network (Print removed - not supported)
         const addMatch = lowerInput.match(
-            /add\s+(search|social|display|tv|radio|ooh|print|espn|cbs|nbc|abc|fox|cnn|msnbc|hgtv|discovery|tlc|bravo|tnt|netflix|hulu|amazon|disney|hbo|apple|paramount|peacock|youtube|roku|tubi|pluto|f1|dazn|sling|nfl|nba|mlb|nhl)/i
+            /add\s+(search|social|display|tv|radio|ooh|espn|cbs|nbc|abc|fox|cnn|msnbc|hgtv|discovery|tlc|bravo|tnt|netflix|hulu|amazon|disney|hbo|apple|paramount|peacock|youtube|roku|tubi|pluto|f1|dazn|sling|nfl|nba|mlb|nhl)/i
         );
 
         if (!addMatch) return null;
@@ -491,6 +499,26 @@ export class ChannelManager {
         }
 
         const vendorInput = showOnlyMatch[1].trim();
+
+        // Check for unsupported channels first
+        const lowerVendor = vendorInput.toLowerCase();
+        for (const unsupported of UNSUPPORTED_CHANNELS) {
+            if (lowerVendor.includes(unsupported) || lowerVendor === unsupported) {
+                // Return helpful message about unsupported channel
+                const alternatives: Record<string, string> = {
+                    'print': 'Try digital display or OOH (out-of-home) instead',
+                    'newspaper': 'Try digital display or local news streaming instead',
+                    'magazine': 'Try digital display or podcast sponsorships instead',
+                    'email': 'Email campaigns are handled separately - this tool focuses on media placements',
+                    'billboard': 'Try "add OOH" for digital out-of-home placements'
+                };
+                const altMessage = alternatives[unsupported] || 'Try Search, Social, Display, TV, Radio, or OOH channels instead';
+                return createAgentMessage(
+                    `Sorry, **${vendorInput}** is not a supported media channel.\n\n${altMessage}.\n\nSupported channels: Search, Social, Display, TV, Radio, Streaming Audio, Podcast, OOH`,
+                    ['Add Display', 'Add Social', 'Add TV']
+                );
+            }
+        }
 
         // Use smart channel detection
         const { channel, vendorName } = getChannelFromVendor(vendorInput);
