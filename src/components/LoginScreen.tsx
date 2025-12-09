@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { User, UserType } from '../types';
 import { SAMPLE_USERS } from '../logic/dummyData';
-import { Mail, Lock, AlertCircle, Layout } from 'lucide-react';
+import { Mail, Lock, AlertCircle, Layout, Loader2 } from 'lucide-react';
 
 interface LoginScreenProps {
     onLogin: (user: User) => void;
@@ -127,7 +127,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
                                 disabled={isLoading}
                                 className={`w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-colors ${isLoading ? 'opacity-75 cursor-not-allowed' : ''}`}
                             >
-                                {isLoading ? 'Signing in...' : 'Sign in'}
+                                {isLoading ? (
+                                    <span className="flex items-center gap-2">
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        Signing in...
+                                    </span>
+                                ) : 'Sign in'}
                             </button>
                         </div>
                     </form>

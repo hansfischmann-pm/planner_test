@@ -107,7 +107,8 @@ const initialCanvasState: CanvasState = {
   chatCollapsed: false,
   chatMode: 'docked',
   chatWindowId: null,
-  wallpaper: { type: 'gradient', value: 'from-slate-900 via-slate-800 to-slate-900' }
+  wallpaper: { type: 'gradient', value: 'from-slate-900 via-slate-800 to-slate-900' },
+  canvasOffset: { x: 0, y: 0 }
 };
 
 // Window positioning constants
@@ -527,6 +528,48 @@ function canvasReducer(state: CanvasState, action: WindowAction): CanvasState {
       return initialCanvasState;
     }
 
+    case 'GATHER_WINDOWS': {
+      // Bring all windows back to visible area with cascade layout
+      const { viewportWidth, viewportHeight } = action;
+      const PADDING = 20;
+      const CASCADE = 30;
+
+      canvasLog(`Gathering windows to viewport: ${viewportWidth}x${viewportHeight}`);
+
+      // Track position index separately so chat windows get proper cascade position
+      let posIndex = 0;
+
+      return {
+        ...state,
+        canvasOffset: { x: 0, y: 0 }, // Reset pan offset
+        windows: state.windows.map((w) => {
+          // Calculate new position with cascade for ALL windows including floating chat
+          const currentIndex = posIndex++;
+          const newX = PADDING + (currentIndex * CASCADE) % Math.max(100, viewportWidth - w.size.width - PADDING * 2);
+          const newY = PADDING + (currentIndex * CASCADE) % Math.max(100, viewportHeight - w.size.height - PADDING * 2 - 48);
+
+          canvasLog(`  Moving ${w.type} (${w.title}) from (${w.position.x}, ${w.position.y}) to (${newX}, ${newY})`);
+
+          return {
+            ...w,
+            position: {
+              x: Math.max(PADDING, Math.min(newX, viewportWidth - w.size.width - PADDING)),
+              y: Math.max(PADDING, Math.min(newY, viewportHeight - w.size.height - PADDING - 48))
+            },
+            // Restore minimized windows so they're visible
+            state: w.state === 'minimized' ? 'normal' : w.state
+          };
+        })
+      };
+    }
+
+    case 'SET_CANVAS_OFFSET': {
+      return {
+        ...state,
+        canvasOffset: action.offset
+      };
+    }
+
     default:
       return state;
   }
@@ -546,6 +589,9 @@ interface CanvasContextType {
   togglePinWindow: (windowId: string) => void;
   getActiveWindow: () => WindowState | null;
   findWindowByEntity: (entityId: string) => WindowState | undefined;
+  gatherWindows: () => void;
+  setCanvasOffset: (offset: { x: number; y: number }) => void;
+  hasOffscreenWindows: () => boolean;
 }
 
 const CanvasContext = createContext<CanvasContextType | null>(null);
@@ -641,6 +687,35 @@ export function CanvasProvider({ children }: { children: ReactNode }) {
     return state.windows.find(w => w.entityId === entityId);
   }, [state.windows]);
 
+  const gatherWindows = useCallback(() => {
+    // Get current viewport dimensions (excluding chat panel)
+    const chatWidth = state.chatMode === 'docked' ? (state.chatCollapsed ? 50 : state.chatWidth) : 0;
+    const viewportWidth = window.innerWidth - chatWidth;
+    const viewportHeight = window.innerHeight;
+    dispatch({ type: 'GATHER_WINDOWS', viewportWidth, viewportHeight });
+  }, [state.chatMode, state.chatCollapsed, state.chatWidth]);
+
+  const setCanvasOffset = useCallback((offset: { x: number; y: number }) => {
+    dispatch({ type: 'SET_CANVAS_OFFSET', offset });
+  }, []);
+
+  const hasOffscreenWindows = useCallback(() => {
+    const chatWidth = state.chatMode === 'docked' ? (state.chatCollapsed ? 50 : state.chatWidth) : 0;
+    const viewportWidth = window.innerWidth - chatWidth;
+    const viewportHeight = window.innerHeight;
+
+    return state.windows.some(w => {
+      if (w.type === 'chat' || w.state === 'minimized') return false;
+      const right = w.position.x + w.size.width;
+      const bottom = w.position.y + w.size.height;
+      // Consider offscreen if more than 80% of window is outside viewport
+      return w.position.x > viewportWidth - 50 ||
+             w.position.y > viewportHeight - 50 ||
+             right < 50 ||
+             bottom < 50;
+    });
+  }, [state.windows, state.chatMode, state.chatCollapsed, state.chatWidth]);
+
   return (
     <CanvasContext.Provider value={{
       state,
@@ -653,7 +728,10 @@ export function CanvasProvider({ children }: { children: ReactNode }) {
       focusWindow,
       togglePinWindow,
       getActiveWindow,
-      findWindowByEntity
+      findWindowByEntity,
+      gatherWindows,
+      setCanvasOffset,
+      hasOffscreenWindows
     }}>
       {children}
     </CanvasContext.Provider>

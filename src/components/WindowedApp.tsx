@@ -11,10 +11,12 @@ import { Canvas } from './Canvas';
 import { ChatInterface } from './ChatInterface';
 import { PlanVisualizer } from './PlanVisualizer';
 import { AudienceInsightsPanel } from './AudienceInsightsPanel';
+import { TemplateLibrary } from './TemplateLibrary';
+import { AsyncButton } from './Spinner';
 import { CanvasProvider, useCanvas } from '../context/CanvasContext';
 import { WindowType } from '../types/windowTypes';
 import { AgentBrain, AgentState, WindowContext } from '../logic/agentBrain';
-import { AgentMessage, MediaPlan, Brand, Campaign, Flight, Placement, Segment } from '../types';
+import { AgentMessage, MediaPlan, Brand, Campaign, Flight, Placement, Segment, CampaignTemplate, Line } from '../types';
 import { generateMediaPlanPDF } from '../utils/pdfGenerator';
 import { generateMediaPlanPPT } from '../utils/pptGenerator';
 import { calculatePlanMetrics, calculateFlightForecast, calculateFlightDelivery, calculateCampaignForecast, calculateCampaignDelivery, generateId } from '../logic/dummyData';
@@ -422,6 +424,7 @@ interface FlightWindowContentProps {
 }
 
 function FlightWindowContent({ flight, campaignName, onToggleStatus, onEditPlan }: FlightWindowContentProps) {
+  const [visibleCount, setVisibleCount] = useState(10);
   const plannedSpend = flight.lines.reduce((sum, l) => sum + l.totalCost, 0);
   const totalImpressions = flight.lines.reduce((sum, l) => sum + (l.forecast?.impressions || 0), 0);
 
@@ -611,7 +614,7 @@ function FlightWindowContent({ flight, campaignName, onToggleStatus, onEditPlan 
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {flight.lines.slice(0, 10).map(line => {
+            {flight.lines.slice(0, visibleCount).map(line => {
               const lineCpm = line.forecast?.impressions ? (line.totalCost / line.forecast.impressions) * 1000 : 0;
               return (
                 <tr key={line.id} className="hover:bg-gray-50">
@@ -625,10 +628,13 @@ function FlightWindowContent({ flight, campaignName, onToggleStatus, onEditPlan 
             })}
           </tbody>
         </table>
-        {flight.lines.length > 10 && (
-          <div className="text-center text-sm text-gray-500 py-2 border-t border-gray-100 bg-gray-50">
-            +{flight.lines.length - 10} more placements
-          </div>
+        {flight.lines.length > visibleCount && (
+          <button
+            onClick={() => setVisibleCount(prev => prev + 10)}
+            className="w-full text-center text-sm text-blue-600 hover:text-blue-700 font-medium py-2 border-t border-gray-100 bg-gray-50 hover:bg-gray-100 transition-colors"
+          >
+            Load More (+{Math.min(10, flight.lines.length - visibleCount)} of {flight.lines.length - visibleCount} remaining)
+          </button>
         )}
       </div>
     </div>
@@ -788,6 +794,81 @@ function ClientListWindowContent({ brands, currentBrandId, onSelectClient, onOpe
   );
 }
 
+// Attribution Report Window Content
+interface AttributionReportContentProps {
+  entityName: string;
+  entityType: 'brand' | 'campaign' | 'flight';
+  channels: string[];
+}
+
+function AttributionReportContent({ entityName, entityType, channels }: AttributionReportContentProps) {
+  // Generate sample attribution data
+  const attributionData = (channels.length > 0 ? channels : ['Search', 'Social', 'Display', 'Video']).map(ch => ({
+    channel: ch,
+    firstTouch: Math.floor(Math.random() * 30 + 10),
+    lastTouch: Math.floor(Math.random() * 40 + 15),
+    linear: Math.floor(Math.random() * 25 + 20),
+    timeDecay: Math.floor(Math.random() * 35 + 12),
+    positionBased: Math.floor(Math.random() * 28 + 18)
+  }));
+
+  const models = ['First Touch', 'Last Touch', 'Linear', 'Time Decay', 'Position Based'];
+
+  return (
+    <div className="p-4 h-full overflow-auto">
+      {/* Header */}
+      <div className="flex items-center gap-3 mb-4">
+        <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
+          <BarChart3 className="w-5 h-5 text-indigo-600" />
+        </div>
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900">Attribution Report</h2>
+          <p className="text-sm text-gray-500">{entityName} • {entityType}</p>
+        </div>
+      </div>
+
+      {/* Attribution Model Comparison */}
+      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden mb-4">
+        <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
+          <h3 className="text-sm font-medium text-gray-700">Multi-Touch Attribution by Channel</h3>
+        </div>
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50 border-b border-gray-200">
+            <tr>
+              <th className="text-left px-4 py-2 text-xs font-medium text-gray-500 uppercase">Channel</th>
+              {models.map(m => (
+                <th key={m} className="text-right px-3 py-2 text-xs font-medium text-gray-500 uppercase">{m}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {attributionData.map(row => (
+              <tr key={row.channel} className="hover:bg-gray-50">
+                <td className="px-4 py-3 font-medium text-gray-900">{row.channel}</td>
+                <td className="px-3 py-3 text-right text-gray-600">{row.firstTouch}%</td>
+                <td className="px-3 py-3 text-right text-gray-600">{row.lastTouch}%</td>
+                <td className="px-3 py-3 text-right text-gray-600">{row.linear}%</td>
+                <td className="px-3 py-3 text-right text-gray-600">{row.timeDecay}%</td>
+                <td className="px-3 py-3 text-right text-gray-600">{row.positionBased}%</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Insights */}
+      <div className="bg-indigo-50 rounded-lg p-4">
+        <h4 className="text-sm font-medium text-indigo-900 mb-2">Key Insights</h4>
+        <ul className="text-sm text-indigo-700 space-y-1">
+          <li>• {attributionData[0]?.channel || 'Search'} shows strongest first-touch attribution</li>
+          <li>• Consider multi-touch models for more accurate ROI measurement</li>
+          <li>• Cross-channel synergy detected between top channels</li>
+        </ul>
+      </div>
+    </div>
+  );
+}
+
 // Client Detail Window - Shows a specific client's overview before switching
 interface ClientDetailWindowContentProps {
   clientBrand: Brand;
@@ -928,6 +1009,109 @@ function WindowedAppInner({ brand, allBrands, onBrandUpdate, onBrandSelect, onBa
   const [messages, setMessages] = useState<AgentMessage[]>([]);
   const [agentState, setAgentState] = useState<AgentState>('INIT');
   const [isTyping, setIsTyping] = useState(false);
+
+  // Template library state - tracks which campaign is showing template library
+  const [templateLibraryCampaignId, setTemplateLibraryCampaignId] = useState<string | null>(null);
+
+  // Handler for when a template is selected from the library
+  const handleTemplateSelect = useCallback((campaignId: string, template: CampaignTemplate) => {
+    // Find the campaign for this template
+    const campaign = brand.campaigns.find(c => c.id === campaignId);
+    if (!campaign) {
+      console.warn(`[Template] Campaign ${campaignId} not found`);
+      setTemplateLibraryCampaignId(null);
+      return;
+    }
+
+    // Calculate total budget from campaign (use 25% of campaign budget for template-based flight)
+    const flightBudget = Math.floor(campaign.budget * 0.25);
+    const today = new Date();
+    const startDate = today.toISOString().split('T')[0];
+
+    // Create placements based on template channel mix
+    const placements: Placement[] = template.channelMix.map((mix) => {
+      const placementBudget = Math.floor(flightBudget * (mix.percentage / 100));
+      const channelName = mix.channel as Line['channel'];
+
+      // Calculate CPM based on channel (rough industry averages)
+      const cpmRates: Record<string, number> = {
+        'Search': 2.50,
+        'Social': 8.00,
+        'Display': 3.50,
+        'TV': 25.00,
+        'Radio': 6.00,
+        'Streaming Audio': 12.00,
+        'Podcast': 20.00,
+        'Place-based Audio': 8.00,
+        'OOH': 5.00
+      };
+      const cpm = cpmRates[channelName] || 10.00;
+      const impressions = Math.floor((placementBudget / cpm) * 1000);
+
+      // Determine duration based on template flight structure (default 30 days)
+      const durationDays = template.flightStructure[0]?.durationDays || 30;
+      const endDate = new Date(today.getTime() + durationDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+      return {
+        id: generateId(),
+        name: `${channelName} - ${template.name}`,
+        channel: channelName,
+        status: 'DRAFT' as const,
+        vendor: 'TBD',
+        adUnit: 'Standard',
+        rate: cpm,
+        costMethod: 'CPM' as const,
+        startDate,
+        endDate,
+        quantity: impressions,
+        totalCost: placementBudget,
+        targeting: {
+          geo: ['United States'],
+          demographics: ['Adults 25-54'],
+          devices: ['Desktop', 'Mobile']
+        }
+      };
+    });
+
+    // Create the new flight with placements
+    const newFlight: Flight = {
+      id: generateId(),
+      campaignId: campaign.id,
+      name: `${template.name} Flight`,
+      budget: flightBudget,
+      startDate,
+      endDate: new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      lines: placements,
+      status: 'DRAFT',
+      tags: template.tags.slice(0, 3),
+      forecast: { impressions: 0, spend: 0, reach: 0, frequency: 0, source: 'Internal' },
+      delivery: { actualImpressions: 0, actualSpend: 0, pacing: 0, status: 'ON_TRACK' }
+    };
+
+    // Update the brand with the new flight
+    onBrandUpdate({
+      ...brand,
+      campaigns: brand.campaigns.map(c =>
+        c.id === campaign.id
+          ? { ...c, flights: [...c.flights, newFlight] }
+          : c
+      )
+    });
+
+    // Close the template library
+    setTemplateLibraryCampaignId(null);
+
+    // Open the new flight window
+    openWindow('flight', `${campaign.name}\\${newFlight.name}`, newFlight.id, brand.id);
+
+    // Show confirmation in chat
+    setMessages(prev => [...prev, {
+      id: generateId(),
+      role: 'agent' as const,
+      content: `Created new flight "${newFlight.name}" with ${placements.length} placements based on the ${template.name} template. Total budget: $${flightBudget.toLocaleString()}.`,
+      timestamp: Date.now()
+    }]);
+  }, [brand, onBrandUpdate, openWindow, setMessages]);
 
   // Chat log persistence - store all messages for later analysis
   const CHAT_LOG_KEY = 'fuseiq-chat-log';
@@ -1563,6 +1747,12 @@ function WindowedAppInner({ brand, allBrands, onBrandUpdate, onBrandSelect, onBa
 
   // Handle message sending
   const handleSendMessage = async (text: string) => {
+    // Silent clear command - clears chat without any response
+    if (text.toLowerCase().trim() === '/clear' || text.toLowerCase().trim() === 'clear chat') {
+      setMessages([]);
+      return;
+    }
+
     const userMsg: AgentMessage = {
       id: `user-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       role: 'user',
@@ -1595,14 +1785,31 @@ function WindowedAppInner({ brand, allBrands, onBrandUpdate, onBrandSelect, onBa
         ? campaign?.flights.find(f => f.id === windowContext.flightId)
         : undefined;
 
-      // "Show flights" or "show flights for this campaign"
+      // "Show flights" or "show flights for this campaign" - only useful from a flight view
+      // to show sibling flights in the same campaign
       if (lowerText.includes('flight') && (lowerText.includes('show') || lowerText.includes('list'))) {
-        if (campaign) {
+        if (campaign && flight) {
+          // User is viewing a flight, show other flights in the campaign
+          const siblingFlights = campaign.flights.filter(f => f.id !== flight.id);
           openWindow('campaign', campaign.name, campaign.id, contextBrand.id);
           const responseMsg: AgentMessage = {
             id: `agent-${Date.now()}`,
             role: 'agent',
-            content: `Here are the flights for **${campaign.name}**:\n\n${campaign.flights.map(f => `• ${f.name} - $${f.budget?.toLocaleString() || 0}`).join('\n')}`,
+            content: siblingFlights.length > 0
+              ? `Showing flights in **${campaign.name}** (${campaign.flights.length} total):\n\n${campaign.flights.map(f => `• ${f.name}${f.id === flight.id ? ' *(current)*' : ''} - $${f.budget?.toLocaleString() || 0}`).join('\n')}`
+              : `**${flight.name}** is the only flight in ${campaign.name}.`,
+            timestamp: Date.now(),
+            suggestedActions: siblingFlights.slice(0, 3).map(f => `Open ${f.name}`)
+          };
+          setMessages(prev => [...prev, responseMsg]);
+          setIsTyping(false);
+          return;
+        } else if (campaign && !flight) {
+          // User is already viewing a campaign - they can already see flights
+          const responseMsg: AgentMessage = {
+            id: `agent-${Date.now()}`,
+            role: 'agent',
+            content: `You're already viewing the campaign window which shows all ${campaign.flights.length} flights. Click on any flight to open it.`,
             timestamp: Date.now(),
             suggestedActions: campaign.flights.slice(0, 3).map(f => `Open ${f.name}`)
           };
@@ -1646,33 +1853,21 @@ function WindowedAppInner({ brand, allBrands, onBrandUpdate, onBrandSelect, onBa
         return;
       }
 
-      // "Show attribution" for current context
+      // "Show attribution" for current context - opens attribution report window
       if (lowerText.includes('attribution')) {
-        const entityName = flight ? `${campaign?.name} › ${flight.name}` : campaign?.name;
-        const entityType = flight ? 'flight' : 'campaign';
+        const entityName = flight ? `${campaign?.name} › ${flight.name}` : campaign?.name || contextBrand.name;
+        const entityType = flight ? 'flight' : campaign ? 'campaign' : 'brand';
+        const entityIdForReport = flight ? `flight:${flight.id}` : campaign ? `campaign:${campaign.id}` : `brand:${contextBrand.id}`;
 
-        // Generate sample attribution data based on context
-        const channels = flight
-          ? [...new Set(flight.lines.map(l => l.channel))]
-          : ['Search', 'Social', 'Display'];
-
-        const attributionData = channels.map(ch => ({
-          channel: ch,
-          firstTouch: Math.floor(Math.random() * 30 + 10),
-          lastTouch: Math.floor(Math.random() * 40 + 15),
-          linear: Math.floor(Math.random() * 25 + 20)
-        }));
-
-        const attributionContent = attributionData.map(a =>
-          `• **${a.channel}**: First Touch ${a.firstTouch}% | Last Touch ${a.lastTouch}% | Linear ${a.linear}%`
-        ).join('\n');
+        // Open the attribution report window
+        openWindow('report', `Attribution: ${entityName}`, entityIdForReport, contextBrand.id);
 
         const responseMsg: AgentMessage = {
           id: `agent-${Date.now()}`,
           role: 'agent',
-          content: `**Attribution Analysis for ${entityName}:**\n\n${attributionContent}\n\n*Attribution models show how credit for conversions is distributed across channels in this ${entityType}.*\n\n📈 **Recommendation:** Consider increasing investment in channels with high first-touch attribution to expand reach.`,
+          content: `Opened **Attribution Report** for ${entityName}.\n\nThe report shows multi-touch attribution across all channels for this ${entityType}.`,
           timestamp: Date.now(),
-          suggestedActions: ['View full attribution report', 'Compare models', 'Export data']
+          suggestedActions: ['Compare models', 'Export data']
         };
         setMessages(prev => [...prev, responseMsg]);
         setIsTyping(false);
@@ -1680,28 +1875,35 @@ function WindowedAppInner({ brand, allBrands, onBrandUpdate, onBrandSelect, onBa
       }
     }
 
-    // Window open commands
-    if (lowerText.includes('open') && lowerText.includes('campaign')) {
-      const campaignName = text.replace(/open|campaign|the/gi, '').trim();
-      const campaign = contextBrand.campaigns.find(c =>
-        c.name.toLowerCase().includes(campaignName.toLowerCase())
-      );
-      if (campaign) {
-        openWindow('campaign', campaign.name, campaign.id, contextBrand.id);
-        const responseMsg: AgentMessage = {
-          id: `agent-${Date.now()}`,
-          role: 'agent',
-          content: `Opened campaign: **${campaign.name}**`,
-          timestamp: Date.now(),
-          suggestedActions: ['Show flights', 'View performance']
-        };
-        setMessages(prev => [...prev, responseMsg]);
-        setIsTyping(false);
-        return;
+    // Window open commands - "open [campaign name]" or "open campaign [name]"
+    if (lowerText.includes('open')) {
+      // Extract what comes after "open" - support both "open campaign X" and "open X"
+      const afterOpen = text.substring(lowerText.indexOf('open') + 4).trim();
+      const searchName = afterOpen.replace(/^(the\s+)?campaign\s*/i, '').trim();
+
+      if (searchName.length > 0) {
+        // Try to find a campaign that matches the search
+        const campaign = contextBrand.campaigns.find(c =>
+          c.name.toLowerCase().includes(searchName.toLowerCase()) ||
+          searchName.toLowerCase().includes(c.name.toLowerCase().split(' ')[0]) // Match first word
+        );
+        if (campaign) {
+          openWindow('campaign', campaign.name, campaign.id, contextBrand.id);
+          const responseMsg: AgentMessage = {
+            id: `agent-${Date.now()}`,
+            role: 'agent',
+            content: `Opened campaign: **${campaign.name}**`,
+            timestamp: Date.now(),
+            suggestedActions: ['Show flights', 'View performance']
+          };
+          setMessages(prev => [...prev, responseMsg]);
+          setIsTyping(false);
+          return;
+        }
       }
     }
 
-    // "Show attribution" - using window context even without explicit "this" reference
+    // "Show attribution" - using window context even without explicit "this" reference - opens report window
     if (lowerText.includes('attribution') && windowContext) {
       // Try to find campaign/flight from current window context
       const ctxCampaign = windowContext.campaignId
@@ -1715,30 +1917,17 @@ function WindowedAppInner({ brand, allBrands, onBrandUpdate, onBrandSelect, onBa
         ? `${ctxCampaign?.name} › ${ctxFlight.name}`
         : ctxCampaign?.name || contextBrand.name;
       const entityType = ctxFlight ? 'flight' : ctxCampaign ? 'campaign' : 'brand';
+      const entityIdForReport = ctxFlight ? `flight:${ctxFlight.id}` : ctxCampaign ? `campaign:${ctxCampaign.id}` : `brand:${contextBrand.id}`;
 
-      // Generate sample attribution data based on context
-      const channels = ctxFlight
-        ? [...new Set(ctxFlight.lines.map(l => l.channel))]
-        : ctxCampaign?.flights.flatMap(f => f.lines.map(l => l.channel)).filter((v, i, a) => a.indexOf(v) === i).slice(0, 4)
-        || ['Search', 'Social', 'Display'];
-
-      const attributionData = (channels.length > 0 ? channels : ['Search', 'Social', 'Display']).map(ch => ({
-        channel: ch,
-        firstTouch: Math.floor(Math.random() * 30 + 10),
-        lastTouch: Math.floor(Math.random() * 40 + 15),
-        linear: Math.floor(Math.random() * 25 + 20)
-      }));
-
-      const attributionContent = attributionData.map(a =>
-        `• **${a.channel}**: First Touch ${a.firstTouch}% | Last Touch ${a.lastTouch}% | Linear ${a.linear}%`
-      ).join('\n');
+      // Open the attribution report window
+      openWindow('report', `Attribution: ${entityName}`, entityIdForReport, contextBrand.id);
 
       const responseMsg: AgentMessage = {
         id: `agent-${Date.now()}`,
         role: 'agent',
-        content: `**Attribution Analysis for ${entityName}:**\n\n${attributionContent}\n\n*Attribution models show how credit for conversions is distributed across channels in this ${entityType}.*\n\n📈 **Recommendation:** Consider increasing investment in channels with high first-touch attribution to expand reach.`,
+        content: `Opened **Attribution Report** for ${entityName}.\n\nThe report shows multi-touch attribution across all channels for this ${entityType}.`,
         timestamp: Date.now(),
-        suggestedActions: ['View full attribution report', 'Compare models', 'Export data']
+        suggestedActions: ['Compare models', 'Export data']
       };
       setMessages(prev => [...prev, responseMsg]);
       setIsTyping(false);
@@ -1999,10 +2188,9 @@ function WindowedAppInner({ brand, allBrands, onBrandUpdate, onBrandSelect, onBa
           openWindow('flight', `${campaign.name}\\${newFlight.name}`, newFlight.id, windowBrand.id);
         };
 
-        // Handler for opening template library (TODO: implement template library window)
+        // Handler for opening template library
         const handleOpenTemplateLibrary = () => {
-          // For now, just show an alert - template library integration pending
-          alert('Template Library coming soon! For now, create a blank flight and use chat to help design your media plan.');
+          setTemplateLibraryCampaignId(campaign.id);
         };
 
         return <CampaignWindowContent
@@ -2228,20 +2416,22 @@ function WindowedAppInner({ brand, allBrands, onBrandUpdate, onBrandSelect, onBa
                 {plan.campaign.placements?.length || 0} placements | ${plan.totalSpend?.toLocaleString() || '0'} spend
               </div>
               <div className="flex items-center gap-2">
-                <button
+                <AsyncButton
                   onClick={handleExportPDF}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                  icon={<FileDown className="w-4 h-4" />}
+                  loadingText="Exporting..."
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
                 >
-                  <FileDown className="w-4 h-4" />
                   Export PDF
-                </button>
-                <button
+                </AsyncButton>
+                <AsyncButton
                   onClick={handleExportPPT}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                  icon={<Download className="w-4 h-4" />}
+                  loadingText="Exporting..."
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
                 >
-                  <Download className="w-4 h-4" />
                   Export PPT
-                </button>
+                </AsyncButton>
               </div>
             </div>
             <div className="flex-1 overflow-hidden">
@@ -2382,6 +2572,49 @@ function WindowedAppInner({ brand, allBrands, onBrandUpdate, onBrandSelect, onBa
               // No need to switch brands - the window will have its own context
               openWindow('campaign', campaignName, campaignId, clientBrand.id);
             }}
+          />
+        );
+      }
+
+      case 'report': {
+        // entityId encodes: entityType:entityId (e.g., "flight:flight-123" or "campaign:campaign-456")
+        // The window title contains the entity name for display
+        let reportEntityName = 'Report';
+        let reportEntityType: 'brand' | 'campaign' | 'flight' = 'campaign';
+        let reportChannels: string[] = [];
+
+        if (entityId) {
+          const [type, id] = entityId.split(':');
+          if (type === 'flight') {
+            reportEntityType = 'flight';
+            // Find the flight to get channels
+            for (const campaign of windowBrand.campaigns) {
+              const flight = campaign.flights.find(f => f.id === id);
+              if (flight) {
+                reportEntityName = `${campaign.name} › ${flight.name}`;
+                reportChannels = [...new Set(flight.lines.map(l => l.channel))];
+                break;
+              }
+            }
+          } else if (type === 'campaign') {
+            reportEntityType = 'campaign';
+            const campaign = windowBrand.campaigns.find(c => c.id === id);
+            if (campaign) {
+              reportEntityName = campaign.name;
+              reportChannels = [...new Set(campaign.flights.flatMap(f => f.lines.map(l => l.channel)))];
+            }
+          } else if (type === 'brand') {
+            reportEntityType = 'brand';
+            reportEntityName = windowBrand.name;
+            reportChannels = [...new Set(windowBrand.campaigns.flatMap(c => c.flights.flatMap(f => f.lines.map(l => l.channel))))];
+          }
+        }
+
+        return (
+          <AttributionReportContent
+            entityName={reportEntityName}
+            entityType={reportEntityType}
+            channels={reportChannels.slice(0, 6)}
           />
         );
       }
@@ -2616,10 +2849,18 @@ function WindowedAppInner({ brand, allBrands, onBrandUpdate, onBrandSelect, onBa
   );
 
   return (
-    <Canvas
-      chatComponent={chatComponent}
-      renderWindowContent={renderWindowContent}
-    />
+    <>
+      <Canvas
+        chatComponent={chatComponent}
+        renderWindowContent={renderWindowContent}
+      />
+      {templateLibraryCampaignId && (
+        <TemplateLibrary
+          onSelectTemplate={(template) => handleTemplateSelect(templateLibraryCampaignId, template)}
+          onClose={() => setTemplateLibraryCampaignId(null)}
+        />
+      )}
+    </>
   );
 }
 

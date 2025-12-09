@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { AgentMessage } from '../types';
 import { AgentState } from '../logic/agentBrain';
-import { Send, Cpu, ChevronDown, ChevronRight } from 'lucide-react';
+import { Send, Cpu, ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
 import { ContextualHelp } from './ContextualHelp';
 import { ForecastCards, ForecastCardData } from './ForecastCards';
 
@@ -426,8 +426,14 @@ class AudienceOptimizer {
         ))}
         {isTyping && (
           <div className="flex justify-start">
-            <div className="bg-gray-100 rounded-2xl rounded-bl-none p-4">
-              <span className="animate-pulse">...</span>
+            <div className="bg-gray-100 rounded-2xl rounded-bl-none p-4 flex items-center gap-2">
+              <Loader2 className="w-4 h-4 text-purple-600 animate-spin" />
+              <span className="text-sm text-gray-600">Thinking</span>
+              <span className="flex gap-0.5">
+                <span className="w-1.5 h-1.5 bg-purple-600 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                <span className="w-1.5 h-1.5 bg-purple-600 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                <span className="w-1.5 h-1.5 bg-purple-600 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+              </span>
             </div>
           </div>
         )}

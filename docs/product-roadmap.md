@@ -304,8 +304,15 @@ This roadmap outlines the planned evolution of the FuseIQ Media Planner from pro
 - ✅ Skeleton loading screens
 - ✅ Empty state components
 - ✅ Confirmation dialogs
-- [ ] Loading spinners for async operations
+- ✅ Loading spinners for async operations
 - [ ] Transition animations between views
+
+### 12.1: Voice Input for Chat 📋 PLANNED
+- [ ] Voice-to-text input in chat interface (microphone button)
+- [ ] Real-time speech transcription using Web Speech API or Whisper
+- [ ] Visual feedback during voice recording (waveform/indicator)
+- [ ] Automatic submission after speech ends (with option to edit)
+- [ ] Support for hands-free workflow during planning sessions
 
 ---
 

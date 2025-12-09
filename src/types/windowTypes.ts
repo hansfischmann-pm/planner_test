@@ -74,6 +74,7 @@ export interface CanvasState {
   chatMode: ChatMode;                  // Is chat docked or floating
   chatWindowId: string | null;         // ID of chat window when floating
   wallpaper: CanvasWallpaper;          // Canvas background wallpaper
+  canvasOffset: { x: number; y: number };  // Canvas pan offset for scrolling
 }
 
 // Default values for new windows
@@ -187,4 +188,6 @@ export type WindowAction =
   | { type: 'UNPIN_WINDOW'; windowId: string }    // Unpin window (temporary, closes with session)
   | { type: 'TOGGLE_PIN_WINDOW'; windowId: string }  // Toggle pin state
   | { type: 'LOAD_STATE'; state: CanvasState }
-  | { type: 'CLEAR_LAYOUT' };
+  | { type: 'CLEAR_LAYOUT' }
+  | { type: 'GATHER_WINDOWS'; viewportWidth: number; viewportHeight: number }  // Bring all windows back to visible area
+  | { type: 'SET_CANVAS_OFFSET'; offset: { x: number; y: number } };  // Pan the canvas viewport

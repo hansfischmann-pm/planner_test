@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Integration, IntegrationStatus } from '../types';
 import { DATA_PROVIDERS } from '../data/segmentLibrary';
-import { Link, RefreshCw, CheckCircle, AlertCircle, Power, ExternalLink, Activity, Search, Filter } from 'lucide-react';
+import { Link, RefreshCw, CheckCircle, AlertCircle, Power, ExternalLink, Activity, Search, Filter, Loader2 } from 'lucide-react';
 
 interface IntegrationDashboardProps {
     onBack: () => void;
@@ -245,7 +245,7 @@ export const IntegrationDashboard: React.FC<IntegrationDashboardProps> = ({ onBa
                                     >
                                         {loading === integration.id ? (
                                             <>
-                                                <RefreshCw className="w-4 h-4 animate-spin" />
+                                                <Loader2 className="w-4 h-4 animate-spin" />
                                                 Connecting...
                                             </>
                                         ) : (

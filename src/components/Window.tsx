@@ -6,6 +6,7 @@
  */
 
 import { useCallback, useRef, useEffect, useState, ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { Rnd } from 'react-rnd';
 import {
   X,
@@ -279,8 +280,8 @@ export function Window({ window: windowState, children, path }: WindowProps) {
           </div>
         </div>
 
-        {/* Context Menu for Title */}
-        {contextMenu && (
+        {/* Context Menu for Title - rendered via portal to avoid transform positioning issues */}
+        {contextMenu && createPortal(
           <div
             className="fixed z-[9999] bg-white rounded-lg shadow-xl border border-gray-200 py-1 min-w-[160px]"
             style={{ left: contextMenu.x, top: contextMenu.y }}
@@ -306,7 +307,8 @@ export function Window({ window: windowState, children, path }: WindowProps) {
             <div className="px-3 py-1 text-xs text-gray-400 truncate max-w-[200px]">
               {path || windowState.title}
             </div>
-          </div>
+          </div>,
+          document.body
         )}
 
         {/* Copied Toast */}

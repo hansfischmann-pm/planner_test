@@ -3,12 +3,14 @@ import { SegmentBrowser } from './SegmentBrowser';
 import { SegmentPill } from './SegmentPill';
 import { AudienceInsightsPanel } from './AudienceInsightsPanel';
 import { MediaPlan, Placement, Segment } from '../types';
-import { BarChart3, LayoutList, Rows, ArrowUp, ArrowDown, ArrowUpDown, ChevronDown, ChevronRight, Trash2, Download, Presentation, Layers, Filter, Plus, Users } from 'lucide-react';
+import { BarChart3, LayoutList, Rows, ArrowUp, ArrowDown, ArrowUpDown, ChevronDown, ChevronRight, Trash2, Download, Presentation, Layers, Filter, Plus, Users, Loader2 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { PlacementDetailPanel } from './PlacementDetailPanel';
 import { PlanMetricsSummary } from './PlanMetricsSummary';
 import { generateMediaPlanPDF } from '../utils/pdfGenerator';
 import { generateMediaPlanPPT } from '../utils/pptGenerator';
+import { ExportSelector } from './ExportSelector';
+import { ExportType, ExportFormat, SectionConfig, ExportContext } from '../config/exportConfig';
 
 type GroupingMode = 'DETAILED' | 'CHANNEL_SUMMARY' | 'VENDOR' | 'SEGMENT' | 'STATUS' | 'FLIGHT' | 'OBJECTIVE' | 'DEVICE' | 'GEO';
 
@@ -123,6 +125,37 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
 
     // Audience Insights State
     const [isInsightsPanelOpen, setIsInsightsPanelOpen] = useState(false);
+
+    // Export loading states
+    const [exportingPDF, setExportingPDF] = useState(false);
+    const [exportingPPT, setExportingPPT] = useState(false);
+    const [showExportSelector, setShowExportSelector] = useState(false);
+
+    // Export context - determines available export types
+    const exportContext: ExportContext = useMemo(() => ({
+        source: 'plan',
+        stage: 'planning',
+        hasPerformanceData: mediaPlan?.campaign.placements?.some(p => p.performance) || false,
+        hasAttributionData: false,
+        hasForecastData: mediaPlan?.campaign.placements?.some(p => p.forecast) || false,
+    }), [mediaPlan]);
+
+    // Handle export from selector
+    const handleExport = (exportType: ExportType, format: ExportFormat, sections: SectionConfig[]) => {
+        if (!mediaPlan) return;
+
+        // Create custom config with selected sections
+        const customConfig = {
+            // Could add section overrides here if needed
+        };
+
+        if (format === 'PDF') {
+            generateMediaPlanPDF(mediaPlan, { exportType, config: customConfig });
+        } else if (format === 'PPT') {
+            generateMediaPlanPPT(mediaPlan, { exportType, config: customConfig });
+        }
+        // CSV/XLSX would go here
+    };
 
     const handleSegmentSelection = (segments: Segment[]) => {
         if (editingPlacementId && mediaPlan?.campaign.placements) {
@@ -842,22 +875,45 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
 
                         {/* Export Buttons */}
                         <div className="flex items-center gap-3">
+                            {/* Quick export buttons */}
                             <button
-                                onClick={() => generateMediaPlanPDF(mediaPlan)}
+                                onClick={async () => {
+                                    setExportingPDF(true);
+                                    await new Promise(r => setTimeout(r, 100));
+                                    generateMediaPlanPDF(mediaPlan);
+                                    setTimeout(() => setExportingPDF(false), 1000);
+                                }}
+                                disabled={exportingPDF}
+                                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors disabled:opacity-50"
+                                title="Quick export to PDF"
+                            >
+                                {exportingPDF ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                                {exportingPDF ? 'Exporting...' : 'PDF'}
+                            </button>
+                            <button
+                                onClick={async () => {
+                                    setExportingPPT(true);
+                                    await new Promise(r => setTimeout(r, 100));
+                                    generateMediaPlanPPT(mediaPlan);
+                                    setTimeout(() => setExportingPPT(false), 1000);
+                                }}
+                                disabled={exportingPPT}
+                                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-orange-600 rounded-md hover:bg-orange-700 transition-colors shadow-sm disabled:opacity-50"
+                                title="Quick export to PowerPoint"
+                            >
+                                {exportingPPT ? <Loader2 className="w-4 h-4 animate-spin" /> : <Presentation className="w-4 h-4" />}
+                                {exportingPPT ? 'Exporting...' : 'PPT'}
+                            </button>
+                            {/* Advanced export with type selection */}
+                            <button
+                                onClick={() => setShowExportSelector(true)}
                                 className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
-                                title="Export to PDF"
+                                title="Choose export type and customize"
                             >
-                                <Download className="w-4 h-4" />
-                                PDF
+                                <Layers className="w-4 h-4" />
+                                Export...
                             </button>
-                            <button
-                                onClick={() => generateMediaPlanPPT(mediaPlan)}
-                                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-orange-600 rounded-md hover:bg-orange-700 transition-colors shadow-sm"
-                                title="Export to PowerPoint"
-                            >
-                                <Presentation className="w-4 h-4" />
-                                PPT
-                            </button>
+                            <div className="w-px h-6 bg-gray-300" />
                             <button
                                 onClick={() => onOpenAudienceInsights ? onOpenAudienceInsights() : setIsInsightsPanelOpen(true)}
                                 className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white font-medium rounded-lg hover:bg-purple-700 transition-colors shadow-sm"
@@ -1067,6 +1123,15 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
                     goals={campaign.numericGoals}
                     onAddSegment={handleQuickAddSegment}
                     onRemoveSegment={handleRemoveSegment}
+                />
+            )}
+
+            {/* Export Type Selector Modal */}
+            {showExportSelector && (
+                <ExportSelector
+                    context={exportContext}
+                    onExport={handleExport}
+                    onClose={() => setShowExportSelector(false)}
                 />
             )}
         </div>
