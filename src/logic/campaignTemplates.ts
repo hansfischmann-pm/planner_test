@@ -1,4 +1,4 @@
-import { CampaignTemplate, Channel, TemplateCategory } from '../types';
+import { CampaignTemplate, TemplateCategory } from '../types';
 
 /**
  * Pre-configured campaign templates for quick-start

@@ -70,6 +70,17 @@ export interface Flight {
     lines: Line[];
     forecast?: ForecastMetrics;
     delivery?: DeliveryMetrics;
+    performance?: {
+        spend: number;
+        impressions: number;
+        clicks: number;
+        conversions: number;
+        ctr: number;
+        cvr: number;
+        cpa: number;
+        roas: number;
+        revenue: number;
+    };
 }
 
 export interface PlanMetrics {

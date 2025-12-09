@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { CampaignTemplate, TemplateCategory } from '../types';
 import { CAMPAIGN_TEMPLATES } from '../logic/campaignTemplates';
-import { X, Search, TrendingUp, ShoppingCart, Briefcase, Rocket, Smartphone, Store } from 'lucide-react';
+import { X, Search, TrendingUp, ShoppingCart, Briefcase, Rocket, Store } from 'lucide-react';
 
 interface TemplateLibraryProps {
     onSelectTemplate: (template: CampaignTemplate) => void;

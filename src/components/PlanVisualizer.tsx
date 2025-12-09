@@ -3,7 +3,7 @@ import { SegmentBrowser } from './SegmentBrowser';
 import { SegmentPill } from './SegmentPill';
 import { AudienceInsightsPanel } from './AudienceInsightsPanel';
 import { MediaPlan, Placement, Segment } from '../types';
-import { BarChart3, LayoutList, Rows, ArrowUp, ArrowDown, ArrowUpDown, ChevronDown, ChevronRight, Trash2, Download, Presentation, Layers, Filter, Plus, Users, Loader2 } from 'lucide-react';
+import { BarChart3, LayoutList, ArrowUp, ArrowDown, ArrowUpDown, ChevronDown, ChevronRight, Trash2, Download, Presentation, Layers, Filter, Plus, Users, Loader2 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { PlacementDetailPanel } from './PlacementDetailPanel';
 import { PlanMetricsSummary } from './PlanMetricsSummary';
@@ -141,7 +141,7 @@ export const PlanVisualizer: React.FC<PlanVisualizerProps> = ({ mediaPlan, onGro
     }), [mediaPlan]);
 
     // Handle export from selector
-    const handleExport = (exportType: ExportType, format: ExportFormat, sections: SectionConfig[]) => {
+    const handleExport = (exportType: ExportType, format: ExportFormat, _sections: SectionConfig[]) => {
         if (!mediaPlan) return;
 
         // Create custom config with selected sections

@@ -18,8 +18,8 @@ const VENDORS_BY_CHANNEL: Record<string, string[]> = {
     OOH: ['Clear Channel', 'Lamar', 'Outfront Media', 'AdQuick', 'Vistar Media']
 };
 
-// Use random ID for user-created items
-const generateId = () => Math.random().toString(36).substring(2, 9);
+// Use random ID for user-created items (exported in case other modules need it)
+export const generateId = () => Math.random().toString(36).substring(2, 9);
 
 const getRandomItem = <T>(arr: readonly T[]): T => arr[Math.floor(Math.random() * arr.length)];
 const getRandomInt = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
@@ -32,7 +32,7 @@ const getWeightedTier = (): 'Enterprise' | 'Mid-Market' | 'SMB' => {
     return 'SMB';
 };
 
-const generateDateRange = (year: number) => {
+export const generateDateRange = (year: number) => {
     const startMonth = getRandomInt(0, 11);
     const endMonth = getRandomInt(startMonth, 11);
     const startDate = new Date(year, startMonth, 1).toISOString().split('T')[0];
@@ -205,7 +205,7 @@ export const generateLargeScaleData = (): Brand[] => {
     const brands: Brand[] = [];
     const brandNames = ['Coca Cola', 'Nike', 'Apple', 'Samsung', 'Toyota', 'Ford', 'Pepsi', 'Verizon', 'AT&T', 'Amazon'];
 
-    brandNames.forEach((name, brandIdx) => {
+    brandNames.forEach((name, _brandIdx) => {
         const campaigns: Campaign[] = [];
         const brandId = name.toLowerCase().replace(' ', '_');
 

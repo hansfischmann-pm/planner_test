@@ -1,6 +1,6 @@
 import React from 'react';
 import { DeliveryRiskAssessment } from '../utils/predictiveAnalytics';
-import { AlertTriangle, TrendingDown, Activity, Clock } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 
 interface DeliveryRiskIndicatorProps {
     riskAssessment: DeliveryRiskAssessment;

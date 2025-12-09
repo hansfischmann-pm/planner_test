@@ -1,8 +1,8 @@
-import React, { useState, useMemo } from 'react';
-import { Campaign, ConversionPath, AttributionModel, AttributionResult, IncrementalityTest } from '../types';
+import { useState, useMemo } from 'react';
+import { Campaign, AttributionModel } from '../types';
 import { AttributionEngine } from '../utils/attributionEngine';
 import { generateConversionPaths } from '../logic/dummyData';
-import { TrendingUp, DollarSign, Target, Percent, BarChart3, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { TrendingUp, DollarSign, Target, BarChart3, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { ConversionPathVisualizer } from './ConversionPathVisualizer';
 import { ConversionPathSankey } from './ConversionPathSankey';
 import { IncrementalityPanel } from './IncrementalityPanel';

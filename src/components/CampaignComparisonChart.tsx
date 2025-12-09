@@ -20,7 +20,7 @@ export const CampaignComparisonChart: React.FC<CampaignComparisonChartProps> = (
     // Determine scales
     const maxSpend = Math.max(...activeCampaigns.map(c => c.performance?.spend || 0)) * 1.1;
     const maxRoas = Math.max(...activeCampaigns.map(c => c.performance?.roas || 0)) * 1.1;
-    const minRoas = Math.min(0, ...activeCampaigns.map(c => c.performance?.roas || 0)); // Usually 0 base
+    // minRoas would be used for Y-axis lower bound if we needed negative values
 
     const padding = 40;
     const width = 600;
@@ -67,7 +67,7 @@ export const CampaignComparisonChart: React.FC<CampaignComparisonChartProps> = (
                     <text x={10} y={height / 2} transform={`rotate(-90 10 ${height / 2})`} textAnchor="middle" className="text-xs fill-gray-500 font-medium">ROAS (x)</text>
 
                     {/* Data Points */}
-                    {activeCampaigns.map((campaign, i) => {
+                    {activeCampaigns.map((campaign, _i) => {
                         const x = getX(campaign.performance!.spend);
                         const y = getY(campaign.performance!.roas);
                         const radius = 6 + Math.min(10, (campaign.performance!.revenue / 100000)); // Size by revenue

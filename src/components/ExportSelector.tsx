@@ -20,7 +20,6 @@ import {
   FileBarChart,
   BarChart3,
   PieChart,
-  Users,
   TrendingUp,
   Briefcase,
   Layers,
@@ -77,7 +76,7 @@ export const ExportSelector: React.FC<ExportSelectorProps> = ({
   );
   const [isExporting, setIsExporting] = useState(false);
 
-  const currentConfig = EXPORT_TYPE_CONFIGS[selectedType];
+  // Config is accessed directly via EXPORT_TYPE_CONFIGS[selectedType] where needed
 
   // Update sections when type changes
   const handleTypeChange = (type: ExportType) => {

@@ -58,12 +58,10 @@ export const AudienceOverlapChart: React.FC<AudienceOverlapChartProps> = ({ segm
                                             )}
                                         </div>
                                     </td>
-                                    {segments.map((colSeg, colIdx) => {
+                                    {segments.map((_colSeg, colIdx) => {
                                         const overlap = overlapMatrix[rowIdx][colIdx];
-                                        const intensity = Math.floor(overlap * 100);
-                                        const bgColor = rowIdx === colIdx
-                                            ? 'bg-gray-100'
-                                            : `bg-purple-${Math.min(900, Math.max(100, Math.floor(intensity / 10) * 100))}`;
+                                        // intensity and bgColor are computed for potential Tailwind class approach
+                                        // Currently using inline styles for finer gradient control
 
                                         return (
                                             <td

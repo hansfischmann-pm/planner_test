@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Placement, Creative, Segment } from '../types';
+import { Placement, Creative } from '../types';
 import { X, Image as ImageIcon, Film, Upload, Plus, Users } from 'lucide-react';
 import { clsx } from 'clsx';
 import { CreativePerformanceCard } from './CreativePerformanceCard';

@@ -1,7 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { Integration, IntegrationStatus } from '../types';
 import { DATA_PROVIDERS } from '../data/segmentLibrary';
-import { Link, RefreshCw, CheckCircle, AlertCircle, Power, ExternalLink, Activity, Search, Filter, Loader2 } from 'lucide-react';
+import { Link, RefreshCw, CheckCircle, Power, Search, Loader2 } from 'lucide-react';
 
 interface IntegrationDashboardProps {
     onBack: () => void;

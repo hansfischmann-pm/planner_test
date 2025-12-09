@@ -1,5 +1,5 @@
 import { Segment } from '../types';
-import { calculateOverlapMatrix, calculateUniqueReach } from './audienceInsights';
+import { calculateUniqueReach } from './audienceInsights';
 
 /**
  * Find the optimal set of segments to remove to maximize reach efficiency
@@ -59,7 +59,7 @@ function calculateEfficiency(segments: Segment[]): number {
 /**
  * Calculate average overlap for a segment against all others
  */
-export function calculateAverageOverlap(segment: Segment, otherSegments: Segment[], overlapMatrix: number[][], segmentIndex: number): number {
+export function calculateAverageOverlap(_segment: Segment, otherSegments: Segment[], overlapMatrix: number[][], segmentIndex: number): number {
     if (otherSegments.length === 0) return 0;
 
     let totalOverlap = 0;

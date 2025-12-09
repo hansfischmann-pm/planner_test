@@ -1,6 +1,6 @@
 import React from 'react';
 import { BudgetPacingAnalysis } from '../utils/predictiveAnalytics';
-import { TrendingUp, TrendingDown, Minus, DollarSign } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 
 interface BudgetPacingAlertProps {
     pacing: BudgetPacingAnalysis;

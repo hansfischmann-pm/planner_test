@@ -181,7 +181,6 @@ export function calculateAudienceOverlap(placements: Placement[]): {
 
     // Calculate pairwise overlaps
     let totalOverlap = 0;
-    const channels = placementReaches.map(pr => pr.channel);
 
     for (let i = 0; i < placementReaches.length; i++) {
         for (let j = i + 1; j < placementReaches.length; j++) {
@@ -223,10 +222,10 @@ export function calculateAudienceOverlap(placements: Placement[]): {
 export function forecastCampaign(
     placements: Placement[],
     startDate: string,
-    endDate: string
+    _endDate: string  // Kept for API compatibility and future duration calculations
 ): ForecastResult {
     const start = new Date(startDate);
-    const end = new Date(endDate);
+    // endDate is kept for future duration-based calculations
     const month = start.getMonth();
 
     // Aggregate forecasts from all placements
@@ -396,7 +395,7 @@ export function formatForecastResult(forecast: ForecastResult): string {
 /**
  * Format metric value (e.g., 1000000 -> "1.0M", 50000 -> "50K")
  */
-function formatMetricValue(value: number): string {
+export function formatMetricValue(value: number): string {
     if (value >= 1000000) {
         return (value / 1000000).toFixed(1) + 'M';
     } else if (value >= 1000) {
@@ -409,7 +408,7 @@ function formatMetricValue(value: number): string {
 /**
  * Wrap text to fit within card width
  */
-function wrapText(text: string, maxWidth: number): string[] {
+export function wrapText(text: string, maxWidth: number): string[] {
     const words = text.split(' ');
     const lines: string[] = [];
     let currentLine = '';

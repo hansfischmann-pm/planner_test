@@ -54,7 +54,7 @@ export const AudienceInsightsPanel: React.FC<AudienceInsightsPanelProps> = ({
         let best = currentSegments[0];
         let bestROAS = 0;
 
-        segmentPerformance.forEach((perf, segmentId) => {
+        segmentPerformance.forEach((perf, _segmentId) => {
             if (perf.roas > bestROAS) {
                 bestROAS = perf.roas;
                 best = perf.segment;
@@ -329,7 +329,7 @@ export const AudienceInsightsPanel: React.FC<AudienceInsightsPanelProps> = ({
                                                 {currentSegments.slice(0, 3).map((segment, idx) => {
                                                     // Calculate average overlap for this segment
                                                     let avgOverlap = 0;
-                                                    currentSegments.forEach((otherSeg, otherIdx) => {
+                                                    currentSegments.forEach((_otherSeg, otherIdx) => {
                                                         if (idx !== otherIdx) {
                                                             avgOverlap += overlapMatrix[idx]?.[otherIdx] || 0;
                                                         }
@@ -550,7 +550,7 @@ export const AudienceInsightsPanel: React.FC<AudienceInsightsPanelProps> = ({
                                     </div>
 
                                     <div className="space-y-2">
-                                        {segmentToRemove.map((item: any, idx: number) => (
+                                        {segmentToRemove.map((item: any, _idx: number) => (
                                             <label
                                                 key={item.segment.id}
                                                 className="flex items-center gap-3 p-3 bg-orange-50 border border-orange-200 rounded-lg hover:bg-orange-100 cursor-pointer transition-colors"

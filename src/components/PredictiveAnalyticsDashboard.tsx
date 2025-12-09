@@ -5,8 +5,7 @@ import {
     analyzeBudgetPacing,
     predictPerformance,
     assessDeliveryRisk,
-    identifyOpportunities,
-    PredictiveAlert
+    identifyOpportunities
 } from '../utils/predictiveAnalytics';
 import { PredictiveAlertsPanel } from './PredictiveAlertsPanel';
 import { DeliveryRiskIndicator } from './DeliveryRiskIndicator';

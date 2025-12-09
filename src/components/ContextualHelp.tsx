@@ -9,7 +9,7 @@ interface ContextualHelpProps {
     onSendPrompt: (prompt: string) => void;
 }
 
-export const ContextualHelp: React.FC<ContextualHelpProps> = ({ state, currentView, hasPlan, onSendPrompt }) => {
+export const ContextualHelp: React.FC<ContextualHelpProps> = ({ state: _state, currentView, hasPlan, onSendPrompt }) => {
     const [isExpanded, setIsExpanded] = useState(false);
 
     const getPrompts = (): { category: string; prompts: string[] }[] => {

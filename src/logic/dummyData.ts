@@ -1,4 +1,4 @@
-import { Campaign, Line, CostMethod, Brand, User, Flight, MediaPlan, AgentInfo, AgentExecution, PlanMetrics, ForecastMetrics, DeliveryMetrics, ForecastSource, Creative, ConversionPath, Touchpoint, ChannelType } from '../types';
+import { Campaign, Line, CostMethod, Brand, User, Flight, AgentInfo, PlanMetrics, ForecastMetrics, DeliveryMetrics, ForecastSource, Creative, ConversionPath, Touchpoint, ChannelType } from '../types';
 
 // Generate a random ID (for user-created entities)
 export const generateId = () => Math.random().toString(36).substr(2, 9);
@@ -146,7 +146,7 @@ export const SAMPLE_AGENTS: AgentInfo[] = [
 
 // --- Generators ---
 
-const generateForecast = (channel: string, vendor: string, budget: number): { forecast: ForecastMetrics, delivery: DeliveryMetrics } => {
+const generateForecast = (channel: string, _vendor: string, budget: number): { forecast: ForecastMetrics, delivery: DeliveryMetrics } => {
     // 1. Determine Source
     let source: ForecastSource = 'Internal';
     if (channel === 'TV') source = 'Nielsen';
@@ -213,7 +213,7 @@ const generateForecast = (channel: string, vendor: string, budget: number): { fo
     return { forecast, delivery };
 };
 
-export function generateLine(channel: 'Search' | 'Social' | 'Display' | 'TV' | 'Radio' | 'Streaming Audio' | 'Podcast' | 'Place-based Audio' | 'OOH', advertiser: string, networkName?: string, programName?: string): Line {
+export function generateLine(channel: 'Search' | 'Social' | 'Display' | 'TV' | 'Radio' | 'Streaming Audio' | 'Podcast' | 'Place-based Audio' | 'OOH', _advertiser: string, networkName?: string, programName?: string): Line {
     const vendors = VENDORS;
 
     const adUnits: Record<string, string[]> = {
@@ -383,17 +383,8 @@ export function generateLine(channel: 'Search' | 'Social' | 'Display' | 'TV' | '
     const conversions = Math.floor(impressions * cvr);
     const revenue = conversions * (50 + Math.random() * 100);
 
-    const performance = {
-        impressions: Math.floor(impressions),
-        clicks,
-        conversions,
-        ctr,
-        cvr,
-        cpc: clicks > 0 ? totalCost / clicks : 0,
-        cpa: conversions > 0 ? totalCost / conversions : 0,
-        roas: totalCost > 0 ? revenue / totalCost : 0,
-        status: 'ACTIVE' as const
-    };
+    // Performance metrics computed above (impressions, clicks, conversions, etc.)
+    // are used for forecast generation, not directly attached to line
 
     // Buying Type Logic
     const buyingRoll = Math.random();

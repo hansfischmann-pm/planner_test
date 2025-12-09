@@ -13,8 +13,6 @@ import {
   WindowType,
   WindowPosition,
   WindowSize,
-  ChatMode,
-  CanvasWallpaper,
   WINDOW_CONFIGS,
   WINDOW_CASCADE_OFFSET
 } from '../types/windowTypes';

@@ -1,4 +1,4 @@
-import { Integration, IntegrationStatus } from '../types';
+import { Integration } from '../types';
 
 export const AVAILABLE_INTEGRATIONS: Integration[] = [
     {

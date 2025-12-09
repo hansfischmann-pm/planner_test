@@ -83,13 +83,8 @@ function issueToRecommendation(
     const placement = placements.find(p => p.id === issue.placementId);
     if (!placement && issue.placementId !== 'PLAN_LEVEL') return null;
 
-    // Determine priority based on severity and impact
-    let priority: 'HIGH' | 'MEDIUM' | 'LOW' = 'LOW';
-    if (issue.severity === 'CRITICAL' || (issue.estimatedWaste && Math.abs(issue.estimatedWaste) > 5000)) {
-        priority = 'HIGH';
-    } else if (issue.severity === 'WARNING' || (issue.estimatedWaste && Math.abs(issue.estimatedWaste) > 2000)) {
-        priority = 'MEDIUM';
-    }
+    // Priority is determined by each switch branch based on specific criteria
+    // Each return statement includes the appropriate priority level
 
     // Generate specific recommendations based on issue type
     switch (issue.type) {

@@ -192,7 +192,7 @@ export class ContextManager {
     /**
      * Detect expertise level from user language
      */
-    private updateUserProfile(context: ConversationContext, message: string, intent?: DetectedIntent): void {
+    private updateUserProfile(context: ConversationContext, message: string, _intent?: DetectedIntent): void {
         const lowercaseMsg = message.toLowerCase();
 
         // Expert indicators

@@ -1,4 +1,4 @@
-import { Campaign, Flight, Line, DeliveryMetrics, ForecastMetrics, PerformanceMetrics } from '../types';
+import { Campaign, Flight, Line } from '../types';
 
 // ===== Type Definitions =====
 
@@ -191,9 +191,12 @@ export function predictPerformance(
         currentValue = entity.delivery?.actualImpressions || entity.performance?.impressions || 0;
         goalValue = entity.forecast?.impressions;
     } else if (entity.performance) {
-        currentValue = entity.performance[metric] || 0;
+        // Access metric dynamically - cast to any to handle varying performance types
+        currentValue = (entity.performance as Record<string, number>)[metric] || 0;
         if ('numericGoals' in entity && entity.numericGoals) {
-            goalValue = entity.numericGoals[metric];
+            // numericGoals only has certain metrics - check before accessing
+            const goals = entity.numericGoals as Record<string, number | undefined>;
+            goalValue = goals[metric];
         }
     }
 

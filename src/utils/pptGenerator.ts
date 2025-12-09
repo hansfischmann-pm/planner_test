@@ -210,7 +210,7 @@ export const generateSimplePPT = (mediaPlan: MediaPlan) => {
 
 export const generatePostCampaignPPT = (
   mediaPlan: MediaPlan,
-  performanceData?: ExportData['performance']
+  _performanceData?: ExportData['performance']
 ) => {
   generateMediaPlanPPT(mediaPlan, {
     exportType: 'POST_CAMPAIGN',
@@ -227,7 +227,7 @@ export const generateCampaignBriefPPT = (mediaPlan: MediaPlan) => {
 
 export const generateAttributionPPT = (
   mediaPlan: MediaPlan,
-  attributionData?: ExportData['attribution']
+  _attributionData?: ExportData['attribution']
 ) => {
   generateMediaPlanPPT(mediaPlan, {
     exportType: 'ATTRIBUTION_REPORT',

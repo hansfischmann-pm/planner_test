@@ -14,9 +14,6 @@ import {
   TableStyleConfig,
   ChartConfig,
   SectionConfig,
-  DEFAULT_BRANDING,
-  DEFAULT_TABLE_STYLE,
-  DEFAULT_CHART_CONFIG,
 } from '../config/exportConfig';
 
 // =============================================================================
@@ -611,7 +608,7 @@ export const pptSections = {
 
     const chartData = Object.entries(channelData)
       .sort((a, b) => b[1] - a[1])
-      .map(([channel, spend], idx) => ({
+      .map(([channel, spend], _idx) => ({
         name: channel,
         labels: [channel],
         values: [spend],

@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { ConversionPath, Touchpoint } from '../types';
+import { ConversionPath } from '../types';
 import { ArrowRight, DollarSign, Clock, MousePointerClick } from 'lucide-react';
 
 interface ConversionPathVisualizerProps {

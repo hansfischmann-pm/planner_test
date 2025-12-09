@@ -11,7 +11,6 @@ import {
   ExportType,
   ExportConfig,
   DEFAULT_EXPORT_CONFIG,
-  EXPORT_TYPE_CONFIGS,
   getEnabledSections,
 } from '../config/exportConfig';
 import { PDFContext, ExportData, renderPDFSection } from './exportSections';
@@ -182,7 +181,7 @@ export const generateSimplePDF = (mediaPlan: MediaPlan) => {
 
 export const generatePostCampaignPDF = (
   mediaPlan: MediaPlan,
-  performanceData?: ExportData['performance']
+  _performanceData?: ExportData['performance']
 ) => {
   generateMediaPlanPDF(mediaPlan, {
     exportType: 'POST_CAMPAIGN',
@@ -192,7 +191,7 @@ export const generatePostCampaignPDF = (
 
 export const generateAttributionPDF = (
   mediaPlan: MediaPlan,
-  attributionData?: ExportData['attribution']
+  _attributionData?: ExportData['attribution']
 ) => {
   generateMediaPlanPDF(mediaPlan, {
     exportType: 'ATTRIBUTION_REPORT',
@@ -202,7 +201,7 @@ export const generateAttributionPDF = (
 
 export const generatePortfolioPDF = (
   mediaPlan: MediaPlan,
-  campaigns?: MediaPlan['campaign'][]
+  _campaigns?: MediaPlan['campaign'][]
 ) => {
   generateMediaPlanPDF(mediaPlan, {
     exportType: 'PORTFOLIO_SUMMARY',

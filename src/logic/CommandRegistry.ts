@@ -5,7 +5,7 @@
  * Commands are organized by category and include priority for disambiguation.
  */
 
-import { AgentContext, CommandResult } from './AgentContext';
+// CommandRegistry command patterns - no runtime imports needed
 
 /**
  * Command categories for organization and routing

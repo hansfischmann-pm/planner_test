@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Segment } from '../types';
-import { SEGMENT_LIBRARY, SegmentCategory, searchSegments, getSegmentsByCategory } from '../data/segmentLibrary';
+import { SEGMENT_LIBRARY, SegmentCategory, getSegmentsByCategory } from '../data/segmentLibrary';
 import { Search, X, Users, DollarSign, Check, Filter } from 'lucide-react';
 
 interface SegmentBrowserProps {

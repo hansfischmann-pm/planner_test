@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { User, UserType } from '../types';
+import { User } from '../types';
 import { SAMPLE_USERS } from '../logic/dummyData';
 import { Mail, Lock, AlertCircle, Layout, Loader2 } from 'lucide-react';
 

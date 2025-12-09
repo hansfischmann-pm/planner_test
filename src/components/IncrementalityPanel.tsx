@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { IncrementalityTest, ChannelType } from '../types';
+import { IncrementalityTest } from '../types';
 import { calculateIncrementality, formatLift, getRecommendationMessage } from '../utils/incrementalityCalculator';
 import { TrendingUp, TrendingDown, AlertCircle, CheckCircle, Info } from 'lucide-react';
 
@@ -220,7 +220,7 @@ export const IncrementalityPanel: React.FC<IncrementalityPanelProps> = ({ tests 
                 </div>
             ) : tests.length > 0 ? (
                 <div className="divide-y divide-gray-200 dark:divide-gray-700">
-                    {testsWithResults.map((test, index) => (
+                    {testsWithResults.map((test, _index) => (
                         <div key={test.id} className="p-6">
                             {/* Test Header */}
                             <div className="flex items-center justify-between mb-4">

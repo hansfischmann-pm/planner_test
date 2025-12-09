@@ -927,10 +927,7 @@ function App() {
                         )}
                         <button
                             onClick={() => setView('AGENCY_ANALYTICS')}
-                            className={`w-full flex items-center gap-2 px-2 py-2 text-sm font-medium rounded-lg transition-colors ${view === 'AGENCY_ANALYTICS'
-                                ? 'bg-purple-50 text-purple-700 dark:bg-purple-900/20 dark:text-purple-300'
-                                : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
-                                }`}
+                            className="w-full flex items-center gap-2 px-2 py-2 text-sm font-medium rounded-lg transition-colors text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
                             title={sidebarCollapsed ? 'Analytics' : undefined}
                         >
                             <BarChart2 className="w-4 h-4 flex-shrink-0" />
@@ -1033,7 +1030,6 @@ function App() {
                                 </div>
                             )}
                             {view === 'PREDICTIVE_ANALYTICS' && 'Predictive Analytics'}
-                            {view === 'AGENCY_ANALYTICS' && 'Agency Analytics'}
                         </h1>
                     </div>
 
@@ -1161,7 +1157,7 @@ function App() {
                     <div className="h-full overflow-y-auto">
                         <PortfolioDashboard
                             portfolio={initialPortfolio}
-                            onSelectCampaign={(campaignId) => {
+                            onSelectCampaign={() => {
                                 // For now, just switch to campaign list,
                                 // in a real app we'd load the specific campaign
                                 setView('CAMPAIGN_LIST');

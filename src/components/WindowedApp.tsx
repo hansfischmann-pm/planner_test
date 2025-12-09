@@ -1289,7 +1289,7 @@ function WindowedAppInner({ brand, allBrands, onBrandUpdate, onBrandSelect, onBa
   }, []);
 
   // Open a flight in the plan editor (kept for chat command support)
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  // @ts-expect-error Intentionally unused - kept for future chat command integration
   const _openFlightInPlanEditor = useCallback((flightId: string, flightName: string, campaignName: string) => {
     windowLog('Opening flight in plan editor:', flightId, flightName);
 
@@ -1445,7 +1445,7 @@ function WindowedAppInner({ brand, allBrands, onBrandUpdate, onBrandSelect, onBa
   }, [findBrandByFlightId, brand, onBrandUpdate, updateBrandMetrics]);
 
   // Handle activate/pause flight (global version - kept for chat commands)
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  // @ts-expect-error Intentionally unused - kept for future chat command integration
   const _handleToggleFlightStatus = useCallback((flightId: string, newStatus: 'ACTIVE' | 'DRAFT') => {
     // Find the brand containing this flight
     const targetBrand = findBrandByFlightId(flightId) || brand;
