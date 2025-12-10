@@ -27,7 +27,8 @@ export type CommandCategory =
     | 'UNDO_REDO'
     | 'HELP'
     | 'INVENTORY'
-    | 'WINDOW_MANAGEMENT';
+    | 'WINDOW_MANAGEMENT'
+    | 'ATTRIBUTION';
 
 /**
  * Command definition structure
@@ -745,6 +746,231 @@ export const WINDOW_MANAGEMENT_COMMANDS: CommandDefinition[] = [
 ];
 
 // =============================================================================
+// ATTRIBUTION COMMANDS (Phase 2 - Attribution + Chat Integration)
+// =============================================================================
+
+export const ATTRIBUTION_COMMANDS: CommandDefinition[] = [
+    // --- Navigation Commands ---
+    {
+        id: 'open_attribution',
+        name: 'Open Attribution Dashboard',
+        category: 'ATTRIBUTION',
+        patterns: [
+            /(?:show|open|view|display)\s+(?:me\s+)?(?:the\s+)?attribution(?:\s+dashboard)?$/i,
+            /(?:go\s+to|navigate\s+to)\s+attribution/i,
+            /attribution\s+(?:dashboard|analysis|view)$/i
+        ],
+        priority: 90,
+        description: 'Open the full attribution dashboard',
+        examples: ['show attribution', 'open attribution dashboard', 'go to attribution']
+    },
+    {
+        id: 'open_attribution_overview',
+        name: 'Open Attribution Overview',
+        category: 'ATTRIBUTION',
+        patterns: [
+            /(?:show|open|view)\s+(?:me\s+)?(?:the\s+)?attribution\s+overview/i,
+            /(?:show|open|view)\s+(?:me\s+)?(?:the\s+)?(?:channel\s+)?attribution\s+(?:breakdown|summary|table)/i
+        ],
+        priority: 88,
+        description: 'Open the attribution overview view',
+        examples: ['show attribution overview', 'view channel attribution breakdown']
+    },
+    {
+        id: 'open_incrementality',
+        name: 'Open Incrementality Testing',
+        category: 'ATTRIBUTION',
+        patterns: [
+            /(?:show|open|view)\s+(?:me\s+)?(?:the\s+)?incrementality(?:\s+testing)?/i,
+            /(?:show|open|view)\s+(?:me\s+)?(?:the\s+)?(?:lift|holdout)\s+test(?:s|ing)?/i,
+            /(?:go\s+to|navigate\s+to)\s+incrementality/i
+        ],
+        priority: 88,
+        description: 'Open the incrementality testing view',
+        examples: ['show incrementality', 'open lift testing', 'view holdout tests']
+    },
+    {
+        id: 'open_time_analysis',
+        name: 'Open Time Analysis',
+        category: 'ATTRIBUTION',
+        patterns: [
+            /(?:show|open|view)\s+(?:me\s+)?(?:the\s+)?time\s+(?:analysis|to\s+conversion)/i,
+            /(?:show|open|view)\s+(?:me\s+)?conversion\s+(?:time|velocity)/i,
+            /how\s+long\s+(?:does\s+it\s+take|until)\s+(?:users?\s+)?convert/i
+        ],
+        priority: 88,
+        description: 'Open the time-to-conversion analysis view',
+        examples: ['show time analysis', 'view conversion time', 'how long until users convert']
+    },
+    {
+        id: 'open_frequency_analysis',
+        name: 'Open Touchpoint Frequency',
+        category: 'ATTRIBUTION',
+        patterns: [
+            /(?:show|open|view)\s+(?:me\s+)?(?:the\s+)?(?:touchpoint\s+)?frequency/i,
+            /(?:show|open|view)\s+(?:me\s+)?touchpoint\s+(?:analysis|count)/i,
+            /how\s+many\s+(?:touchpoints?|interactions?)\s+(?:before|until|to)\s+convert/i
+        ],
+        priority: 88,
+        description: 'Open the touchpoint frequency analysis view',
+        examples: ['show frequency analysis', 'view touchpoint count', 'how many touchpoints to convert']
+    },
+    {
+        id: 'open_model_comparison',
+        name: 'Open Model Comparison',
+        category: 'ATTRIBUTION',
+        patterns: [
+            /(?:show|open|view)\s+(?:me\s+)?(?:the\s+)?model\s+comparison/i,
+            /compare\s+(?:attribution\s+)?models/i,
+            /(?:show|view)\s+(?:me\s+)?(?:all\s+)?(?:attribution\s+)?models/i,
+            /(?:which|what)\s+model\s+(?:is\s+best|should\s+I\s+use)/i
+        ],
+        priority: 88,
+        description: 'Open the attribution model comparison view',
+        examples: ['show model comparison', 'compare models', 'which model is best']
+    },
+    // --- Pop-out Commands ---
+    {
+        id: 'popout_attribution_view',
+        name: 'Pop Out Attribution View',
+        category: 'ATTRIBUTION',
+        patterns: [
+            /pop\s*out\s+(?:the\s+)?(overview|incrementality|time|frequency|model)/i,
+            /open\s+(overview|incrementality|time|frequency|model)\s+in\s+(?:a\s+)?new\s+window/i,
+            /(?:detach|separate)\s+(?:the\s+)?(overview|incrementality|time|frequency|model)/i
+        ],
+        priority: 92,
+        description: 'Open an attribution view in a separate window',
+        examples: ['pop out overview', 'open time in new window', 'detach incrementality']
+    },
+    // --- Model Commands ---
+    {
+        id: 'change_attribution_model',
+        name: 'Change Attribution Model',
+        category: 'ATTRIBUTION',
+        patterns: [
+            /(?:switch|change|set)\s+(?:to\s+)?(?:the\s+)?(first[- ]?touch|last[- ]?touch|linear|time[- ]?decay|position[- ]?based)\s*(?:model|attribution)?/i,
+            /use\s+(?:the\s+)?(first[- ]?touch|last[- ]?touch|linear|time[- ]?decay|position[- ]?based)\s*(?:model|attribution)?/i,
+            /(?:attribution\s+)?model\s*[=:]\s*(first[- ]?touch|last[- ]?touch|linear|time[- ]?decay|position[- ]?based)/i
+        ],
+        priority: 85,
+        description: 'Change the active attribution model',
+        examples: ['switch to first touch', 'use linear model', 'change to time decay']
+    },
+    {
+        id: 'explain_attribution_model',
+        name: 'Explain Attribution Model',
+        category: 'ATTRIBUTION',
+        patterns: [
+            /(?:explain|what\s+is|tell\s+me\s+about)\s+(?:the\s+)?(first[- ]?touch|last[- ]?touch|linear|time[- ]?decay|position[- ]?based)(?:\s+(?:model|attribution))?/i,
+            /how\s+does\s+(?:the\s+)?(first[- ]?touch|last[- ]?touch|linear|time[- ]?decay|position[- ]?based)\s*(?:model)?\s*work/i,
+            /(?:what's|what\s+is)\s+the\s+difference\s+between\s+(?:attribution\s+)?models/i
+        ],
+        priority: 82,
+        description: 'Explain how an attribution model works',
+        examples: ['explain time decay', 'what is first touch attribution', 'how does linear model work']
+    },
+    // --- Incrementality Commands ---
+    {
+        id: 'create_incrementality_test',
+        name: 'Create Incrementality Test',
+        category: 'ATTRIBUTION',
+        patterns: [
+            /(?:create|set\s+up|start|run)\s+(?:a\s+)?(?:new\s+)?(?:incrementality|lift|holdout)\s+test/i,
+            /(?:create|set\s+up|start)\s+(?:a\s+)?(?:new\s+)?(?:incrementality|lift|holdout)\s+test\s+(?:for\s+)?(\w+)/i,
+            /test\s+(?:the\s+)?(?:incrementality|lift)\s+(?:of|for)\s+(\w+)/i
+        ],
+        priority: 85,
+        description: 'Create a new incrementality/lift test',
+        examples: ['create incrementality test', 'set up holdout test for Search', 'test lift for Social']
+    },
+    {
+        id: 'view_test_results',
+        name: 'View Test Results',
+        category: 'ATTRIBUTION',
+        patterns: [
+            /(?:show|view)\s+(?:me\s+)?(?:the\s+)?(?:incrementality|lift|test)\s+results/i,
+            /how\s+did\s+(?:the\s+)?(\w+)\s+test\s+(?:perform|do|go)/i,
+            /(?:what|what's)\s+(?:the\s+)?lift\s+(?:for|on)\s+(\w+)/i
+        ],
+        priority: 83,
+        description: 'View incrementality test results',
+        examples: ['show test results', 'how did the Search test perform', 'what is the lift for Social']
+    },
+    // --- Analysis Commands ---
+    {
+        id: 'analyze_channel_attribution',
+        name: 'Analyze Channel Attribution',
+        category: 'ATTRIBUTION',
+        patterns: [
+            /(?:how|what)\s+(?:is|are)\s+(\w+)\s+(?:performing|doing|attributed)/i,
+            /(?:analyze|show)\s+(?:me\s+)?(\w+)\s+(?:attribution|performance|contribution)/i,
+            /(?:which|what)\s+channel\s+(?:is\s+)?(?:the\s+)?(?:best|top)\s+(opener|closer|performer)/i,
+            /(?:which|what)\s+channels?\s+(?:drives?|generates?)\s+(?:the\s+)?most\s+(?:conversions?|revenue)/i
+        ],
+        priority: 80,
+        description: 'Analyze attribution for a specific channel',
+        examples: ['how is Social performing', 'which channel is the best opener', 'what drives most conversions']
+    },
+    {
+        id: 'show_conversion_paths',
+        name: 'Show Conversion Paths',
+        category: 'ATTRIBUTION',
+        patterns: [
+            /(?:show|view|display)\s+(?:me\s+)?(?:the\s+)?conversion\s+paths?/i,
+            /(?:show|view)\s+(?:me\s+)?(?:the\s+)?(?:customer|user)\s+journey/i,
+            /(?:what|what's)\s+(?:the\s+)?(?:typical|common|average)\s+(?:conversion\s+)?path/i,
+            /how\s+do\s+(?:users?|customers?|people)\s+(?:typically\s+)?convert/i
+        ],
+        priority: 80,
+        description: 'Show conversion path analysis',
+        examples: ['show conversion paths', 'view customer journey', 'how do users typically convert']
+    },
+    {
+        id: 'attribution_insights',
+        name: 'Attribution Insights',
+        category: 'ATTRIBUTION',
+        patterns: [
+            /(?:what|give\s+me)\s+(?:attribution\s+)?(?:insights|recommendations)/i,
+            /(?:what\s+should\s+I|how\s+can\s+I)\s+(?:optimize|improve)\s+(?:based\s+on\s+)?attribution/i,
+            /attribution\s+(?:insights|recommendations|suggestions)/i,
+            /(?:analyze|review)\s+(?:my\s+)?attribution\s+(?:data|results)/i
+        ],
+        priority: 78,
+        description: 'Get AI-driven attribution insights and recommendations',
+        examples: ['give me attribution insights', 'what should I optimize', 'analyze my attribution data']
+    },
+    // --- Help Commands ---
+    {
+        id: 'explain_incrementality',
+        name: 'Explain Incrementality',
+        category: 'ATTRIBUTION',
+        patterns: [
+            /(?:explain|what\s+is|tell\s+me\s+about)\s+incrementality/i,
+            /(?:explain|what\s+is|tell\s+me\s+about)\s+(?:lift|holdout)\s+test(?:ing)?/i,
+            /how\s+(?:does|do)\s+(?:incrementality|lift)\s+test(?:s|ing)?\s+work/i,
+            /(?:what's|what\s+is)\s+(?:a\s+)?(?:good|ideal)\s+(?:confidence|lift)\s+(?:score|level)/i
+        ],
+        priority: 75,
+        description: 'Explain incrementality testing concepts',
+        examples: ['explain incrementality', 'what is a holdout test', 'what is a good confidence score']
+    },
+    {
+        id: 'attribution_help',
+        name: 'Attribution Help',
+        category: 'ATTRIBUTION',
+        patterns: [
+            /(?:help\s+(?:me\s+)?with|how\s+do\s+I\s+use)\s+attribution/i,
+            /(?:what|how)\s+(?:can\s+I|do\s+I)\s+(?:do|use)\s+(?:in\s+)?attribution/i,
+            /attribution\s+help/i
+        ],
+        priority: 70,
+        description: 'Get help with attribution features',
+        examples: ['help me with attribution', 'how do I use attribution', 'attribution help']
+    }
+];
+
+// =============================================================================
 // REGISTRY
 // =============================================================================
 
@@ -767,7 +993,8 @@ export const ALL_COMMANDS: CommandDefinition[] = [
     ...EXPORT_COMMANDS,
     ...INVENTORY_COMMANDS,
     ...NAVIGATION_COMMANDS,
-    ...WINDOW_MANAGEMENT_COMMANDS
+    ...WINDOW_MANAGEMENT_COMMANDS,
+    ...ATTRIBUTION_COMMANDS
 ].sort((a, b) => b.priority - a.priority);
 
 /**
@@ -827,12 +1054,16 @@ export function findAllMatchingCommands(input: string): CommandMatch[] {
  * Window context for eligibility checks
  */
 export interface CommandWindowContext {
-    windowType: 'campaign' | 'flight' | 'portfolio' | 'report' | 'settings' | 'media-plan' | 'audience-insights' | 'chat' | 'client' | 'client-list' | null;
+    windowType: 'campaign' | 'flight' | 'portfolio' | 'report' | 'settings' | 'media-plan' | 'audience-insights' | 'chat' | 'client' | 'client-list' | 'attribution' | 'attribution-overview' | 'attribution-incrementality' | 'attribution-time' | 'attribution-frequency' | 'attribution-models' | null;
     hasMediaPlan: boolean;
     hasCampaign: boolean;
     hasFlight: boolean;
     hasWindows: boolean;     // Are there any open windows?
     activeWindowId?: string;
+    // Attribution-specific context
+    isAttributionOpen?: boolean;
+    currentAttributionView?: 'OVERVIEW' | 'INCREMENTALITY' | 'TIME' | 'FREQUENCY' | 'ROI' | null;
+    selectedAttributionModel?: string;
 }
 
 /**
@@ -903,7 +1134,10 @@ const COMMAND_CONTEXT_REQUIREMENTS: Record<CommandCategory, {
     'INVENTORY': {},
 
     // Window Management - mostly always available, some require windows
-    'WINDOW_MANAGEMENT': {}
+    'WINDOW_MANAGEMENT': {},
+
+    // Attribution - requires campaign context for data, but navigation always available
+    'ATTRIBUTION': { requiresCampaign: true }
 };
 
 /**

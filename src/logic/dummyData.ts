@@ -654,6 +654,7 @@ export const MOCK_DATA = {
 
 /**
  * Generate realistic conversion paths for attribution modeling
+ * Creates data that shows meaningful differences between attribution models
  */
 export function generateConversionPaths(campaign: Campaign, count: number = 50): ConversionPath[] {
     const paths: ConversionPath[] = [];
@@ -669,62 +670,155 @@ export function generateConversionPaths(campaign: Campaign, count: number = 50):
         'Podcast': 'AUDIO',
         'Place-based Audio': 'AUDIO',
         'OOH': 'OOH',
-        'Print': 'DISPLAY'
+        'Print': 'DISPLAY',
+        // Fallback channels
+        'Google Ads': 'SEARCH',
+        'Meta': 'SOCIAL',
+        'Google Display Network': 'DISPLAY',
+        'CTV': 'VIDEO',
+        'Email': 'EMAIL'
     };
 
     // Get all placements from campaign flights
     const allPlacements: Line[] = campaign.flights.flatMap(f => f.lines);
 
-    if (allPlacements.length === 0) {
-        return paths; // No placements, no paths
-    }
+    // If no placements, generate realistic fallback data with common channel mix
+    // This ensures attribution dashboard always has meaningful data to show
+    const fallbackChannels = [
+        { channel: 'Google Ads', vendor: 'Google Ads', channelType: 'SEARCH' as ChannelType, avgCost: 2.50 },
+        { channel: 'Meta', vendor: 'Meta', channelType: 'SOCIAL' as ChannelType, avgCost: 1.80 },
+        { channel: 'Google Display Network', vendor: 'Google Display Network', channelType: 'DISPLAY' as ChannelType, avgCost: 0.75 },
+        { channel: 'CTV', vendor: 'CTV', channelType: 'VIDEO' as ChannelType, avgCost: 25.00 },
+        { channel: 'Email', vendor: 'Email', channelType: 'EMAIL' as ChannelType, avgCost: 0.10 },
+    ];
+
+    const useFallback = allPlacements.length === 0;
+
+    // Define realistic journey patterns that show model differences:
+    // - AWARENESS_TO_CONVERSION: Display/Social -> Search -> Conversion (shows first-touch vs last-touch)
+    // - MULTI_TOUCH_AWARENESS: CTV -> Display -> Social -> Search (shows linear value of middle touches)
+    // - RETARGETING_HEAVY: Display -> Display -> Display -> Search (shows time-decay, recent touches)
+    // - DIRECT_RESPONSE: Email -> Search -> Conversion (short, high-intent path)
+    // - BRAND_JOURNEY: CTV -> Social -> Display -> Email -> Search (full funnel, position-based)
+    const journeyPatterns = [
+        { name: 'AWARENESS_TO_CONVERSION', channels: ['DISPLAY', 'SOCIAL', 'SEARCH'], weight: 25 },
+        { name: 'MULTI_TOUCH_AWARENESS', channels: ['VIDEO', 'DISPLAY', 'SOCIAL', 'SEARCH'], weight: 20 },
+        { name: 'RETARGETING_HEAVY', channels: ['DISPLAY', 'DISPLAY', 'DISPLAY', 'SEARCH'], weight: 15 },
+        { name: 'DIRECT_RESPONSE', channels: ['EMAIL', 'SEARCH'], weight: 20 },
+        { name: 'BRAND_JOURNEY', channels: ['VIDEO', 'SOCIAL', 'DISPLAY', 'EMAIL', 'SEARCH'], weight: 10 },
+        { name: 'SOCIAL_FIRST', channels: ['SOCIAL', 'DISPLAY', 'SEARCH'], weight: 10 },
+    ];
+
+    // Helper to pick a channel source based on channel type
+    const getChannelForType = (channelType: ChannelType): { channel: string; vendor: string; avgCost: number } => {
+        if (useFallback) {
+            const match = fallbackChannels.find(c => c.channelType === channelType);
+            if (match) return { channel: match.channel, vendor: match.vendor, avgCost: match.avgCost };
+            return fallbackChannels[0]; // Default fallback
+        }
+
+        // Find placements matching this channel type
+        const matchingPlacements = allPlacements.filter(p => channelTypeMap[p.channel] === channelType);
+        if (matchingPlacements.length > 0) {
+            const placement = matchingPlacements[Math.floor(Math.random() * matchingPlacements.length)];
+            return {
+                channel: placement.vendor,
+                vendor: placement.vendor,
+                avgCost: placement.totalCost / (placement.quantity || 1)
+            };
+        }
+
+        // Fallback to any placement if no match
+        const placement = allPlacements[Math.floor(Math.random() * allPlacements.length)];
+        return {
+            channel: placement.vendor,
+            vendor: placement.vendor,
+            avgCost: placement.totalCost / (placement.quantity || 1)
+        };
+    };
+
+    // Select a journey pattern based on weights
+    const selectPattern = (): typeof journeyPatterns[0] => {
+        const totalWeight = journeyPatterns.reduce((sum, p) => sum + p.weight, 0);
+        let random = Math.random() * totalWeight;
+        for (const pattern of journeyPatterns) {
+            random -= pattern.weight;
+            if (random <= 0) return pattern;
+        }
+        return journeyPatterns[0];
+    };
 
     for (let i = 0; i < count; i++) {
         const pathId = generateId();
         const userId = `user_${generateId()}`;
 
-        // Random number of touchpoints (2-8, weighted toward 3-5)
-        const numTouchpoints = Math.floor(Math.random() * 100) < 60
-            ? 3 + Math.floor(Math.random() * 3) // 60% chance of 3-5 touchpoints
-            : 2 + Math.floor(Math.random() * 7); // 40% chance of 2-8 touchpoints
+        // Select a journey pattern
+        const pattern = selectPattern();
+        const patternChannels = [...pattern.channels];
 
+        // Sometimes add extra touchpoints of same channel (for retargeting feel)
+        if (Math.random() < 0.3 && patternChannels.length < 6) {
+            const insertIdx = Math.floor(Math.random() * (patternChannels.length - 1)) + 1;
+            patternChannels.splice(insertIdx, 0, patternChannels[insertIdx - 1]);
+        }
+
+        const numTouchpoints = patternChannels.length;
         const touchpoints: Touchpoint[] = [];
         const now = new Date();
 
-        // Time to conversion: 1-30 days (hours)
-        const timeToConversionHours = 24 + Math.random() * (29 * 24);
-        const conversionDate = new Date(now.getTime() - timeToConversionHours * 60 * 60 * 1000);
+        // Time to conversion varies by journey type
+        // - Direct response: 1-3 days
+        // - Awareness journeys: 7-30 days
+        let timeToConversionHours: number;
+        if (pattern.name === 'DIRECT_RESPONSE') {
+            timeToConversionHours = 24 + Math.random() * (2 * 24); // 1-3 days
+        } else if (pattern.name === 'BRAND_JOURNEY') {
+            timeToConversionHours = 7 * 24 + Math.random() * (23 * 24); // 7-30 days
+        } else {
+            timeToConversionHours = 3 * 24 + Math.random() * (14 * 24); // 3-17 days
+        }
 
-        let currentTime = now.getTime() - timeToConversionHours * 60 * 60 * 1000;
+        const conversionDate = new Date(now.getTime() - Math.random() * 30 * 24 * 60 * 60 * 1000); // Random date in past 30 days
+        const pathStartTime = conversionDate.getTime() - timeToConversionHours * 60 * 60 * 1000;
 
-        // Generate touchpoints in chronological order
+        // Distribute touchpoints across the time window
+        const timePerTouch = timeToConversionHours / numTouchpoints;
+
         for (let t = 0; t < numTouchpoints; t++) {
-            // Pick a random placement
-            const placement = allPlacements[Math.floor(Math.random() * allPlacements.length)];
+            const channelType = patternChannels[t] as ChannelType;
+            const channelInfo = getChannelForType(channelType);
 
-            // Time gap between touchpoints: 1 hour to 7 days
-            const timeGapHours = t === 0 ? 0 : 1 + Math.random() * (7 * 24);
-            currentTime += timeGapHours * 60 * 60 * 1000;
+            // Time for this touchpoint (with some randomness)
+            const baseTime = pathStartTime + t * timePerTouch * 60 * 60 * 1000;
+            const jitter = (Math.random() - 0.5) * timePerTouch * 0.5 * 60 * 60 * 1000;
+            const touchTime = baseTime + jitter;
 
-            const channelType = channelTypeMap[placement.channel] || 'DISPLAY';
-
-            // Cost per touchpoint (approximate from placement)
-            const avgCost = placement.totalCost / (placement.quantity || 1);
-            const touchpointCost = avgCost * (0.5 + Math.random()); // Vary cost
+            // Cost varies by channel type
+            let touchpointCost = channelInfo.avgCost * (0.5 + Math.random());
+            // Video/CTV tends to be more expensive
+            if (channelType === 'VIDEO') touchpointCost *= 2;
+            // Email is very cheap
+            if (channelType === 'EMAIL') touchpointCost *= 0.1;
 
             touchpoints.push({
                 id: generateId(),
-                channel: placement.vendor,
+                channel: channelInfo.channel,
                 channelType: channelType,
                 campaignId: campaign.id,
                 campaignName: campaign.name,
-                timestamp: new Date(currentTime).toISOString(),
+                timestamp: new Date(touchTime).toISOString(),
                 cost: Math.round(touchpointCost * 100) / 100
             });
         }
 
-        // Conversion value: $50 - $500
-        const conversionValue = 50 + Math.random() * 450;
+        // Sort touchpoints by timestamp to ensure chronological order
+        touchpoints.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+        // Conversion value varies by journey complexity
+        // - Longer journeys tend to have higher value (more considered purchases)
+        const baseValue = 50 + Math.random() * 200;
+        const journeyMultiplier = 1 + (numTouchpoints - 2) * 0.2; // +20% per extra touchpoint
+        const conversionValue = baseValue * journeyMultiplier;
 
         paths.push({
             id: pathId,

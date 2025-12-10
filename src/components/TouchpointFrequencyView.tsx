@@ -28,36 +28,47 @@ export const TouchpointFrequencyView: React.FC<TouchpointFrequencyViewProps> = (
         return { buckets, max };
     }, [paths]);
 
+    if (paths.length === 0) {
+        return (
+            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+                    Touchpoint Frequency Analysis
+                </h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                    No conversion data available. Generate conversion paths to see frequency analysis.
+                </p>
+            </div>
+        );
+    }
+
     return (
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
             <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
                 Touchpoint Frequency Analysis
             </h3>
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-8">
-                Breakdown of how many interactions users engaging with before finally converting.
+                Breakdown of how many interactions users engage with before finally converting.
             </p>
 
-            <div className="h-96 flex items-end gap-4 px-4">
+            <div className="h-80 flex items-end gap-4 px-4">
                 {Object.entries(frequencyData.buckets).map(([bucket, count]) => {
-                    const height = count > 0 ? (count / frequencyData.max) * 100 : 0;
+                    const heightPercent = frequencyData.max > 0 ? (count / frequencyData.max) * 100 : 0;
+                    const heightPx = Math.max(4, (heightPercent / 100) * 280); // 280px max height, 4px min
                     return (
-                        <div key={bucket} className="flex-1 flex flex-col items-center group">
-                            <div className="relative w-full flex items-end justify-center">
-                                <div
-                                    className="w-full bg-purple-100 dark:bg-purple-900/30 rounded-t-sm group-hover:bg-purple-200 dark:group-hover:bg-purple-800/50 transition-all duration-500 relative"
-                                    style={{ height: `${height}%` }}
-                                >
-                                    <div
-                                        className="w-full bg-purple-500 dark:bg-purple-400 rounded-t-sm absolute top-0"
-                                        style={{ height: '4px' }}
-                                    />
-                                    <div className="absolute -top-10 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
-                                        {count} conversions ({((count / paths.length) * 100).toFixed(1)}%)
-                                    </div>
+                        <div key={bucket} className="flex-1 flex flex-col items-center justify-end group h-full">
+                            <div className="relative w-full flex flex-col items-center justify-end h-full">
+                                {/* Tooltip */}
+                                <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+                                    {count} conversions ({paths.length > 0 ? ((count / paths.length) * 100).toFixed(1) : 0}%)
                                 </div>
+                                {/* Bar */}
+                                <div
+                                    className="w-full bg-purple-500 dark:bg-purple-400 rounded-t-md group-hover:bg-purple-600 dark:group-hover:bg-purple-300 transition-all duration-300"
+                                    style={{ height: `${heightPx}px` }}
+                                />
                             </div>
                             <div className="mt-4 text-xs text-gray-500 dark:text-gray-400 text-center font-medium">
-                                {bucket}
+                                {bucket === '1' ? '1 touch' : bucket === '10+' ? '10+' : `${bucket} touches`}
                             </div>
                         </div>
                     );
@@ -66,7 +77,7 @@ export const TouchpointFrequencyView: React.FC<TouchpointFrequencyViewProps> = (
             <div className="mt-8 text-center bg-purple-50 dark:bg-purple-900/20 p-4 rounded-lg">
                 <p className="text-sm text-purple-800 dark:text-purple-300">
                     <strong>Insight:</strong>
-                    {' '}{((paths.filter(p => p.touchpoints.length >= 3).length / paths.length) * 100).toFixed(0)}% of conversions require 3 or more touchpoints. Multi-touch attribution is essential for valuing your upper-funnel channels correctly.
+                    {' '}{paths.length > 0 ? ((paths.filter(p => p.touchpoints.length >= 3).length / paths.length) * 100).toFixed(0) : 0}% of conversions require 3 or more touchpoints. Multi-touch attribution is essential for valuing your upper-funnel channels correctly.
                 </p>
             </div>
         </div>

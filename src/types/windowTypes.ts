@@ -12,10 +12,17 @@ export type WindowType =
   | 'report'
   | 'settings'
   | 'media-plan'
-  | 'audience-insights' // Audience insights panel as separate window
-  | 'chat'           // Special window type for movable chat
-  | 'client-list'    // Agency view: list of all clients/brands
-  | 'client';        // Individual client/brand detail view
+  | 'audience-insights'    // Audience insights panel as separate window
+  | 'chat'                 // Special window type for movable chat
+  | 'client-list'          // Agency view: list of all clients/brands
+  | 'client'               // Individual client/brand detail view
+  // Attribution window types (hybrid: full dashboard or pop-out views)
+  | 'attribution'                 // Full attribution dashboard with sidebar
+  | 'attribution-overview'        // Pop-out: Overview view only
+  | 'attribution-incrementality'  // Pop-out: Incrementality testing
+  | 'attribution-time'            // Pop-out: Time analysis
+  | 'attribution-frequency'       // Pop-out: Touchpoint frequency
+  | 'attribution-models';         // Pop-out: Model comparison
 
 export type WindowStateType = 'normal' | 'maximized' | 'minimized';
 
@@ -155,6 +162,43 @@ export const WINDOW_CONFIGS: Record<WindowType, {
   'client': {
     defaultSize: { width: 950, height: 700 },
     minSize: { width: 550, height: 450 },
+    isResizable: true,
+    isDraggable: true
+  },
+  // Attribution windows
+  'attribution': {
+    defaultSize: { width: 1100, height: 750 },
+    minSize: { width: 800, height: 550 },
+    isResizable: true,
+    isDraggable: true
+  },
+  'attribution-overview': {
+    defaultSize: { width: 900, height: 650 },
+    minSize: { width: 600, height: 450 },
+    isResizable: true,
+    isDraggable: true
+  },
+  'attribution-incrementality': {
+    defaultSize: { width: 850, height: 600 },
+    minSize: { width: 550, height: 400 },
+    isResizable: true,
+    isDraggable: true
+  },
+  'attribution-time': {
+    defaultSize: { width: 700, height: 500 },
+    minSize: { width: 450, height: 350 },
+    isResizable: true,
+    isDraggable: true
+  },
+  'attribution-frequency': {
+    defaultSize: { width: 700, height: 500 },
+    minSize: { width: 450, height: 350 },
+    isResizable: true,
+    isDraggable: true
+  },
+  'attribution-models': {
+    defaultSize: { width: 800, height: 550 },
+    minSize: { width: 500, height: 400 },
     isResizable: true,
     isDraggable: true
   }

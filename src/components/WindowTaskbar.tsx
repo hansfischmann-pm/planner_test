@@ -16,7 +16,12 @@ import {
   MessageSquare,
   Users,
   Building2,
-  Target
+  Target,
+  GitBranch,
+  PieChart,
+  Clock,
+  Hash,
+  LayoutDashboard
 } from 'lucide-react';
 import { WindowState, WindowType } from '../types/windowTypes';
 import { useCanvas } from '../context/CanvasContext';
@@ -36,7 +41,14 @@ const windowTypeIcons: Record<WindowType, typeof FolderOpen> = {
   'audience-insights': Target,
   'chat': MessageSquare,
   'client-list': Users,
-  'client': Building2
+  'client': Building2,
+  // Attribution window types
+  'attribution': GitBranch,
+  'attribution-overview': LayoutDashboard,
+  'attribution-incrementality': PieChart,
+  'attribution-time': Clock,
+  'attribution-frequency': Hash,
+  'attribution-models': BarChart3
 };
 
 export function WindowTaskbar({ minimizedWindows }: WindowTaskbarProps) {

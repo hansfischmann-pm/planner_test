@@ -13,6 +13,7 @@ import { PlanVisualizer } from './PlanVisualizer';
 import { AudienceInsightsPanel } from './AudienceInsightsPanel';
 import { TemplateLibrary } from './TemplateLibrary';
 import { AsyncButton } from './Spinner';
+import { AttributionDashboard } from './AttributionDashboard';
 import { CanvasProvider, useCanvas } from '../context/CanvasContext';
 import { WindowType } from '../types/windowTypes';
 import { AgentBrain, AgentState, WindowContext } from '../logic/agentBrain';
@@ -1010,6 +1011,10 @@ function WindowedAppInner({ brand, allBrands, onBrandUpdate, onBrandSelect, onBa
   const [agentState, setAgentState] = useState<AgentState>('INIT');
   const [isTyping, setIsTyping] = useState(false);
 
+  // Attribution state (shared across attribution windows)
+  const [attributionModel, setAttributionModel] = useState<string>('LINEAR');
+  const [attributionView, setAttributionView] = useState<string>('OVERVIEW');
+
   // Template library state - tracks which campaign is showing template library
   const [templateLibraryCampaignId, setTemplateLibraryCampaignId] = useState<string | null>(null);
 
@@ -1836,6 +1841,68 @@ function WindowedAppInner({ brand, allBrands, onBrandUpdate, onBrandSelect, onBa
     }
   }, [dispatch, getActiveWindow]);
 
+  // Handle attribution actions from agent
+  const handleAttributionAction = useCallback((action: string) => {
+    windowLog('Handling attribution action:', action);
+
+    // Get the current campaign context from the window
+    const currentCampaign = windowContext?.campaignId
+      ? brand.campaigns.find(c => c.id === windowContext.campaignId)
+      : brand.campaigns[0]; // Fallback to first campaign
+
+    if (!currentCampaign) {
+      windowLog('No campaign available for attribution');
+      return;
+    }
+
+    // Map action to view type
+    const actionToView: Record<string, string> = {
+      'OPEN_ATTRIBUTION': 'OVERVIEW',
+      'OPEN_ATTRIBUTION_OVERVIEW': 'OVERVIEW',
+      'OPEN_ATTRIBUTION_INCREMENTALITY': 'INCREMENTALITY',
+      'OPEN_ATTRIBUTION_TIME': 'TIME',
+      'OPEN_ATTRIBUTION_FREQUENCY': 'FREQUENCY',
+      'OPEN_ATTRIBUTION_MODELS': 'ROI',
+    };
+
+    // Map action to window type for pop-outs
+    const actionToWindowType: Record<string, string> = {
+      'POPOUT_ATTRIBUTION_OVERVIEW': 'attribution-overview',
+      'POPOUT_ATTRIBUTION_INCREMENTALITY': 'attribution-incrementality',
+      'POPOUT_ATTRIBUTION_TIME': 'attribution-time',
+      'POPOUT_ATTRIBUTION_FREQUENCY': 'attribution-frequency',
+      'POPOUT_ATTRIBUTION_MODELS': 'attribution-models',
+    };
+
+    // Check if it's a pop-out action
+    if (action.startsWith('POPOUT_')) {
+      const windowType = actionToWindowType[action];
+      if (windowType) {
+        const viewName = action.replace('POPOUT_ATTRIBUTION_', '');
+        const title = `${viewName.charAt(0) + viewName.slice(1).toLowerCase()} - ${currentCampaign.name}`;
+        openWindow(windowType as any, title, currentCampaign.id, brand.id);
+      }
+    }
+    // Regular open action - open full attribution dashboard or navigate to view
+    else if (action.startsWith('OPEN_ATTRIBUTION')) {
+      const view = actionToView[action] || 'OVERVIEW';
+      setAttributionView(view);
+
+      // Check if we already have an attribution window for this campaign
+      const existingAttrWindow = canvasState.windows.find(
+        w => w.type === 'attribution' && w.entityId === currentCampaign.id
+      );
+
+      if (existingAttrWindow) {
+        // Focus and update view
+        dispatch({ type: 'FOCUS_WINDOW', windowId: existingAttrWindow.id });
+      } else {
+        // Open new attribution window
+        openWindow('attribution', `Attribution - ${currentCampaign.name}`, currentCampaign.id, brand.id);
+      }
+    }
+  }, [windowContext, brand, openWindow, dispatch, canvasState.windows]);
+
   // Handle message sending
   const handleSendMessage = async (text: string) => {
     // Silent clear command - clears chat without any response
@@ -1944,26 +2011,8 @@ function WindowedAppInner({ brand, allBrands, onBrandUpdate, onBrandSelect, onBa
         return;
       }
 
-      // "Show attribution" for current context - opens attribution report window
-      if (lowerText.includes('attribution')) {
-        const entityName = flight ? `${campaign?.name} › ${flight.name}` : campaign?.name || contextBrand.name;
-        const entityType = flight ? 'flight' : campaign ? 'campaign' : 'brand';
-        const entityIdForReport = flight ? `flight:${flight.id}` : campaign ? `campaign:${campaign.id}` : `brand:${contextBrand.id}`;
-
-        // Open the attribution report window
-        openWindow('report', `Attribution: ${entityName}`, entityIdForReport, contextBrand.id);
-
-        const responseMsg: AgentMessage = {
-          id: `agent-${Date.now()}`,
-          role: 'agent',
-          content: `Opened **Attribution Report** for ${entityName}.\n\nThe report shows multi-touch attribution across all channels for this ${entityType}.`,
-          timestamp: Date.now(),
-          suggestedActions: ['Compare models', 'Export data']
-        };
-        setMessages(prev => [...prev, responseMsg]);
-        setIsTyping(false);
-        return;
-      }
+      // Attribution commands are now handled by agentBrain via handleAttributionCommands
+      // (removed hardcoded handler - let it fall through to agentBrain)
     }
 
     // Window open commands - "open [campaign name]" or "open campaign [name]"
@@ -1994,36 +2043,8 @@ function WindowedAppInner({ brand, allBrands, onBrandUpdate, onBrandSelect, onBa
       }
     }
 
-    // "Show attribution" - using window context even without explicit "this" reference - opens report window
-    if (lowerText.includes('attribution') && windowContext) {
-      // Try to find campaign/flight from current window context
-      const ctxCampaign = windowContext.campaignId
-        ? contextBrand.campaigns.find(c => c.id === windowContext.campaignId)
-        : contextBrand.campaigns[0];
-      const ctxFlight = windowContext.flightId && ctxCampaign
-        ? ctxCampaign.flights.find(f => f.id === windowContext.flightId)
-        : undefined;
-
-      const entityName = ctxFlight
-        ? `${ctxCampaign?.name} › ${ctxFlight.name}`
-        : ctxCampaign?.name || contextBrand.name;
-      const entityType = ctxFlight ? 'flight' : ctxCampaign ? 'campaign' : 'brand';
-      const entityIdForReport = ctxFlight ? `flight:${ctxFlight.id}` : ctxCampaign ? `campaign:${ctxCampaign.id}` : `brand:${contextBrand.id}`;
-
-      // Open the attribution report window
-      openWindow('report', `Attribution: ${entityName}`, entityIdForReport, contextBrand.id);
-
-      const responseMsg: AgentMessage = {
-        id: `agent-${Date.now()}`,
-        role: 'agent',
-        content: `Opened **Attribution Report** for ${entityName}.\n\nThe report shows multi-touch attribution across all channels for this ${entityType}.`,
-        timestamp: Date.now(),
-        suggestedActions: ['Compare models', 'Export data']
-      };
-      setMessages(prev => [...prev, responseMsg]);
-      setIsTyping(false);
-      return;
-    }
+    // Attribution commands are handled by agentBrain via handleAttributionCommands
+    // (removed second hardcoded handler - let it fall through to agentBrain)
 
     // "Show insights" or "show audience insights" command
     if ((lowerText.includes('insight') || lowerText.includes('audience')) &&
@@ -2121,7 +2142,17 @@ function WindowedAppInner({ brand, allBrands, onBrandUpdate, onBrandSelect, onBa
       // Window management actions
       if (typeof action === 'string' && action.startsWith('WINDOW_')) {
         handleWindowAction(action);
-      } else if (action === 'EXPORT_PDF' && ctx.mediaPlan) {
+      }
+      // Attribution actions
+      else if (typeof action === 'string' && (action.startsWith('OPEN_ATTRIBUTION') || action.startsWith('POPOUT_ATTRIBUTION'))) {
+        handleAttributionAction(action);
+      }
+      // Attribution model change
+      else if (typeof action === 'string' && action.startsWith('SET_ATTRIBUTION_MODEL_')) {
+        const model = action.replace('SET_ATTRIBUTION_MODEL_', '');
+        setAttributionModel(model);
+      }
+      else if (action === 'EXPORT_PDF' && ctx.mediaPlan) {
         generateMediaPlanPDF(ctx.mediaPlan);
       } else if (action === 'EXPORT_PPT' && ctx.mediaPlan) {
         generateMediaPlanPPT(ctx.mediaPlan);
@@ -2709,6 +2740,88 @@ function WindowedAppInner({ brand, allBrands, onBrandUpdate, onBrandSelect, onBa
             entityName={reportEntityName}
             entityType={reportEntityType}
             channels={reportChannels.slice(0, 6)}
+          />
+        );
+      }
+
+      // Attribution windows - full dashboard and pop-out views
+      case 'attribution': {
+        // entityId is the campaignId
+        const campaign = windowBrand.campaigns.find(c => c.id === entityId);
+        if (!campaign) {
+          return (
+            <div className="p-4 h-full flex items-center justify-center">
+              <div className="text-center">
+                <BarChart3 className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+                <p className="text-gray-500">Campaign not found</p>
+                <p className="text-xs text-gray-400 mt-1">Campaign ID: {entityId}</p>
+              </div>
+            </div>
+          );
+        }
+
+        // Handler for pop-out
+        const handlePopOut = (viewType: string, title: string) => {
+          openWindow(viewType as any, title, campaign.id, windowBrand.id);
+        };
+
+        return (
+          <AttributionDashboard
+            campaign={campaign}
+            onBack={() => {
+              // Find and close this window
+              const windowToClose = canvasState.windows.find(
+                w => w.type === 'attribution' && w.entityId === entityId
+              );
+              if (windowToClose) {
+                closeWindow(windowToClose.id);
+              }
+            }}
+            onPopOut={handlePopOut}
+            initialView={attributionView as any}
+            initialModel={attributionModel as any}
+            onModelChange={(model) => setAttributionModel(model)}
+            onViewChange={(view) => setAttributionView(view)}
+          />
+        );
+      }
+
+      // Pop-out attribution views (single view without sidebar)
+      case 'attribution-overview':
+      case 'attribution-incrementality':
+      case 'attribution-time':
+      case 'attribution-frequency':
+      case 'attribution-models': {
+        const campaign = windowBrand.campaigns.find(c => c.id === entityId);
+        if (!campaign) {
+          return (
+            <div className="p-4 h-full flex items-center justify-center">
+              <div className="text-center">
+                <BarChart3 className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+                <p className="text-gray-500">Campaign not found</p>
+              </div>
+            </div>
+          );
+        }
+
+        // Map window type to view
+        const windowTypeToView: Record<string, string> = {
+          'attribution-overview': 'OVERVIEW',
+          'attribution-incrementality': 'INCREMENTALITY',
+          'attribution-time': 'TIME',
+          'attribution-frequency': 'FREQUENCY',
+          'attribution-models': 'ROI',
+        };
+
+        const viewForWindow = windowTypeToView[windowType] || 'OVERVIEW';
+
+        return (
+          <AttributionDashboard
+            campaign={campaign}
+            hideSidebar={true}
+            initialView={viewForWindow as any}
+            initialModel={attributionModel as any}
+            onModelChange={(model) => setAttributionModel(model)}
           />
         );
       }
