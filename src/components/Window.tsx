@@ -15,7 +15,6 @@ import {
   Minimize2,
   MoreHorizontal,
   Pin,
-  PinOff,
   Copy,
   Link
 } from 'lucide-react';
@@ -175,10 +174,12 @@ export function Window({ window: windowState, children, path }: WindowProps) {
       }}
       className={`
         application-window
-        absolute rounded-lg overflow-hidden shadow-2xl
-        ${windowState.isActive ? 'ring-2 ring-blue-500' : 'ring-1 ring-gray-300'}
-        ${isMaximized ? 'rounded-none' : ''}
-        transition-shadow duration-150
+        absolute rounded-xl overflow-hidden
+        bg-white
+        ${windowState.isActive ? 'shadow-2xl shadow-black/20 border-gray-300' : 'shadow-xl shadow-black/5 border-gray-200'}
+        border
+        transition-all duration-200
+        ${isMaximized ? 'rounded-none border-0' : ''}
       `}
     >
       <div className="flex flex-col h-full bg-white">
@@ -186,37 +187,35 @@ export function Window({ window: windowState, children, path }: WindowProps) {
         <div
           className={`
             window-drag-handle
-            flex items-center justify-between px-3 py-2
-            ${windowState.isActive
-              ? 'bg-gradient-to-r from-blue-600 to-blue-700'
-              : 'bg-gray-500'
-            }
-            cursor-move select-none
+            flex items-center justify-between px-4 py-2.5
+            bg-white/80 backdrop-blur-md
+            border-b border-gray-100
+            select-none
           `}
         >
           {/* Left: Title and Badge */}
           <div className="flex items-center gap-2 min-w-0">
             <span
-              className="text-white font-medium text-sm truncate cursor-default"
+              className="text-gray-800 font-medium text-sm truncate cursor-default tracking-tight"
               onContextMenu={handleTitleContextMenu}
               title={path || windowState.title}
             >
               {windowState.title}
             </span>
             {windowState.badge && (
-              <span className="bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full">
+              <span className="bg-rose-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-medium">
                 {windowState.badge}
               </span>
             )}
           </div>
 
           {/* Right: Window Controls */}
-          <div className="flex items-center gap-1 ml-2">
+          <div className="flex items-center gap-1.5 ml-2">
             {/* Pin/Unpin toggle */}
             <button
-              className={`p-1 rounded transition-colors ${windowState.isPinned
-                  ? 'bg-white/30 text-white hover:bg-white/40'
-                  : 'hover:bg-white/20 text-white/60 hover:text-white'
+              className={`p-1 rounded-md transition-all duration-200 ${windowState.isPinned
+                ? 'bg-blue-50 text-blue-600'
+                : 'hover:bg-gray-100 text-gray-400 hover:text-gray-700'
                 }`}
               onClick={(e) => {
                 e.stopPropagation();
@@ -224,56 +223,58 @@ export function Window({ window: windowState, children, path }: WindowProps) {
               }}
               title={windowState.isPinned ? 'Unpin (window will close with session)' : 'Pin (window persists across sessions)'}
             >
-              {windowState.isPinned ? <Pin size={14} /> : <PinOff size={14} />}
+              {windowState.isPinned ? <Pin size={13} fill="currentColor" /> : <Pin size={13} />}
             </button>
 
             {/* More options */}
             <button
-              className="p-1 hover:bg-white/20 rounded text-white/80 hover:text-white transition-colors"
+              className="p-1 hover:bg-gray-100 rounded-md text-gray-400 hover:text-gray-700 transition-colors"
               onClick={(e) => {
                 e.stopPropagation();
                 // TODO: Show context menu
               }}
               title="More options"
             >
-              <MoreHorizontal size={14} />
+              <MoreHorizontal size={13} />
             </button>
+
+            <div className="w-px h-3 bg-gray-200 mx-1" />
 
             {/* Minimize */}
             <button
-              className="p-1 hover:bg-white/20 rounded text-white/80 hover:text-white transition-colors"
+              className="p-1 hover:bg-gray-100 rounded-md text-gray-400 hover:text-gray-700 transition-colors"
               onClick={(e) => {
                 e.stopPropagation();
                 handleMinimize();
               }}
               title="Minimize"
             >
-              <Minus size={14} />
+              <Minus size={13} />
             </button>
 
             {/* Maximize/Restore */}
             <button
-              className="p-1 hover:bg-white/20 rounded text-white/80 hover:text-white transition-colors"
+              className="p-1 hover:bg-gray-100 rounded-md text-gray-400 hover:text-gray-700 transition-colors"
               onClick={(e) => {
                 e.stopPropagation();
                 handleMaximizeToggle();
               }}
               title={isMaximized ? 'Restore' : 'Maximize'}
             >
-              {isMaximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+              {isMaximized ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
             </button>
 
             {/* Close */}
             {windowState.canClose && (
               <button
-                className="p-1 hover:bg-red-500 rounded text-white/80 hover:text-white transition-colors"
+                className="p-1 hover:bg-red-50 text-gray-400 hover:text-red-500 rounded-md transition-colors ml-0.5"
                 onClick={(e) => {
                   e.stopPropagation();
                   handleClose();
                 }}
                 title="Close"
               >
-                <X size={14} />
+                <X size={13} />
               </button>
             )}
           </div>
