@@ -105,11 +105,11 @@ export function Canvas({ chatComponent, renderWindowContent }: CanvasProps) {
   // Determine if scroll bars should be shown
   const showScrollBars = useMemo(() => {
     const showX = canvasBounds.width > viewportSize.width ||
-                  canvasBounds.minX < 0 ||
-                  canvasBounds.maxX > viewportSize.width;
+      canvasBounds.minX < 0 ||
+      canvasBounds.maxX > viewportSize.width;
     const showY = canvasBounds.height > viewportSize.height ||
-                  canvasBounds.minY < 0 ||
-                  canvasBounds.maxY > viewportSize.height;
+      canvasBounds.minY < 0 ||
+      canvasBounds.maxY > viewportSize.height;
     return { x: showX, y: showY };
   }, [canvasBounds, viewportSize]);
 
@@ -231,14 +231,51 @@ export function Canvas({ chatComponent, renderWindowContent }: CanvasProps) {
     if (!canvas) return;
 
     const handleWheel = (e: WheelEvent) => {
-      // Only pan/zoom if we're not over a scrollable element inside a window
-      const target = e.target as HTMLElement;
-      const isInsideWindowContent = target.closest('.window-content-scrollable');
-      if (isInsideWindowContent) {
+      // Helper to check if an element is scrollable
+      const isScrollable = (element: HTMLElement, direction: 'vertical' | 'horizontal'): boolean => {
+        const style = window.getComputedStyle(element);
+        const overflow = direction === 'vertical' ? style.overflowY : style.overflowX;
+        const isScrollableStyle = ['auto', 'scroll'].includes(overflow);
+
+        if (!isScrollableStyle) return false;
+
+        if (direction === 'vertical') {
+          return element.scrollHeight > element.clientHeight;
+        } else {
+          return element.scrollWidth > element.clientWidth;
+        }
+      };
+
+      // Traverse up from target to find if we're inside a scrollable container
+      let currentElement = e.target as HTMLElement;
+      let shouldBlockCanvas = false;
+
+      // Stop traversing if we hit the canvas itself or run out of parents
+      while (currentElement && currentElement !== canvas) {
+        // Prepare to check scrollability based on wheel direction
+        // If mostly vertical scrolling
+        if (Math.abs(e.deltaY) >= Math.abs(e.deltaX)) {
+          if (isScrollable(currentElement, 'vertical')) {
+            shouldBlockCanvas = true;
+            break;
+          }
+        }
+        // If mostly horizontal scrolling
+        else {
+          if (isScrollable(currentElement, 'horizontal')) {
+            shouldBlockCanvas = true;
+            break;
+          }
+        }
+        currentElement = currentElement.parentElement as HTMLElement;
+      }
+
+      if (shouldBlockCanvas) {
         return; // Let the window content scroll naturally
       }
 
       // Prevent default browser behavior (back/forward navigation on horizontal swipe)
+      // Only if we decided to handle it as a canvas action
       e.preventDefault();
       e.stopPropagation();
 
@@ -424,9 +461,9 @@ export function Canvas({ chatComponent, renderWindowContent }: CanvasProps) {
               {renderWindowContent
                 ? renderWindowContent(window.type, window.entityId, window.brandId)
                 : <WindowContent
-                    entityId={window.entityId}
-                    windowType={window.type}
-                  />
+                  entityId={window.entityId}
+                  windowType={window.type}
+                />
               }
             </Window>
           ))}
