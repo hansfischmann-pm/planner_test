@@ -9,7 +9,7 @@ import { useMemo, useEffect, useState, useCallback, useRef, ReactNode } from 're
 import { useCanvas } from '../context/CanvasContext';
 import { Window } from './Window';
 import { WindowTaskbar } from './WindowTaskbar';
-import { WindowType } from '../types/windowTypes';
+import { WindowType, WindowState } from '../types/windowTypes';
 import { Move } from 'lucide-react';
 
 // Content components for different window types
@@ -41,9 +41,10 @@ function WindowContent({ entityId, windowType }: WindowContentProps) {
 interface CanvasProps {
   chatComponent: ReactNode;
   renderWindowContent?: (windowType: WindowType, entityId?: string, brandId?: string) => ReactNode;
+  getWindowActions?: (window: WindowState) => { label: string; onClick: () => void }[];
 }
 
-export function Canvas({ chatComponent, renderWindowContent }: CanvasProps) {
+export function Canvas({ chatComponent, renderWindowContent, getWindowActions }: CanvasProps) {
   const { state, gatherWindows, hasOffscreenWindows, setCanvasOffset, setCanvasZoom } = useCanvas();
 
   // Track viewport size for scroll bar calculations (re-render on resize)
@@ -427,6 +428,7 @@ export function Canvas({ chatComponent, renderWindowContent }: CanvasProps) {
               key={window.id}
               window={window}
               path={window.title} // Title contains the path (e.g., "Campaign > Flight")
+              actions={getWindowActions ? getWindowActions(window) : undefined}
             >
               {renderWindowContent
                 ? renderWindowContent(window.type, window.entityId, window.brandId)

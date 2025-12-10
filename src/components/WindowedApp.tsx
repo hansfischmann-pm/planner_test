@@ -15,7 +15,7 @@ import { TemplateLibrary } from './TemplateLibrary';
 import { AsyncButton } from './Spinner';
 import { AttributionDashboard } from './AttributionDashboard';
 import { CanvasProvider, useCanvas } from '../context/CanvasContext';
-import { WindowType } from '../types/windowTypes';
+import { WindowType, WindowState } from '../types/windowTypes';
 import { AgentBrain, AgentState, WindowContext } from '../logic/agentBrain';
 import { AgentMessage, MediaPlan, Brand, Campaign, Flight, Placement, Segment, CampaignTemplate, Line } from '../types';
 import { generateMediaPlanPDF } from '../utils/pdfGenerator';
@@ -245,11 +245,10 @@ function CampaignWindowContent({ campaign, onCreateFlight, onOpenFlight, onOpenT
               <div className="flex items-center gap-2">
                 <Calendar className="w-4 h-4 text-gray-400" />
                 <span className="font-medium text-gray-900">{flight.name}</span>
-                <span className={`text-xs px-2 py-0.5 rounded-full ${
-                  flight.status === 'ACTIVE' ? 'bg-green-100 text-green-700' :
+                <span className={`text-xs px-2 py-0.5 rounded-full ${flight.status === 'ACTIVE' ? 'bg-green-100 text-green-700' :
                   flight.status === 'PAUSED' ? 'bg-yellow-100 text-yellow-700' :
-                  'bg-gray-100 text-gray-600'
-                }`}>
+                    'bg-gray-100 text-gray-600'
+                  }`}>
                   {flight.status}
                 </span>
               </div>
@@ -385,11 +384,10 @@ function PortfolioWindowContent({ brand, onCreateCampaign, onOpenCampaign }: Por
               <div className="flex items-center gap-2">
                 <Folder className="w-4 h-4 text-gray-400" />
                 <span className="font-medium text-gray-900">{campaign.name}</span>
-                <span className={`text-xs px-2 py-0.5 rounded-full ${
-                  campaign.status === 'ACTIVE' ? 'bg-green-100 text-green-700' :
+                <span className={`text-xs px-2 py-0.5 rounded-full ${campaign.status === 'ACTIVE' ? 'bg-green-100 text-green-700' :
                   campaign.status === 'PAUSED' ? 'bg-yellow-100 text-yellow-700' :
-                  'bg-gray-100 text-gray-700'
-                }`}>
+                    'bg-gray-100 text-gray-700'
+                  }`}>
                   {campaign.status}
                 </span>
               </div>
@@ -471,9 +469,8 @@ function FlightWindowContent({ flight, campaignName, onToggleStatus, onEditPlan 
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-lg font-semibold text-gray-900">{flight.name}</h2>
-              <span className={`text-xs px-2 py-0.5 rounded-full ${
-                isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
-              }`}>
+              <span className={`text-xs px-2 py-0.5 rounded-full ${isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
+                }`}>
                 {flight.status}
               </span>
               <span className={`text-xs px-2 py-0.5 rounded-full ${perfStatus.bg} ${perfStatus.color}`}>
@@ -486,11 +483,10 @@ function FlightWindowContent({ flight, campaignName, onToggleStatus, onEditPlan 
         <div className="flex items-center gap-2">
           <button
             onClick={() => onToggleStatus(isActive ? 'DRAFT' : 'ACTIVE')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
-              isActive
-                ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
-                : 'bg-green-100 text-green-700 hover:bg-green-200'
-            }`}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${isActive
+              ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
+              : 'bg-green-100 text-green-700 hover:bg-green-200'
+              }`}
           >
             {isActive ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
             {isActive ? 'Pause' : 'Activate'}
@@ -576,10 +572,9 @@ function FlightWindowContent({ flight, campaignName, onToggleStatus, onEditPlan 
             </div>
             <div className="w-full bg-gray-100 rounded-full h-2">
               <div
-                className={`h-2 rounded-full transition-all ${
-                  pacing > timeProgress + 10 ? 'bg-yellow-500' :
+                className={`h-2 rounded-full transition-all ${pacing > timeProgress + 10 ? 'bg-yellow-500' :
                   pacing < timeProgress - 10 ? 'bg-red-500' : 'bg-green-500'
-                }`}
+                  }`}
                 style={{ width: `${Math.min(100, pacing)}%` }}
               />
             </div>
@@ -736,11 +731,10 @@ function ClientListWindowContent({ brands, currentBrandId, onSelectClient, onOpe
         {filteredBrands.map(b => (
           <div
             key={b.id}
-            className={`flex items-center justify-between p-3 rounded-lg border transition-all cursor-pointer ${
-              b.id === currentBrandId
-                ? 'bg-indigo-50 border-indigo-300'
-                : 'bg-white border-gray-200 hover:border-indigo-200 hover:shadow-sm'
-            }`}
+            className={`flex items-center justify-between p-3 rounded-lg border transition-all cursor-pointer ${b.id === currentBrandId
+              ? 'bg-indigo-50 border-indigo-300'
+              : 'bg-white border-gray-200 hover:border-indigo-200 hover:shadow-sm'
+              }`}
             onClick={() => onOpenClientDetail(b.id, b.name)}
           >
             <div className="flex items-center gap-3">
@@ -755,9 +749,8 @@ function ClientListWindowContent({ brands, currentBrandId, onSelectClient, onOpe
                   {b.id === currentBrandId && (
                     <span className="text-xs px-2 py-0.5 bg-indigo-100 text-indigo-600 rounded-full">Current</span>
                   )}
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${
-                    b.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
-                  }`}>
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${b.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
+                    }`}>
                     {b.status}
                   </span>
                   {b.tier && (
@@ -964,11 +957,10 @@ function ClientDetailWindowContent({ clientBrand, isCurrentClient, onSwitchToCli
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <span className={`text-xs px-2 py-0.5 rounded-full ${
-                  campaign.status === 'ACTIVE' ? 'bg-green-100 text-green-700' :
+                <span className={`text-xs px-2 py-0.5 rounded-full ${campaign.status === 'ACTIVE' ? 'bg-green-100 text-green-700' :
                   campaign.status === 'PAUSED' ? 'bg-yellow-100 text-yellow-700' :
-                  'bg-gray-100 text-gray-600'
-                }`}>
+                    'bg-gray-100 text-gray-600'
+                  }`}>
                   {campaign.status}
                 </span>
                 <ChevronRight className="w-4 h-4 text-gray-400" />
@@ -2048,7 +2040,7 @@ function WindowedAppInner({ brand, allBrands, onBrandUpdate, onBrandSelect, onBa
 
     // "Show insights" or "show audience insights" command
     if ((lowerText.includes('insight') || lowerText.includes('audience')) &&
-        (lowerText.includes('show') || lowerText.includes('open') || lowerText.includes('view'))) {
+      (lowerText.includes('show') || lowerText.includes('open') || lowerText.includes('view'))) {
       // Need a flight context to show insights
       if (windowContext?.flightId) {
         const flightId = windowContext.flightId;
@@ -2231,7 +2223,7 @@ function WindowedAppInner({ brand, allBrands, onBrandUpdate, onBrandSelect, onBa
         return b;
       }
       if ((windowType === 'flight' || windowType === 'media-plan') &&
-          b.campaigns.some(c => c.flights.some(f => f.id === entityId))) {
+        b.campaigns.some(c => c.flights.some(f => f.id === entityId))) {
         return b;
       }
       if (windowType === 'portfolio' && b.id === entityId) {
@@ -3055,11 +3047,41 @@ function WindowedAppInner({ brand, allBrands, onBrandUpdate, onBrandSelect, onBa
     </div>
   );
 
+  // Define window actions based on window type
+  const getWindowActions = (window: WindowState): { label: string; onClick: () => void }[] => {
+    const actions = [];
+
+    if (window.type === 'campaign') {
+      // Add "Open Attribution Dashboard" action for campaign windows
+      actions.push({
+        label: 'Open Attribution Dashboard',
+        onClick: () => {
+          // Find the campaign to get title
+          // window.entityId is the campaignId for campaign windows
+          const cId = window.entityId;
+          const bId = window.brandId || brand.id; // Use window brand or current brand fallback
+
+          if (cId) {
+            // Find campaign name for the window title
+            let campaignName = 'Campaign';
+
+            openWindow('attribution', 'Attribution Dashboard', cId, bId);
+          } else {
+            console.warn('Cannot open attribution: validation failed', { cId, bId });
+          }
+        }
+      });
+    }
+
+    return actions;
+  };
+
   return (
     <>
       <Canvas
         chatComponent={chatComponent}
         renderWindowContent={renderWindowContent}
+        getWindowActions={getWindowActions}
       />
       {templateLibraryCampaignId && (
         <TemplateLibrary
@@ -3087,7 +3109,7 @@ export function WindowedApp({ brand, allBrands = [], onBrandUpdate, onBrandSelec
         brand={brand}
         allBrands={allBrands.length > 0 ? allBrands : [brand]}  // Default to current brand if no list provided
         onBrandUpdate={onBrandUpdate}
-        onBrandSelect={onBrandSelect || (() => {})}
+        onBrandSelect={onBrandSelect || (() => { })}
         onBack={onBack}
         onSwitchToClassic={onSwitchToClassic}
       />

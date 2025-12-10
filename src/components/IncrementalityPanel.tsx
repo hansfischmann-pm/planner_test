@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { IncrementalityTest, ChannelType } from '../types';
 import { calculateIncrementality, formatLift, getRecommendationMessage } from '../utils/incrementalityCalculator';
-import { TrendingUp, TrendingDown, AlertCircle, CheckCircle, Info, HelpCircle, X } from 'lucide-react';
+import { TrendingUp, TrendingDown, AlertCircle, CheckCircle, Info, HelpCircle, X, Sparkles } from 'lucide-react';
 
 interface IncrementalityPanelProps {
     tests?: IncrementalityTest[];
@@ -34,7 +34,6 @@ export const IncrementalityPanel: React.FC<IncrementalityPanelProps> = ({ tests 
     const [testRevenue, setTestRevenue] = useState('');
 
     // Calculate incrementality results for each test
-    // Note: If tests come with results pre-calculated (which they do now from parent), this is redundant but harmless re-calculation for legacy support
     const testsWithResults = tests.map(test => ({
         ...test,
         results: calculateIncrementality(test)
@@ -68,6 +67,38 @@ export const IncrementalityPanel: React.FC<IncrementalityPanelProps> = ({ tests 
         setTestSpend('');
         setTestConversions('');
         setTestRevenue('');
+    };
+
+    const handleSimulateData = () => {
+        // Generate realistic mock data
+        // 1. Control Group (Baseline)
+        const controlConv = Math.floor(Math.random() * 50) + 100; // 100-150 conversions
+        const controlRev = controlConv * (Math.floor(Math.random() * 20) + 40); // $40-$60 AOV
+
+        // 2. Test Group (Exposed)
+        // Simulate a lift between -5% and +25%
+        const liftUncertainty = (Math.random() * 0.30) - 0.05;
+        const testSpendAmount = Math.floor(Math.random() * 2000) + 1000; // $1000-$3000 spend
+
+        // Impact of spend (simplified ROAS assumption of 2x-5x on ad spend)
+        const adDrivenLift = 1 + liftUncertainty;
+
+        const testConv = Math.floor(controlConv * adDrivenLift);
+        const testRev = Math.floor(controlRev * adDrivenLift);
+
+        // Autofill form
+        setStartDate(new Date().toISOString().split('T')[0]);
+        const endDateObj = new Date();
+        endDateObj.setDate(endDateObj.getDate() + 30);
+        setEndDate(endDateObj.toISOString().split('T')[0]);
+
+        setControlSpend('0');
+        setControlConversions(controlConv.toString());
+        setControlRevenue(controlRev.toString());
+
+        setTestSpend(testSpendAmount.toString());
+        setTestConversions(testConv.toString());
+        setTestRevenue(testRev.toString());
     };
 
     const getConfidenceColor = (confidence: number) => {
@@ -198,7 +229,17 @@ export const IncrementalityPanel: React.FC<IncrementalityPanelProps> = ({ tests 
             {/* Test Creation Form */}
             {showTestForm && (
                 <div className="p-6 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:border-gray-700/50">
-                    <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Create Incrementality Test</h3>
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-lg font-medium text-gray-900 dark:text-white">Create Incrementality Test</h3>
+                        <button
+                            onClick={handleSimulateData}
+                            className="flex items-center gap-2 text-sm text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 font-medium transition-colors"
+                            title="Generate realistic mock data for demo"
+                        >
+                            <Sparkles className="w-4 h-4" />
+                            Autofill Mock Data
+                        </button>
+                    </div>
 
                     {/* Top Row: Channel and Dates */}
                     <div className="grid grid-cols-3 gap-4 mb-6">

@@ -220,10 +220,12 @@ This roadmap outlines the planned evolution of the FuseIQ Media Planner from pro
 **Extensibility & Partnerships**
 
 ### 10.1: White-Label Capabilities
-- Custom branding
-- Domain customization
-- Feature toggles
-- Reseller program
+- **Custom Branding**: Configurable active window colors (client brand matching).
+- **Theme Collections**: Pre-built theme sets (e.g., Dark Mode, High Contrast, Client Brand).
+- **Attribution Options**: "Powered by..." toggle and localization.
+- **Domain Customization**: CNAME support.
+- **Feature Toggles**: Enable/disable specific modules per client.
+- **Reseller Program**: Multi-tenant architecture.
 
 ### 10.2: API & Developer Platform
 - Public API

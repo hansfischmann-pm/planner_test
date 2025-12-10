@@ -21,13 +21,19 @@ import {
 import { WindowState } from '../types/windowTypes';
 import { useCanvas } from '../context/CanvasContext';
 
+interface WindowAction {
+  label: string;
+  onClick: () => void;
+}
+
 interface WindowProps {
   window: WindowState;
   children: ReactNode;
   path?: string; // Optional path for hierarchical windows (e.g., "Brand > Campaign > Flight")
+  actions?: WindowAction[]; // Custom actions for the window menu
 }
 
-export function Window({ window: windowState, children, path }: WindowProps) {
+export function Window({ window: windowState, children, path, actions }: WindowProps) {
   const { dispatch, focusWindow, closeWindow, minimizeWindow, maximizeWindow, restoreWindow, togglePinWindow } = useCanvas();
   const rndRef = useRef<Rnd>(null);
 
@@ -95,10 +101,11 @@ export function Window({ window: windowState, children, path }: WindowProps) {
     togglePinWindow(windowState.id);
   }, [windowState.id, togglePinWindow]);
 
-  // Handle context menu on title
-  const handleTitleContextMenu = useCallback((e: React.MouseEvent) => {
+  // Handle context menu on title or more button
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    // Position menu near the click
     setContextMenu({ x: e.clientX, y: e.clientY });
   }, []);
 
@@ -209,7 +216,7 @@ export function Window({ window: windowState, children, path }: WindowProps) {
                 font-medium text-sm truncate cursor-default tracking-tight
                 ${windowState.isActive ? 'text-gray-900' : 'text-gray-500'}
               `}
-              onContextMenu={handleTitleContextMenu}
+              onContextMenu={handleContextMenu}
               title={path || windowState.title}
             >
               {windowState.title}
@@ -241,10 +248,7 @@ export function Window({ window: windowState, children, path }: WindowProps) {
             {/* More options */}
             <button
               className="p-1 hover:bg-gray-100 rounded-md text-gray-400 hover:text-gray-700 transition-colors"
-              onClick={(e) => {
-                e.stopPropagation();
-                // TODO: Show context menu
-              }}
+              onClick={handleContextMenu}
               title="More options"
             >
               <MoreHorizontal size={13} />
@@ -292,13 +296,32 @@ export function Window({ window: windowState, children, path }: WindowProps) {
           </div>
         </div>
 
-        {/* Context Menu for Title - rendered via portal to avoid transform positioning issues */}
+        {/* Context Menu - rendered via portal to avoid transform positioning issues */}
         {contextMenu && createPortal(
           <div
             className="fixed z-[9999] bg-white rounded-lg shadow-xl border border-gray-200 py-1 min-w-[160px]"
-            style={{ left: contextMenu.x, top: contextMenu.y }}
+            style={{ left: contextMenu.x - 140, top: contextMenu.y + 10 }} // Adjusted position to be under the button
             onClick={(e) => e.stopPropagation()}
           >
+            {/* Custom Actions */}
+            {actions && actions.length > 0 && (
+              <>
+                {actions.map((action, index) => (
+                  <button
+                    key={index}
+                    className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                    onClick={() => {
+                      action.onClick();
+                      setContextMenu(null);
+                    }}
+                  >
+                    {action.label}
+                  </button>
+                ))}
+                <div className="border-t border-gray-100 my-1" />
+              </>
+            )}
+
             <button
               className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
               onClick={() => copyToClipboard(windowState.title, 'Name copied')}
