@@ -176,13 +176,22 @@ export function Window({ window: windowState, children, path }: WindowProps) {
         application-window
         absolute rounded-xl overflow-hidden
         bg-white
-        ${windowState.isActive ? 'shadow-2xl shadow-black/20 border-gray-300' : 'shadow-xl shadow-black/5 border-gray-200'}
         border
-        transition-all duration-200
+        transition-shadow duration-200
+        will-change-transform
+        ${windowState.isActive
+          ? 'shadow-2xl shadow-indigo-500/10 border-indigo-200 ring-1 ring-indigo-50'
+          : 'shadow-lg border-gray-200 opacity-95'
+        }
         ${isMaximized ? 'rounded-none border-0' : ''}
       `}
     >
-      <div className="flex flex-col h-full bg-white">
+      <div className="flex flex-col h-full bg-white relative">
+        {/* Active Window Accent Line */}
+        {windowState.isActive && !isMaximized && (
+          <div className="absolute top-0 left-0 right-0 h-[2px] bg-indigo-500 z-10" />
+        )}
+
         {/* Title Bar */}
         <div
           className={`
@@ -196,7 +205,10 @@ export function Window({ window: windowState, children, path }: WindowProps) {
           {/* Left: Title and Badge */}
           <div className="flex items-center gap-2 min-w-0">
             <span
-              className="text-gray-800 font-medium text-sm truncate cursor-default tracking-tight"
+              className={`
+                font-medium text-sm truncate cursor-default tracking-tight
+                ${windowState.isActive ? 'text-gray-900' : 'text-gray-500'}
+              `}
               onContextMenu={handleTitleContextMenu}
               title={path || windowState.title}
             >
