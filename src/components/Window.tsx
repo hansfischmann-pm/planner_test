@@ -174,6 +174,7 @@ export function Window({ window: windowState, children, path }: WindowProps) {
         topLeft: { width: '12px', height: '12px', cursor: 'nw-resize' }
       }}
       className={`
+        application-window
         absolute rounded-lg overflow-hidden shadow-2xl
         ${windowState.isActive ? 'ring-2 ring-blue-500' : 'ring-1 ring-gray-300'}
         ${isMaximized ? 'rounded-none' : ''}
@@ -213,11 +214,10 @@ export function Window({ window: windowState, children, path }: WindowProps) {
           <div className="flex items-center gap-1 ml-2">
             {/* Pin/Unpin toggle */}
             <button
-              className={`p-1 rounded transition-colors ${
-                windowState.isPinned
+              className={`p-1 rounded transition-colors ${windowState.isPinned
                   ? 'bg-white/30 text-white hover:bg-white/40'
                   : 'hover:bg-white/20 text-white/60 hover:text-white'
-              }`}
+                }`}
               onClick={(e) => {
                 e.stopPropagation();
                 handlePinToggle();

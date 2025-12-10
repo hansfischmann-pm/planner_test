@@ -231,59 +231,12 @@ export function Canvas({ chatComponent, renderWindowContent }: CanvasProps) {
     if (!canvas) return;
 
     const handleWheel = (e: WheelEvent) => {
-      // Helper to check if an element is scrollable
-      const isScrollable = (element: HTMLElement, direction: 'vertical' | 'horizontal'): boolean => {
-        const style = window.getComputedStyle(element);
-        const overflow = direction === 'vertical' ? style.overflowY : style.overflowX;
-        const isScrollableStyle = ['auto', 'scroll'].includes(overflow);
-
-        if (!isScrollableStyle) return false;
-
-        if (direction === 'vertical') {
-          return element.scrollHeight > element.clientHeight;
-        } else {
-          return element.scrollWidth > element.clientWidth;
-        }
-      };
-
-      // Traverse up from target to find if we're inside a scrollable container
-      let currentElement = e.target as HTMLElement;
-      let shouldBlockCanvas = false;
-
-      // Stop traversing if we hit the canvas itself or run out of parents
-      while (currentElement && currentElement !== canvas) {
-        // Prepare to check scrollability based on wheel direction
-        // If mostly vertical scrolling
-        if (Math.abs(e.deltaY) >= Math.abs(e.deltaX)) {
-          if (isScrollable(currentElement, 'vertical')) {
-            shouldBlockCanvas = true;
-            break;
-          }
-        }
-        // If mostly horizontal scrolling
-        else {
-          if (isScrollable(currentElement, 'horizontal')) {
-            shouldBlockCanvas = true;
-            break;
-          }
-        }
-        currentElement = currentElement.parentElement as HTMLElement;
-      }
-
-      if (shouldBlockCanvas) {
-        return; // Let the window content scroll naturally
-      }
-
-      // Prevent default browser behavior (back/forward navigation on horizontal swipe)
-      // Only if we decided to handle it as a canvas action
-      e.preventDefault();
-      e.stopPropagation();
-
-      const currentOffset = state.canvasOffset || { x: 0, y: 0 };
-      const currentZoom = state.canvasZoom || 1.0;
-
-      // Ctrl+scroll or Cmd+scroll = zoom (pinch gesture also triggers ctrlKey on Mac)
+      // 1. Zoom Logic (Ctrl + Wheel or Pinch) - Global
+      // We process this first because we usually want zoom to work everywhere
       if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        e.stopPropagation();
+
         // If it's a pinch gesture (ctrlKey with no actual key pressed) or Ctrl/Cmd+scroll
         // Pinch gestures have small deltaY values, scroll wheel has larger ones
         const isPinchGesture = e.ctrlKey && Math.abs(e.deltaY) < 50;
@@ -293,7 +246,7 @@ export function Canvas({ chatComponent, renderWindowContent }: CanvasProps) {
         // Scroll wheel: use larger step
         const zoomSpeed = isPinchGesture ? 0.01 : 0.1;
         const zoomDelta = -e.deltaY * zoomSpeed;
-        const newZoom = Math.max(0.25, Math.min(2.0, currentZoom + zoomDelta));
+        const newZoom = Math.max(0.25, Math.min(2.0, state.canvasZoom! + zoomDelta)); // state.canvasZoom can be undefined in types but has default in context
 
         // Zoom toward the mouse position
         // Calculate mouse position relative to canvas
@@ -302,7 +255,8 @@ export function Canvas({ chatComponent, renderWindowContent }: CanvasProps) {
         const mouseY = e.clientY - rect.top;
 
         // Adjust offset to zoom toward mouse position
-        const zoomRatio = newZoom / currentZoom;
+        const zoomRatio = newZoom / (state.canvasZoom || 1);
+        const currentOffset = state.canvasOffset || { x: 0, y: 0 };
         const newOffset = {
           x: mouseX - (mouseX - currentOffset.x) * zoomRatio,
           y: mouseY - (mouseY - currentOffset.y) * zoomRatio
@@ -312,6 +266,22 @@ export function Canvas({ chatComponent, renderWindowContent }: CanvasProps) {
         setCanvasOffset(newOffset);
         return;
       }
+
+      // 2. Pan Logic - Block if over a window
+      const target = e.target as HTMLElement;
+      const isOverWindow = target.closest('.application-window');
+
+      if (isOverWindow) {
+        // If we are over a window, we DO NOT pan the canvas.
+        // We let the event bubble naturally so the window can scroll.
+        return;
+      }
+
+      // 3. Pan Canvas (only if not over a window)
+      e.preventDefault();
+      e.stopPropagation();
+
+      const currentOffset = state.canvasOffset || { x: 0, y: 0 };
 
       // Regular scroll/trackpad panning
       // deltaX for horizontal, deltaY for vertical
