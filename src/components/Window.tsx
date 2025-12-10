@@ -150,7 +150,6 @@ export function Window({ window: windowState, children, path }: WindowProps) {
       minHeight={windowState.minSize.height}
       maxWidth={windowState.maxSize?.width}
       maxHeight={windowState.maxSize?.height}
-      bounds="parent"
       dragHandleClassName="window-drag-handle"
       enableResizing={windowState.isResizable && !isMaximized}
       disableDragging={!windowState.isDraggable || isMaximized}

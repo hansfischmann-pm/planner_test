@@ -1745,6 +1745,97 @@ function WindowedAppInner({ brand, allBrands, onBrandUpdate, onBrandSelect, onBa
     brainRef.current?.setWindowContext(newContext);
   }, [canvasState.activeWindowId, canvasState.windows, brand, allBrands, getActiveWindow, mediaPlans]);
 
+  // Handle window management actions from agent
+  const handleWindowAction = useCallback((action: string) => {
+    windowLog('Handling window action:', action);
+    const activeWindow = getActiveWindow();
+
+    switch (action) {
+      case 'WINDOW_CLOSE':
+        if (activeWindow) {
+          dispatch({ type: 'CLOSE_WINDOW', windowId: activeWindow.id });
+        }
+        break;
+
+      case 'WINDOW_MINIMIZE':
+        if (activeWindow) {
+          dispatch({ type: 'MINIMIZE_WINDOW', windowId: activeWindow.id });
+        }
+        break;
+
+      case 'WINDOW_MAXIMIZE':
+        if (activeWindow) {
+          dispatch({ type: 'MAXIMIZE_WINDOW', windowId: activeWindow.id });
+        }
+        break;
+
+      case 'WINDOW_RESTORE':
+        if (activeWindow) {
+          dispatch({ type: 'RESTORE_WINDOW', windowId: activeWindow.id });
+        }
+        break;
+
+      case 'WINDOW_TILE_HORIZONTAL':
+        dispatch({ type: 'ARRANGE_TILE_HORIZONTAL' });
+        break;
+
+      case 'WINDOW_TILE_VERTICAL':
+        dispatch({ type: 'ARRANGE_TILE_VERTICAL' });
+        break;
+
+      case 'WINDOW_CASCADE':
+        dispatch({ type: 'ARRANGE_CASCADE' });
+        break;
+
+      case 'WINDOW_MINIMIZE_ALL':
+        dispatch({ type: 'MINIMIZE_ALL' });
+        break;
+
+      case 'WINDOW_RESTORE_ALL':
+        dispatch({ type: 'RESTORE_ALL' });
+        break;
+
+      case 'WINDOW_CLOSE_ALL':
+        dispatch({ type: 'CLOSE_ALL' });
+        break;
+
+      case 'WINDOW_GATHER':
+        dispatch({
+          type: 'GATHER_WINDOWS',
+          viewportWidth: window.innerWidth,
+          viewportHeight: window.innerHeight
+        });
+        break;
+
+      case 'WINDOW_PIN':
+        if (activeWindow) {
+          dispatch({ type: 'PIN_WINDOW', windowId: activeWindow.id });
+        }
+        break;
+
+      case 'WINDOW_UNPIN':
+        if (activeWindow) {
+          dispatch({ type: 'UNPIN_WINDOW', windowId: activeWindow.id });
+        }
+        break;
+
+      case 'WINDOW_FOCUS':
+        // Focus is handled by the agent brain based on window name matching
+        // For now, this is a placeholder - actual focus needs window ID lookup
+        windowLog('Window focus requested - requires window lookup');
+        break;
+
+      case 'WINDOW_OPEN':
+        // Open is handled by the agent brain based on window type
+        // For now, this is a placeholder - actual open needs type lookup
+        windowLog('Window open requested - requires type specification');
+        break;
+
+      default:
+        windowLog('Unknown window action:', action);
+    }
+  }, [dispatch, getActiveWindow]);
+
   // Handle message sending
   const handleSendMessage = async (text: string) => {
     // Silent clear command - clears chat without any response
@@ -2027,7 +2118,10 @@ function WindowedAppInner({ brand, allBrands, onBrandUpdate, onBrandSelect, onBa
     // Handle actions
     const action = agentResponse.action as any;
     if (action) {
-      if (action === 'EXPORT_PDF' && ctx.mediaPlan) {
+      // Window management actions
+      if (typeof action === 'string' && action.startsWith('WINDOW_')) {
+        handleWindowAction(action);
+      } else if (action === 'EXPORT_PDF' && ctx.mediaPlan) {
         generateMediaPlanPDF(ctx.mediaPlan);
       } else if (action === 'EXPORT_PPT' && ctx.mediaPlan) {
         generateMediaPlanPPT(ctx.mediaPlan);

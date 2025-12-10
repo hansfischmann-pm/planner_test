@@ -26,7 +26,8 @@ export type CommandCategory =
     | 'VIEW'
     | 'UNDO_REDO'
     | 'HELP'
-    | 'INVENTORY';
+    | 'INVENTORY'
+    | 'WINDOW_MANAGEMENT';
 
 /**
  * Command definition structure
@@ -552,6 +553,198 @@ export const NAVIGATION_COMMANDS: CommandDefinition[] = [
 ];
 
 // =============================================================================
+// WINDOW MANAGEMENT COMMANDS (Phase 2 - Canvas Integration)
+// =============================================================================
+
+export const WINDOW_MANAGEMENT_COMMANDS: CommandDefinition[] = [
+    {
+        id: 'close_window',
+        name: 'Close Window',
+        category: 'WINDOW_MANAGEMENT',
+        patterns: [
+            /^close$/i,
+            /close\s+(?:this\s+)?window/i,
+            /close\s+(?:the\s+)?(.+)\s+window/i
+        ],
+        priority: 85,
+        description: 'Close the active window or a specific window',
+        examples: ['close', 'close window', 'close this window', 'close the campaign window']
+    },
+    {
+        id: 'minimize_window',
+        name: 'Minimize Window',
+        category: 'WINDOW_MANAGEMENT',
+        patterns: [
+            /minimize$/i,
+            /minimize\s+(?:this\s+)?window/i,
+            /minimize\s+(?:the\s+)?(.+)\s+window/i
+        ],
+        priority: 85,
+        description: 'Minimize the active window or a specific window',
+        examples: ['minimize', 'minimize window', 'minimize the flight window']
+    },
+    {
+        id: 'maximize_window',
+        name: 'Maximize Window',
+        category: 'WINDOW_MANAGEMENT',
+        patterns: [
+            /maximize$/i,
+            /maximize\s+(?:this\s+)?window/i,
+            /full\s*screen/i
+        ],
+        priority: 85,
+        description: 'Maximize the active window',
+        examples: ['maximize', 'maximize window', 'fullscreen']
+    },
+    {
+        id: 'restore_window',
+        name: 'Restore Window',
+        category: 'WINDOW_MANAGEMENT',
+        patterns: [
+            /restore\s+(?:this\s+)?window/i,
+            /restore\s+(?:the\s+)?(.+)\s+window/i,
+            /unminimize/i,
+            /unmaximize/i
+        ],
+        priority: 85,
+        description: 'Restore a minimized or maximized window',
+        examples: ['restore window', 'restore the campaign window', 'unminimize']
+    },
+    {
+        id: 'tile_windows',
+        name: 'Tile Windows',
+        category: 'WINDOW_MANAGEMENT',
+        patterns: [
+            /tile\s+(?:all\s+)?windows?/i,
+            /tile\s+(horizontal|vertical)(?:ly)?/i,
+            /arrange\s+(?:windows?\s+)?(?:as\s+)?tile/i,
+            /snap\s+windows/i
+        ],
+        priority: 90,
+        description: 'Arrange windows in a tiled layout',
+        examples: ['tile windows', 'tile horizontal', 'tile vertical', 'arrange as tile']
+    },
+    {
+        id: 'cascade_windows',
+        name: 'Cascade Windows',
+        category: 'WINDOW_MANAGEMENT',
+        patterns: [
+            /cascade\s+(?:all\s+)?windows?/i,
+            /cascade$/i,
+            /arrange\s+(?:windows?\s+)?(?:as\s+)?cascade/i,
+            /stack\s+windows/i
+        ],
+        priority: 90,
+        description: 'Arrange windows in a cascading layout',
+        examples: ['cascade windows', 'cascade', 'stack windows']
+    },
+    {
+        id: 'minimize_all',
+        name: 'Minimize All',
+        category: 'WINDOW_MANAGEMENT',
+        patterns: [
+            /minimize\s+all/i,
+            /show\s+desktop/i,
+            /hide\s+all\s+windows/i,
+            /clear\s+(?:the\s+)?desktop/i
+        ],
+        priority: 90,
+        description: 'Minimize all open windows',
+        examples: ['minimize all', 'show desktop', 'hide all windows']
+    },
+    {
+        id: 'restore_all',
+        name: 'Restore All',
+        category: 'WINDOW_MANAGEMENT',
+        patterns: [
+            /restore\s+all/i,
+            /show\s+all\s+windows/i,
+            /unhide\s+(?:all\s+)?windows/i
+        ],
+        priority: 90,
+        description: 'Restore all minimized windows',
+        examples: ['restore all', 'show all windows']
+    },
+    {
+        id: 'close_all',
+        name: 'Close All Windows',
+        category: 'WINDOW_MANAGEMENT',
+        patterns: [
+            /close\s+all(?:\s+windows)?/i,
+            /close\s+everything/i
+        ],
+        priority: 90,
+        description: 'Close all open windows',
+        examples: ['close all', 'close all windows', 'close everything']
+    },
+    {
+        id: 'focus_window',
+        name: 'Focus Window',
+        category: 'WINDOW_MANAGEMENT',
+        patterns: [
+            /(?:switch|go)\s+to\s+(?:the\s+)?(.+?)(?:\s+window)?$/i,
+            /focus\s+(?:on\s+)?(?:the\s+)?(.+?)(?:\s+window)?$/i,
+            /bring\s+(.+)\s+to\s+(?:the\s+)?front/i,
+            /show\s+(?:me\s+)?(?:the\s+)?(.+?)(?:\s+window)?$/i
+        ],
+        priority: 80,
+        description: 'Switch focus to a specific window',
+        examples: ['switch to campaign', 'go to the flight window', 'focus on portfolio', 'bring campaign to front']
+    },
+    {
+        id: 'open_window',
+        name: 'Open Window',
+        category: 'WINDOW_MANAGEMENT',
+        patterns: [
+            /open\s+(?:a\s+)?(?:new\s+)?(campaign|flight|portfolio|report|settings|audience|chat)\s*(?:window)?/i,
+            /new\s+(campaign|flight|portfolio|report|settings|audience|chat)\s*window/i
+        ],
+        priority: 85,
+        description: 'Open a new window of a specific type',
+        examples: ['open campaign window', 'open portfolio', 'new flight window']
+    },
+    {
+        id: 'gather_windows',
+        name: 'Gather Windows',
+        category: 'WINDOW_MANAGEMENT',
+        patterns: [
+            /gather\s+(?:all\s+)?windows/i,
+            /bring\s+(?:all\s+)?windows\s+(?:back|here)/i,
+            /find\s+(?:my\s+)?(?:lost\s+)?windows/i,
+            /where\s+(?:are\s+)?(?:my\s+)?windows/i
+        ],
+        priority: 85,
+        description: 'Bring all windows back to the visible area',
+        examples: ['gather windows', 'bring windows back', 'find my windows']
+    },
+    {
+        id: 'pin_window',
+        name: 'Pin Window',
+        category: 'WINDOW_MANAGEMENT',
+        patterns: [
+            /pin\s+(?:this\s+)?window/i,
+            /keep\s+(?:this\s+)?window/i,
+            /save\s+(?:this\s+)?window/i
+        ],
+        priority: 80,
+        description: 'Pin the current window to persist across sessions',
+        examples: ['pin window', 'keep this window', 'save window']
+    },
+    {
+        id: 'unpin_window',
+        name: 'Unpin Window',
+        category: 'WINDOW_MANAGEMENT',
+        patterns: [
+            /unpin\s+(?:this\s+)?window/i,
+            /don't\s+keep\s+(?:this\s+)?window/i
+        ],
+        priority: 80,
+        description: 'Unpin the current window',
+        examples: ['unpin window', "don't keep this window"]
+    }
+];
+
+// =============================================================================
 // REGISTRY
 // =============================================================================
 
@@ -573,7 +766,8 @@ export const ALL_COMMANDS: CommandDefinition[] = [
     ...VIEW_COMMANDS,
     ...EXPORT_COMMANDS,
     ...INVENTORY_COMMANDS,
-    ...NAVIGATION_COMMANDS
+    ...NAVIGATION_COMMANDS,
+    ...WINDOW_MANAGEMENT_COMMANDS
 ].sort((a, b) => b.priority - a.priority);
 
 /**
@@ -623,4 +817,197 @@ export function findAllMatchingCommands(input: string): CommandMatch[] {
     }
 
     return matches;
+}
+
+// =============================================================================
+// CONTEXTUAL COMMAND ELIGIBILITY (Phase 2 - Agent + Canvas Integration)
+// =============================================================================
+
+/**
+ * Window context for eligibility checks
+ */
+export interface CommandWindowContext {
+    windowType: 'campaign' | 'flight' | 'portfolio' | 'report' | 'settings' | 'media-plan' | 'audience-insights' | 'chat' | 'client' | 'client-list' | null;
+    hasMediaPlan: boolean;
+    hasCampaign: boolean;
+    hasFlight: boolean;
+    hasWindows: boolean;     // Are there any open windows?
+    activeWindowId?: string;
+}
+
+/**
+ * Eligibility result with reason
+ */
+export interface EligibilityResult {
+    eligible: boolean;
+    reason?: string;
+}
+
+/**
+ * Command context requirements mapping
+ * Defines what context each command category requires
+ */
+const COMMAND_CONTEXT_REQUIREMENTS: Record<CommandCategory, {
+    requiredWindowTypes?: string[];  // Empty means any window, undefined means no window needed
+    requiresMediaPlan?: boolean;
+    requiresCampaign?: boolean;
+    requiresFlight?: boolean;
+    requiresWindows?: boolean;       // Requires at least one window open
+}> = {
+    // Layout commands - always available
+    'LAYOUT': {},
+
+    // Navigation - always available
+    'NAVIGATION': {},
+
+    // Help - always available
+    'HELP': {},
+
+    // Campaign setup - requires a campaign context
+    'CAMPAIGN_SETUP': { requiresCampaign: true },
+
+    // Budget - requires media plan
+    'BUDGET': { requiresMediaPlan: true },
+
+    // Channel - requires media plan
+    'CHANNEL': { requiresMediaPlan: true },
+
+    // Placement - requires flight context (can only add placements in flight view)
+    'PLACEMENT': { requiresFlight: true },
+
+    // Optimization - requires media plan
+    'OPTIMIZATION': { requiresMediaPlan: true },
+
+    // Forecasting - requires media plan
+    'FORECASTING': { requiresMediaPlan: true },
+
+    // Goal - requires campaign
+    'GOAL': { requiresCampaign: true },
+
+    // Template - always available
+    'TEMPLATE': {},
+
+    // Creative - requires media plan
+    'CREATIVE': { requiresMediaPlan: true },
+
+    // Export - requires media plan
+    'EXPORT': { requiresMediaPlan: true },
+
+    // View - requires media plan
+    'VIEW': { requiresMediaPlan: true },
+
+    // Undo/Redo - always available
+    'UNDO_REDO': {},
+
+    // Inventory - always available
+    'INVENTORY': {},
+
+    // Window Management - mostly always available, some require windows
+    'WINDOW_MANAGEMENT': {}
+};
+
+/**
+ * Window commands that require at least one window
+ */
+const WINDOW_COMMANDS_REQUIRING_WINDOWS = [
+    'close_window',
+    'minimize_window',
+    'maximize_window',
+    'restore_window',
+    'tile_windows',
+    'cascade_windows',
+    'minimize_all',
+    'restore_all',
+    'close_all',
+    'focus_window',
+    'gather_windows',
+    'pin_window',
+    'unpin_window'
+];
+
+/**
+ * Check if a command is eligible given the current window context
+ */
+export function isCommandEligible(
+    command: CommandDefinition,
+    context: CommandWindowContext
+): EligibilityResult {
+    const requirements = COMMAND_CONTEXT_REQUIREMENTS[command.category];
+
+    // No requirements means always eligible
+    if (!requirements) {
+        return { eligible: true };
+    }
+
+    // Check media plan requirement
+    if (requirements.requiresMediaPlan && !context.hasMediaPlan) {
+        return {
+            eligible: false,
+            reason: 'This command requires an active media plan. Please create or select a campaign first.'
+        };
+    }
+
+    // Check campaign requirement
+    if (requirements.requiresCampaign && !context.hasCampaign) {
+        return {
+            eligible: false,
+            reason: 'This command requires a campaign context. Please select or create a campaign.'
+        };
+    }
+
+    // Check flight requirement
+    if (requirements.requiresFlight && !context.hasFlight) {
+        return {
+            eligible: false,
+            reason: 'This command requires a flight context. Please open a flight to manage placements.'
+        };
+    }
+
+    // Check window-specific requirements
+    if (requirements.requiredWindowTypes && requirements.requiredWindowTypes.length > 0) {
+        if (!context.windowType || !requirements.requiredWindowTypes.includes(context.windowType)) {
+            return {
+                eligible: false,
+                reason: `This command is only available in ${requirements.requiredWindowTypes.join(' or ')} windows.`
+            };
+        }
+    }
+
+    // Special handling for window management commands
+    if (command.category === 'WINDOW_MANAGEMENT') {
+        if (WINDOW_COMMANDS_REQUIRING_WINDOWS.includes(command.id) && !context.hasWindows) {
+            return {
+                eligible: false,
+                reason: 'There are no windows open to manage.'
+            };
+        }
+    }
+
+    return { eligible: true };
+}
+
+/**
+ * Find matching command with eligibility check
+ * Returns the first eligible matching command, or null if none match
+ */
+export function findEligibleCommand(
+    input: string,
+    context: CommandWindowContext
+): { match: CommandMatch; eligibility: EligibilityResult } | null {
+    const matches = findAllMatchingCommands(input);
+
+    for (const match of matches) {
+        const eligibility = isCommandEligible(match.command, context);
+        if (eligibility.eligible) {
+            return { match, eligibility };
+        }
+    }
+
+    // If no eligible matches, return the first match with its ineligibility reason
+    if (matches.length > 0) {
+        const eligibility = isCommandEligible(matches[0].command, context);
+        return { match: matches[0], eligibility };
+    }
+
+    return null;
 }
