@@ -75,6 +75,7 @@ export interface CanvasState {
   chatWindowId: string | null;         // ID of chat window when floating
   wallpaper: CanvasWallpaper;          // Canvas background wallpaper
   canvasOffset: { x: number; y: number };  // Canvas pan offset for scrolling
+  canvasZoom: number;                  // Canvas zoom level (1.0 = 100%, 0.5 = 50%, 2.0 = 200%)
 }
 
 // Default values for new windows
@@ -190,4 +191,5 @@ export type WindowAction =
   | { type: 'LOAD_STATE'; state: CanvasState }
   | { type: 'CLEAR_LAYOUT' }
   | { type: 'GATHER_WINDOWS'; viewportWidth: number; viewportHeight: number }  // Bring all windows back to visible area
-  | { type: 'SET_CANVAS_OFFSET'; offset: { x: number; y: number } };  // Pan the canvas viewport
+  | { type: 'SET_CANVAS_OFFSET'; offset: { x: number; y: number } }  // Pan the canvas viewport
+  | { type: 'SET_CANVAS_ZOOM'; zoom: number };  // Set canvas zoom level (0.25 to 2.0)

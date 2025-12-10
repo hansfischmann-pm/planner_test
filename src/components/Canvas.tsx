@@ -44,7 +44,7 @@ interface CanvasProps {
 }
 
 export function Canvas({ chatComponent, renderWindowContent }: CanvasProps) {
-  const { state, gatherWindows, hasOffscreenWindows, setCanvasOffset } = useCanvas();
+  const { state, gatherWindows, hasOffscreenWindows, setCanvasOffset, setCanvasZoom } = useCanvas();
 
   // Track viewport size for scroll bar calculations (re-render on resize)
   const [viewportDimensions, setViewportDimensions] = useState({ width: 0, height: 0 });
@@ -56,15 +56,23 @@ export function Canvas({ chatComponent, renderWindowContent }: CanvasProps) {
   const scrollStartOffset = useRef({ x: 0, y: 0 });
 
   // Calculate the bounds of all windows (the virtual canvas size)
+  // Include floating chat windows so scrollbars can reach them
   const canvasBounds = useMemo(() => {
-    const nonChatWindows = state.windows.filter(w => w.type !== 'chat' && w.state !== 'minimized');
-    if (nonChatWindows.length === 0) {
+    // Include all non-minimized windows
+    // When chat is floating, include it; when docked, exclude it (it's outside canvas)
+    const windowsToInclude = state.windows.filter(w => {
+      if (w.state === 'minimized') return false;
+      if (w.type === 'chat' && state.chatMode === 'docked') return false;
+      return true;
+    });
+
+    if (windowsToInclude.length === 0) {
       return { minX: 0, minY: 0, maxX: 0, maxY: 0, width: 0, height: 0 };
     }
 
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
 
-    nonChatWindows.forEach(w => {
+    windowsToInclude.forEach(w => {
       minX = Math.min(minX, w.position.x);
       minY = Math.min(minY, w.position.y);
       maxX = Math.max(maxX, w.position.x + w.size.width);
@@ -81,7 +89,7 @@ export function Canvas({ chatComponent, renderWindowContent }: CanvasProps) {
       width: maxX - minX + PADDING * 2,
       height: maxY - minY + PADDING * 2
     };
-  }, [state.windows]);
+  }, [state.windows, state.chatMode]);
 
   // Calculate viewport dimensions (uses tracked dimensions for reactivity)
   const viewportSize = useMemo(() => {
@@ -213,6 +221,80 @@ export function Canvas({ chatComponent, renderWindowContent }: CanvasProps) {
     return () => window.removeEventListener('resize', updateViewport);
   }, []);
 
+  // Ref for the canvas container (needed for native wheel event listener)
+  const canvasRef = useRef<HTMLDivElement>(null);
+
+  // Handle trackpad/mouse wheel panning and zooming with native event listener
+  // Must use native listener with { passive: false } to prevent browser back/forward gestures
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      // Only pan/zoom if we're not over a scrollable element inside a window
+      const target = e.target as HTMLElement;
+      const isInsideWindowContent = target.closest('.window-content-scrollable');
+      if (isInsideWindowContent) {
+        return; // Let the window content scroll naturally
+      }
+
+      // Prevent default browser behavior (back/forward navigation on horizontal swipe)
+      e.preventDefault();
+      e.stopPropagation();
+
+      const currentOffset = state.canvasOffset || { x: 0, y: 0 };
+      const currentZoom = state.canvasZoom || 1.0;
+
+      // Ctrl+scroll or Cmd+scroll = zoom (pinch gesture also triggers ctrlKey on Mac)
+      if (e.ctrlKey || e.metaKey) {
+        // If it's a pinch gesture (ctrlKey with no actual key pressed) or Ctrl/Cmd+scroll
+        // Pinch gestures have small deltaY values, scroll wheel has larger ones
+        const isPinchGesture = e.ctrlKey && Math.abs(e.deltaY) < 50;
+
+        // Calculate zoom change
+        // Pinch: use deltaY directly (smaller increments)
+        // Scroll wheel: use larger step
+        const zoomSpeed = isPinchGesture ? 0.01 : 0.1;
+        const zoomDelta = -e.deltaY * zoomSpeed;
+        const newZoom = Math.max(0.25, Math.min(2.0, currentZoom + zoomDelta));
+
+        // Zoom toward the mouse position
+        // Calculate mouse position relative to canvas
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+
+        // Adjust offset to zoom toward mouse position
+        const zoomRatio = newZoom / currentZoom;
+        const newOffset = {
+          x: mouseX - (mouseX - currentOffset.x) * zoomRatio,
+          y: mouseY - (mouseY - currentOffset.y) * zoomRatio
+        };
+
+        setCanvasZoom(newZoom);
+        setCanvasOffset(newOffset);
+        return;
+      }
+
+      // Regular scroll/trackpad panning
+      // deltaX for horizontal, deltaY for vertical
+      // Invert the delta so dragging "pulls" the canvas in the intuitive direction
+      const newOffset = {
+        x: currentOffset.x - e.deltaX,
+        y: currentOffset.y - e.deltaY
+      };
+
+      setCanvasOffset(newOffset);
+    };
+
+    // Use passive: false to allow preventDefault() on wheel events
+    canvas.addEventListener('wheel', handleWheel, { passive: false });
+
+    return () => {
+      canvas.removeEventListener('wheel', handleWheel);
+    };
+  }, [state.canvasOffset, state.canvasZoom, setCanvasOffset, setCanvasZoom]);
+
   // Separate minimized windows and chat window for taskbar
   const { visibleWindows, minimizedWindows, chatWindow } = useMemo(() => {
     const visible = state.windows.filter(w => w.state !== 'minimized' && w.type !== 'chat');
@@ -258,8 +340,13 @@ export function Canvas({ chatComponent, renderWindowContent }: CanvasProps) {
 
   return (
     <div
+      ref={canvasRef}
       className={`fixed inset-0 overflow-hidden ${wallpaperStyles.className || ''}`}
-      style={wallpaperStyles.style}
+      style={{
+        ...wallpaperStyles.style,
+        overscrollBehavior: 'none',  // Prevent browser back/forward on horizontal swipe
+        touchAction: 'none'          // Prevent default touch gestures
+      }}
     >
       {/* Canvas Background Pattern */}
       <div
@@ -304,11 +391,28 @@ export function Canvas({ chatComponent, renderWindowContent }: CanvasProps) {
           </button>
         )}
 
-        {/* Regular windows - offset by canvas pan position */}
+        {/* Zoom Indicator - only show when zoom is not 100% */}
+        {state.canvasZoom && state.canvasZoom !== 1.0 && (
+          <div className="absolute bottom-3 left-3 z-50 flex items-center gap-2">
+            <div className="px-2 py-1 bg-slate-700/80 text-white/80 text-xs font-medium rounded shadow-md backdrop-blur-sm border border-slate-600/50">
+              {Math.round((state.canvasZoom || 1) * 100)}%
+            </div>
+            <button
+              onClick={() => setCanvasZoom(1.0)}
+              className="px-2 py-1 bg-slate-700/80 hover:bg-slate-600 text-white/60 hover:text-white text-xs rounded shadow-md transition-all backdrop-blur-sm border border-slate-600/50"
+              title="Reset zoom to 100%"
+            >
+              Reset
+            </button>
+          </div>
+        )}
+
+        {/* Regular windows - offset by canvas pan position and zoom */}
         <div
           className="absolute inset-0"
           style={{
-            transform: `translate(${state.canvasOffset?.x || 0}px, ${state.canvasOffset?.y || 0}px)`
+            transform: `translate(${state.canvasOffset?.x || 0}px, ${state.canvasOffset?.y || 0}px) scale(${state.canvasZoom || 1})`,
+            transformOrigin: '0 0'
           }}
         >
           {visibleWindows.map(window => (
@@ -337,57 +441,57 @@ export function Canvas({ chatComponent, renderWindowContent }: CanvasProps) {
 
         {/* Taskbar for minimized windows */}
         <WindowTaskbar minimizedWindows={minimizedWindows} />
-
-        {/* Horizontal Scroll Bar - at very bottom edge */}
-        {showScrollBars.x && (
-          <div
-            className="absolute left-0 h-2 z-50 group"
-            style={{
-              bottom: minimizedWindows.length > 0 ? 48 : 0,
-              right: showScrollBars.y ? 8 : 0
-            }}
-          >
-            {/* Track */}
-            <div className="relative h-full w-full bg-black/30">
-              {/* Thumb */}
-              <div
-                className="absolute top-0 h-full bg-white/60 hover:bg-white/80 rounded-sm cursor-grab active:cursor-grabbing transition-colors"
-                style={{
-                  left: `${scrollBarInfo.scrollPercentX * (100 - scrollBarInfo.thumbSizeX * 100)}%`,
-                  width: `${Math.max(10, scrollBarInfo.thumbSizeX * 100)}%`,
-                  minWidth: '24px'
-                }}
-                onMouseDown={(e) => handleScrollBarMouseDown('x', e)}
-              />
-            </div>
-          </div>
-        )}
-
-        {/* Vertical Scroll Bar - at very right edge */}
-        {showScrollBars.y && (
-          <div
-            className="absolute top-0 w-2 z-50 group"
-            style={{
-              right: 0,
-              bottom: (minimizedWindows.length > 0 ? 48 : 0) + (showScrollBars.x ? 8 : 0)
-            }}
-          >
-            {/* Track */}
-            <div className="relative w-full h-full bg-black/30">
-              {/* Thumb */}
-              <div
-                className="absolute left-0 w-full bg-white/60 hover:bg-white/80 rounded-sm cursor-grab active:cursor-grabbing transition-colors"
-                style={{
-                  top: `${scrollBarInfo.scrollPercentY * (100 - scrollBarInfo.thumbSizeY * 100)}%`,
-                  height: `${Math.max(10, scrollBarInfo.thumbSizeY * 100)}%`,
-                  minHeight: '24px'
-                }}
-                onMouseDown={(e) => handleScrollBarMouseDown('y', e)}
-              />
-            </div>
-          </div>
-        )}
       </div>
+
+      {/* Horizontal Scroll Bar - at very bottom edge of canvas area (outside container to avoid padding issues) */}
+      {showScrollBars.x && (
+        <div
+          className="absolute left-0 h-2 z-[60] group"
+          style={{
+            bottom: minimizedWindows.length > 0 ? 48 : 0,
+            right: chatPanelWidth + (showScrollBars.y ? 8 : 0)
+          }}
+        >
+          {/* Track */}
+          <div className="relative h-full w-full bg-black/40">
+            {/* Thumb */}
+            <div
+              className="absolute top-0 h-full bg-white/70 hover:bg-white/90 rounded-sm cursor-grab active:cursor-grabbing transition-colors"
+              style={{
+                left: `${scrollBarInfo.scrollPercentX * (100 - scrollBarInfo.thumbSizeX * 100)}%`,
+                width: `${Math.max(10, scrollBarInfo.thumbSizeX * 100)}%`,
+                minWidth: '24px'
+              }}
+              onMouseDown={(e) => handleScrollBarMouseDown('x', e)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Vertical Scroll Bar - at right edge of canvas area (left of chat panel) */}
+      {showScrollBars.y && (
+        <div
+          className="absolute top-0 w-2 z-[60] group"
+          style={{
+            right: chatPanelWidth,
+            bottom: (minimizedWindows.length > 0 ? 48 : 0) + (showScrollBars.x ? 8 : 0)
+          }}
+        >
+          {/* Track */}
+          <div className="relative w-full h-full bg-black/40">
+            {/* Thumb */}
+            <div
+              className="absolute left-0 w-full bg-white/70 hover:bg-white/90 rounded-sm cursor-grab active:cursor-grabbing transition-colors"
+              style={{
+                top: `${scrollBarInfo.scrollPercentY * (100 - scrollBarInfo.thumbSizeY * 100)}%`,
+                height: `${Math.max(10, scrollBarInfo.thumbSizeY * 100)}%`,
+                minHeight: '24px'
+              }}
+              onMouseDown={(e) => handleScrollBarMouseDown('y', e)}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Docked Chat Panel (right side) - only when in docked mode */}
       {state.chatMode === 'docked' && (

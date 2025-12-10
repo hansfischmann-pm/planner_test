@@ -106,7 +106,8 @@ const initialCanvasState: CanvasState = {
   chatMode: 'docked',
   chatWindowId: null,
   wallpaper: { type: 'gradient', value: 'from-slate-900 via-slate-800 to-slate-900' },
-  canvasOffset: { x: 0, y: 0 }
+  canvasOffset: { x: 0, y: 0 },
+  canvasZoom: 1.0  // Default 100% zoom
 };
 
 // Window positioning constants
@@ -568,6 +569,15 @@ function canvasReducer(state: CanvasState, action: WindowAction): CanvasState {
       };
     }
 
+    case 'SET_CANVAS_ZOOM': {
+      // Clamp zoom between 0.25 (25%) and 2.0 (200%)
+      const zoom = Math.max(0.25, Math.min(2.0, action.zoom));
+      return {
+        ...state,
+        canvasZoom: zoom
+      };
+    }
+
     default:
       return state;
   }
@@ -589,6 +599,7 @@ interface CanvasContextType {
   findWindowByEntity: (entityId: string) => WindowState | undefined;
   gatherWindows: () => void;
   setCanvasOffset: (offset: { x: number; y: number }) => void;
+  setCanvasZoom: (zoom: number) => void;
   hasOffscreenWindows: () => boolean;
 }
 
@@ -697,6 +708,10 @@ export function CanvasProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'SET_CANVAS_OFFSET', offset });
   }, []);
 
+  const setCanvasZoom = useCallback((zoom: number) => {
+    dispatch({ type: 'SET_CANVAS_ZOOM', zoom });
+  }, []);
+
   const hasOffscreenWindows = useCallback(() => {
     const chatWidth = state.chatMode === 'docked' ? (state.chatCollapsed ? 50 : state.chatWidth) : 0;
     const viewportWidth = window.innerWidth - chatWidth;
@@ -729,6 +744,7 @@ export function CanvasProvider({ children }: { children: ReactNode }) {
       findWindowByEntity,
       gatherWindows,
       setCanvasOffset,
+      setCanvasZoom,
       hasOffscreenWindows
     }}>
       {children}
