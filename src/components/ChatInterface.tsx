@@ -9,7 +9,7 @@ interface ChatInterfaceProps {
   messages: AgentMessage[];
   onSendMessage: (msg: string) => void;
   isTyping?: boolean;
-  currentView?: 'LOGIN' | 'CLIENT_SELECTION' | 'CAMPAIGN_LIST' | 'FLIGHT_LIST' | 'MEDIA_PLAN' | 'AGENCY_ANALYTICS';
+  currentView?: 'LOGIN' | 'CLIENT_SELECTION' | 'CAMPAIGN_LIST' | 'FLIGHT_LIST' | 'MEDIA_PLAN' | 'AGENCY_ANALYTICS' | 'ATTRIBUTION';
   agentState?: AgentState;
   hasPlan?: boolean;
   layout?: 'LEFT' | 'RIGHT' | 'BOTTOM';

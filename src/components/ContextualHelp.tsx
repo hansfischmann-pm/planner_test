@@ -4,7 +4,7 @@ import { AgentState } from '../logic/agentBrain';
 
 interface ContextualHelpProps {
     state: AgentState | 'IDLE';
-    currentView?: 'LOGIN' | 'CLIENT_SELECTION' | 'CAMPAIGN_LIST' | 'FLIGHT_LIST' | 'MEDIA_PLAN' | 'AGENCY_ANALYTICS';
+    currentView?: 'LOGIN' | 'CLIENT_SELECTION' | 'CAMPAIGN_LIST' | 'FLIGHT_LIST' | 'MEDIA_PLAN' | 'AGENCY_ANALYTICS' | 'ATTRIBUTION';
     hasPlan?: boolean;
     onSendPrompt: (prompt: string) => void;
 }
@@ -82,6 +82,21 @@ export const ContextualHelp: React.FC<ContextualHelpProps> = ({ state: _state, c
                         'Export agency data',
                         'Show top performing clients',
                         'Compare channel performance'
+                    ]
+                }
+            ];
+        }
+
+        // Attribution Analysis view
+        if (currentView === 'ATTRIBUTION') {
+            return [
+                {
+                    category: 'Attribution & Lift',
+                    prompts: [
+                        'Explain incrementality testing',
+                        'Compare first-touch vs linear models',
+                        'Help me set up a holdout test',
+                        'What is a good confidence score?'
                     ]
                 }
             ];

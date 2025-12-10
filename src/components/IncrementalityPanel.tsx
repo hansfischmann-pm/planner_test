@@ -1,20 +1,74 @@
 import React, { useState } from 'react';
-import { IncrementalityTest } from '../types';
+import { IncrementalityTest, ChannelType } from '../types';
 import { calculateIncrementality, formatLift, getRecommendationMessage } from '../utils/incrementalityCalculator';
-import { TrendingUp, TrendingDown, AlertCircle, CheckCircle, Info } from 'lucide-react';
+import { TrendingUp, TrendingDown, AlertCircle, CheckCircle, Info, HelpCircle, X } from 'lucide-react';
 
 interface IncrementalityPanelProps {
     tests?: IncrementalityTest[];
+    onAddTest?: (
+        channel: string,
+        channelType: ChannelType,
+        startDate: string,
+        endDate: string,
+        controlGroup: { spend: number; conversions: number; revenue: number },
+        testGroup: { spend: number; conversions: number; revenue: number }
+    ) => void;
 }
 
-export const IncrementalityPanel: React.FC<IncrementalityPanelProps> = ({ tests = [] }) => {
+export const IncrementalityPanel: React.FC<IncrementalityPanelProps> = ({ tests = [], onAddTest }) => {
     const [showTestForm, setShowTestForm] = useState(false);
+    const [showHelp, setShowHelp] = useState(false);
+
+    // Form State
+    const [channel, setChannel] = useState<string>('Search');
+    const [channelType, setChannelType] = useState<ChannelType>('SEARCH');
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
+
+    const [controlSpend, setControlSpend] = useState('');
+    const [controlConversions, setControlConversions] = useState('');
+    const [controlRevenue, setControlRevenue] = useState('');
+
+    const [testSpend, setTestSpend] = useState('');
+    const [testConversions, setTestConversions] = useState('');
+    const [testRevenue, setTestRevenue] = useState('');
 
     // Calculate incrementality results for each test
+    // Note: If tests come with results pre-calculated (which they do now from parent), this is redundant but harmless re-calculation for legacy support
     const testsWithResults = tests.map(test => ({
         ...test,
         results: calculateIncrementality(test)
     }));
+
+    const handleCreateTest = () => {
+        if (!onAddTest) return;
+
+        onAddTest(
+            channel,
+            channelType,
+            startDate,
+            endDate,
+            {
+                spend: Number(controlSpend),
+                conversions: Number(controlConversions),
+                revenue: Number(controlRevenue)
+            },
+            {
+                spend: Number(testSpend),
+                conversions: Number(testConversions),
+                revenue: Number(testRevenue)
+            }
+        );
+
+        // Reset and close
+        setShowTestForm(false);
+        setControlSpend('');
+        setControlConversions('');
+        setControlRevenue('');
+        setTestSpend('');
+        setTestConversions('');
+        setTestRevenue('');
+    };
 
     const getConfidenceColor = (confidence: number) => {
         if (confidence >= 0.95) return 'text-green-600 dark:text-green-400';
@@ -53,7 +107,16 @@ export const IncrementalityPanel: React.FC<IncrementalityPanelProps> = ({ tests 
             <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
                 <div className="flex items-center justify-between">
                     <div>
-                        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Incrementality Testing</h2>
+                        <div className="flex items-center gap-2">
+                            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Incrementality Testing</h2>
+                            <button
+                                onClick={() => setShowHelp(true)}
+                                className="text-gray-400 hover:text-purple-600 transition-colors"
+                                title="How to use Incrementality Testing"
+                            >
+                                <HelpCircle className="w-4 h-4" />
+                            </button>
+                        </div>
                         <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                             Measure true lift and statistical significance
                         </p>
@@ -67,65 +130,197 @@ export const IncrementalityPanel: React.FC<IncrementalityPanelProps> = ({ tests 
                 </div>
             </div>
 
-            {/* Test Creation Form */}
-            {showTestForm && (
-                <div className="p-6 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:border-gray-700/50">
-                    <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Create Incrementality Test</h3>
-                    <div className="grid grid-cols-2 gap-6">
-                        {/* Test Setup */}
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                    Channel
-                                </label>
-                                <select
-                                    className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
-                                >
-                                    <option value="SEARCH">Search</option>
-                                    <option value="SOCIAL">Social</option>
-                                    <option value="DISPLAY">Display</option>
-                                    <option value="VIDEO">Video/TV</option>
-                                    <option value="AUDIO">Audio</option>
-                                    <option value="EMAIL">Email</option>
-                                    <option value="OOH">Out of Home</option>
-                                </select>
+            {/* Help Modal */}
+            {showHelp && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white dark:bg-gray-800 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+                        <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                            <div className="flex items-center gap-2">
+                                <Info className="w-5 h-5 text-purple-600" />
+                                <h3 className="text-xl font-bold text-gray-900 dark:text-white">Understanding Incrementality</h3>
                             </div>
+                            <button
+                                onClick={() => setShowHelp(false)}
+                                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                            >
+                                <X className="w-6 h-6" />
+                            </button>
+                        </div>
 
-                            <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                        Start Date
-                                    </label>
-                                    <input
-                                        type="date"
-                                        className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
-                                    />
+                        <div className="p-6 space-y-6">
+                            <section>
+                                <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">What is Incrementality?</h4>
+                                <p className="text-gray-600 dark:text-gray-300 leading-relaxed">
+                                    Incrementality measures the <strong>true causal impact</strong> of your advertising.
+                                    Unlike standard attribution which just counts conversions, incrementality asks:
+                                    <em>"Would these conversions have happened anyway without the ad?"</em>
+                                </p>
+                            </section>
+
+                            <section className="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-lg">
+                                <h4 className="text-base font-semibold text-purple-900 dark:text-purple-100 mb-2">How to Run a Test</h4>
+                                <ol className="list-decimal list-inside space-y-2 text-gray-700 dark:text-gray-300">
+                                    <li><strong>Select Channel:</strong> Choose the specific channel you want to test (e.g., Social).</li>
+                                    <li><strong>Define Period:</strong> Set the start and end dates for your test.</li>
+                                    <li><strong>Control Group (Holdout):</strong> Enter data for the group that <u>did not</u> see ads. Ideally, spend here is $0.</li>
+                                    <li><strong>Test Group:</strong> Enter data for the group that <u>did</u> see ads.</li>
+                                </ol>
+                            </section>
+
+                            <div className="grid md:grid-cols-2 gap-4">
+                                <div className="border border-gray-200 dark:border-gray-700 p-4 rounded-lg">
+                                    <h5 className="font-semibold text-gray-900 dark:text-white mb-1">Lift %</h5>
+                                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                                        The percentage increase in conversions caused specifically by the ad exposure.
+                                    </p>
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                        End Date
-                                    </label>
-                                    <input
-                                        type="date"
-                                        className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
-                                    />
+                                <div className="border border-gray-200 dark:border-gray-700 p-4 rounded-lg">
+                                    <h5 className="font-semibold text-gray-900 dark:text-white mb-1">Confidence</h5>
+                                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                                        The statistical probability that the results are real and not just random chance. Target &gt;90%.
+                                    </p>
                                 </div>
                             </div>
                         </div>
 
+                        <div className="p-6 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 text-right">
+                            <button
+                                onClick={() => setShowHelp(false)}
+                                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                            >
+                                Got it
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Test Creation Form */}
+            {showTestForm && (
+                <div className="p-6 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:border-gray-700/50">
+                    <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Create Incrementality Test</h3>
+
+                    {/* Top Row: Channel and Dates */}
+                    <div className="grid grid-cols-3 gap-4 mb-6">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                Channel
+                            </label>
+                            <select
+                                className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
+                                value={channelType}
+                                onChange={(e) => {
+                                    setChannelType(e.target.value as ChannelType);
+                                    setChannel(e.target.options[e.target.selectedIndex].text);
+                                }}
+                            >
+                                <option value="SEARCH">Search</option>
+                                <option value="SOCIAL">Social</option>
+                                <option value="DISPLAY">Display</option>
+                                <option value="VIDEO">Video/TV</option>
+                                <option value="AUDIO">Audio</option>
+                                <option value="EMAIL">Email</option>
+                                <option value="OOH">Out of Home</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                Start Date
+                            </label>
+                            <input
+                                type="date"
+                                className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
+                                value={startDate}
+                                onChange={(e) => setStartDate(e.target.value)}
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                End Date
+                            </label>
+                            <input
+                                type="date"
+                                className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
+                                value={endDate}
+                                onChange={(e) => setEndDate(e.target.value)}
+                            />
+                        </div>
+                    </div>
+
+                    <div className="space-y-6">
                         {/* Control Group */}
-                        <div className="space-y-4">
-                            <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">Control Group (No Spend)</h4>
-                            <div className="grid grid-cols-3 gap-3">
+                        <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+                            <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full bg-gray-400"></span>
+                                Control Group (Holdout)
+                            </h4>
+                            <div className="grid grid-cols-3 gap-4">
                                 <div>
                                     <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
-                                        Spend
+                                        Spend (Should be $0)
+                                    </label>
+                                    <div className="relative">
+                                        <span className="absolute left-3 top-2 text-gray-400">$</span>
+                                        <input
+                                            type="number"
+                                            placeholder="0"
+                                            className="w-full pl-6 pr-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
+                                            value={controlSpend}
+                                            onChange={(e) => setControlSpend(e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
+                                        Conversions
                                     </label>
                                     <input
                                         type="number"
                                         placeholder="0"
-                                        className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
+                                        className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
+                                        value={controlConversions}
+                                        onChange={(e) => setControlConversions(e.target.value)}
                                     />
+                                </div>
+                                <div>
+                                    <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
+                                        Revenue
+                                    </label>
+                                    <div className="relative">
+                                        <span className="absolute left-3 top-2 text-gray-400">$</span>
+                                        <input
+                                            type="number"
+                                            placeholder="0"
+                                            className="w-full pl-6 pr-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
+                                            value={controlRevenue}
+                                            onChange={(e) => setControlRevenue(e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Test Group */}
+                        <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-purple-200 dark:border-purple-900/50 ring-1 ring-purple-100 dark:ring-purple-900/30">
+                            <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full bg-purple-500"></span>
+                                Test Group (Exposed)
+                            </h4>
+                            <div className="grid grid-cols-3 gap-4">
+                                <div>
+                                    <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
+                                        Spend
+                                    </label>
+                                    <div className="relative">
+                                        <span className="absolute left-3 top-2 text-gray-400">$</span>
+                                        <input
+                                            type="number"
+                                            placeholder="0"
+                                            className="w-full pl-6 pr-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
+                                            value={testSpend}
+                                            onChange={(e) => setTestSpend(e.target.value)}
+                                        />
+                                    </div>
                                 </div>
                                 <div>
                                     <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
@@ -135,76 +330,42 @@ export const IncrementalityPanel: React.FC<IncrementalityPanelProps> = ({ tests 
                                         type="number"
                                         placeholder="0"
                                         className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
+                                        value={testConversions}
+                                        onChange={(e) => setTestConversions(e.target.value)}
                                     />
                                 </div>
                                 <div>
                                     <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
                                         Revenue
                                     </label>
-                                    <input
-                                        type="number"
-                                        placeholder="0"
-                                        className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
-                                    />
+                                    <div className="relative">
+                                        <span className="absolute left-3 top-2 text-gray-400">$</span>
+                                        <input
+                                            type="number"
+                                            placeholder="0"
+                                            className="w-full pl-6 pr-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
+                                            value={testRevenue}
+                                            onChange={(e) => setTestRevenue(e.target.value)}
+                                        />
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    {/* Test Group */}
-                    <div className="mt-4">
-                        <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Test Group (With Spend)</h4>
-                        <div className="grid grid-cols-3 gap-3">
-                            <div>
-                                <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
-                                    Spend
-                                </label>
-                                <input
-                                    type="number"
-                                    placeholder="0"
-                                    className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
-                                    Conversions
-                                </label>
-                                <input
-                                    type="number"
-                                    placeholder="0"
-                                    className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
-                                    Revenue
-                                </label>
-                                <input
-                                    type="number"
-                                    placeholder="0"
-                                    className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
-                                />
-                            </div>
-                        </div>
-                    </div>
-
                     {/* Form Actions */}
-                    <div className="flex gap-3 mt-6">
-                        <button
-                            onClick={() => {
-                                // Here you would create the test
-                                alert('Test creation would save the data here. Full implementation would add to tests array.');
-                                setShowTestForm(false);
-                            }}
-                            className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors"
-                        >
-                            Create Test
-                        </button>
+                    <div className="flex gap-3 mt-6 justify-end">
                         <button
                             onClick={() => setShowTestForm(false)}
                             className="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
                         >
                             Cancel
+                        </button>
+                        <button
+                            onClick={handleCreateTest}
+                            className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors shadow-sm"
+                        >
+                            Create Test
                         </button>
                     </div>
                 </div>

@@ -1034,8 +1034,8 @@ function App() {
                     </div>
 
                     <div className="flex items-center gap-3">
-                        {/* Layout Controls - only show in media plan view */}
-                        {view === 'MEDIA_PLAN' && (
+                        {/* Layout Controls - show in media plan and attribution views */}
+                        {(view === 'MEDIA_PLAN' || view === 'ATTRIBUTION') && (
                             <LayoutControls currentLayout={layout} onLayoutChange={handleLayoutChange} />
                         )}
                         <div className="flex flex-col items-end">
@@ -1167,11 +1167,55 @@ function App() {
                 )}
 
                 {view === 'ATTRIBUTION' && currentCampaign && (
-                    <div className="h-full overflow-y-auto">
-                        <AttributionDashboard
-                            campaign={currentCampaign}
-                            onBack={() => setView('FLIGHT_LIST')}
+                    <div className={`h-full flex ${layout === 'BOTTOM' ? 'flex-col' : 'flex-row'}`}>
+                        {/* Chat Panel */}
+                        <div
+                            className={`bg-white dark:bg-gray-800 flex flex-col border-gray-200 dark:border-gray-700 transition-colors duration-200 ${layout === 'BOTTOM'
+                                ? 'border-t order-3'
+                                : layout === 'RIGHT'
+                                    ? 'border-l order-3'
+                                    : 'border-r order-1'
+                                }`}
+                            style={{
+                                width: layout === 'BOTTOM' ? '100%' : `${chatSize}px`,
+                                height: layout === 'BOTTOM' ? `${chatSize}px` : '100%',
+                                flexShrink: 0
+                            }}
+                        >
+                            <ChatInterface
+                                messages={messages}
+                                onSendMessage={handleSendMessage}
+                                isTyping={isTyping}
+                                currentView={view}
+                                agentState={agentState}
+                                hasPlan={mediaPlan !== null}
+                                layout={layout}
+                            />
+                        </div>
+
+                        {/* Resize Handle */}
+                        <div
+                            onMouseDown={handleMouseDown}
+                            className={`bg-gray-200 dark:bg-gray-700 hover:bg-purple-400 transition-colors ${isResizing ? 'bg-purple-500' : ''
+                                } ${layout === 'BOTTOM'
+                                    ? 'h-1 cursor-ns-resize w-full order-2'
+                                    : layout === 'RIGHT'
+                                        ? 'w-1 cursor-ew-resize h-full order-2'
+                                        : 'w-1 cursor-ew-resize h-full order-2'
+                                }`}
+                            style={{ userSelect: 'none' }}
                         />
+
+                        {/* Attribution Dashboard */}
+                        <div className={`flex-1 flex flex-col overflow-hidden relative bg-white dark:bg-gray-900 transition-colors duration-200 ${layout === 'BOTTOM' ? 'order-1' : layout === 'RIGHT' ? 'order-1' : 'order-3'
+                            }`}>
+                            <div className="h-full overflow-y-auto">
+                                <AttributionDashboard
+                                    campaign={currentCampaign}
+                                    onBack={() => setView('FLIGHT_LIST')}
+                                />
+                            </div>
+                        </div>
                     </div>
                 )}
 

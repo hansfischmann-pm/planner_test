@@ -15,18 +15,11 @@ export interface IncrementalityResult {
 export function calculateIncrementality(test: IncrementalityTest): IncrementalityResult {
     const { controlGroup, testGroup } = test;
 
-    // Calculate conversion rates
-    const controlRate = controlGroup.spend > 0
-        ? controlGroup.conversions / controlGroup.spend
-        : 0;
-    const testRate = testGroup.spend > 0
-        ? testGroup.conversions / testGroup.spend
-        : 0;
-
-    // Calculate lift
+    // Calculate lift based on Conversion Volume (Standard A/B Test Lift)
+    // Formula: (Test - Control) / Control
     const liftAbsolute = testGroup.conversions - controlGroup.conversions;
-    const lift = controlRate > 0
-        ? ((testRate - controlRate) / controlRate) * 100
+    const lift = controlGroup.conversions > 0
+        ? (liftAbsolute / controlGroup.conversions) * 100
         : 0;
 
     // Simple z-test for statistical significance
@@ -74,26 +67,42 @@ function calculateSignificance(
     controlSpend: number,
     testSpend: number
 ): { pValue: number; isSignificant: boolean } {
-    // Calculate proportions
-    const p1 = controlSpend > 0 ? controlConversions / controlSpend : 0;
-    const p2 = testSpend > 0 ? testConversions / testSpend : 0;
+    let z = 0;
 
-    // Pooled proportion
-    const pPool = (controlConversions + testConversions) / (controlSpend + testSpend);
+    // SCENARIO 1: Holdout Test (Control Spend is 0)
+    // We compare raw conversion counts using a difference of means test (Poisson approximation)
+    if (controlSpend === 0) {
+        // Standard Error for difference of two counts
+        const se = Math.sqrt(controlConversions + testConversions);
 
-    // Standard error
-    const se = Math.sqrt(pPool * (1 - pPool) * (1 / controlSpend + 1 / testSpend));
+        // Avoid division by zero
+        if (se > 0) {
+            z = Math.abs(testConversions - controlConversions) / se;
+        }
+    }
+    // SCENARIO 2: A/B Test (Both have spend)
+    // We compare Conversion Rate per Dollar (Efficiency)
+    else {
+        // Calculate proportions (Conversions per Spend)
+        const p1 = controlConversions / controlSpend;
+        const p2 = testSpend > 0 ? testConversions / testSpend : 0;
 
-    // Z-score
-    const z = se > 0 ? Math.abs(p1 - p2) / se : 0;
+        // Pooled proportion
+        const pPool = (controlConversions + testConversions) / (controlSpend + testSpend);
+
+        // Standard error
+        const se = Math.sqrt(pPool * (1 - pPool) * (1 / controlSpend + 1 / testSpend));
+
+        // Z-score
+        z = se > 0 ? Math.abs(p1 - p2) / se : 0;
+    }
 
     // Approximate p-value from z-score (two-tailed)
-    // Using simplified normal distribution approximation
     const pValue = z > 0 ? 2 * (1 - normalCDF(z)) : 1.0;
 
     return {
         pValue: Math.max(0.001, Math.min(1.0, pValue)), // Clamp between 0.001 and 1.0
-        isSignificant: pValue < 0.05
+        isSignificant: pValue < 0.05 // 95% Confidence
     };
 }
 
