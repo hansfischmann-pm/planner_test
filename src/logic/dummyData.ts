@@ -800,10 +800,21 @@ export function generateConversionPaths(campaign: Campaign, count: number = 50):
             // Email is very cheap
             if (channelType === 'EMAIL') touchpointCost *= 0.1;
 
+            // Determine interaction type (Click vs View)
+            let isClick = false;
+            if (channelType === 'SEARCH' || channelType === 'EMAIL' || channelType === 'SOCIAL') {
+                isClick = Math.random() < 0.8; // 80% chance of click
+            } else if (channelType === 'AUDIO' || channelType === 'DISPLAY') {
+                isClick = Math.random() < 0.2; // 20% chance of click
+            } else {
+                isClick = Math.random() < 0.05; // 5% chance of click (TV, OOH)
+            }
+
             touchpoints.push({
                 id: generateId(),
                 channel: channelInfo.channel,
                 channelType: channelType,
+                interactionType: isClick ? 'CLICK' : 'VIEW',
                 campaignId: campaign.id,
                 campaignName: campaign.name,
                 timestamp: new Date(touchTime).toISOString(),

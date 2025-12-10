@@ -36,12 +36,14 @@ export const AttributionOverview: React.FC<AttributionOverviewProps> = ({
         { id: 'paths', label: 'Conversion Paths', icon: TrendingUp },
     ];
 
-    const modelLabels: Record<AttributionModel, string> = {
-        'FIRST_TOUCH': 'First Touch',
-        'LAST_TOUCH': 'Last Touch',
-        'LINEAR': 'Linear',
-        'TIME_DECAY': 'Time Decay',
-        'POSITION_BASED': 'Position-Based (U-Shaped)'
+    const modelDescriptions: Record<AttributionModel, string> = {
+        'FIRST_TOUCH': '100% credit to the first touchpoint in the conversion journey',
+        'LAST_TOUCH': '100% credit to the last touchpoint before conversion',
+        'LINEAR': 'Equal credit distributed across all touchpoints',
+        'TIME_DECAY': 'More credit to recent touchpoints (7-day half-life)',
+        'POSITION_BASED': '40% first, 40% last, 20% divided among middle touchpoints',
+        'BLENDED': 'AdRoll Default: 100% to Last Click, otherwise Last Touch',
+        'LAST_CLICK': '100% credit to the last click (ignores views)'
     };
 
     return (
@@ -116,11 +118,10 @@ export const AttributionOverview: React.FC<AttributionOverviewProps> = ({
                                 <button
                                     key={tab.id}
                                     onClick={() => setActiveTab(tab.id)}
-                                    className={`flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors ${
-                                        isActive
+                                    className={`flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors ${isActive
                                             ? 'border-purple-500 text-purple-600 dark:text-purple-400'
                                             : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300'
-                                    }`}
+                                        }`}
                                 >
                                     <Icon className="w-4 h-4" />
                                     {tab.label}
@@ -138,7 +139,7 @@ export const AttributionOverview: React.FC<AttributionOverviewProps> = ({
                             <div className="mb-4">
                                 <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Channel Attribution Breakdown</h2>
                                 <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                                    Credit distribution using the {modelLabels[selectedModel]} model
+                                    {modelDescriptions[selectedModel]}
                                 </p>
                             </div>
                             <div className="overflow-x-auto">

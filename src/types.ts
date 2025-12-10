@@ -364,7 +364,9 @@ export type AttributionModel =
     | 'LAST_TOUCH'
     | 'LINEAR'
     | 'TIME_DECAY'
-    | 'POSITION_BASED';
+    | 'POSITION_BASED'
+    | 'BLENDED'      // AdRoll Blended (Last Touch, Click Priority)
+    | 'LAST_CLICK';  // 100% to Last Click
 
 export type ChannelType = 'SEARCH' | 'SOCIAL' | 'DISPLAY' | 'VIDEO' | 'EMAIL' | 'TV' | 'AUDIO' | 'OOH';
 
@@ -372,6 +374,7 @@ export interface Touchpoint {
     id: string;
     channel: string;
     channelType: ChannelType;
+    interactionType: 'CLICK' | 'VIEW'; // New field for Blended/Last View logic
     campaignId: string;
     campaignName: string;
     timestamp: string;

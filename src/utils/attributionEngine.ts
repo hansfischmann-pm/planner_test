@@ -85,6 +85,10 @@ export class AttributionEngine {
                 return this.timeDecay(path);
             case 'POSITION_BASED':
                 return this.positionBased(path);
+            case 'BLENDED':
+                return this.blendedLastTouch(path);
+            case 'LAST_CLICK':
+                return this.lastClick(path);
             default:
                 return this.linear(path);
         }
@@ -111,6 +115,54 @@ export class AttributionEngine {
             const lastTouch = path.touchpoints[path.touchpoints.length - 1];
             credits.set(this.getChannelKey(lastTouch), 1.0);
         }
+        return credits;
+    }
+
+    /**
+     * Blended (AdRoll Default): 100% to Last Click, otherwise 100% to Last Touch (View)
+     */
+    private blendedLastTouch(path: ConversionPath): Map<string, number> {
+        const credits = new Map<string, number>();
+
+        // Find the last click
+        // Iterate backwards
+        let lastClickNode: Touchpoint | undefined;
+        for (let i = path.touchpoints.length - 1; i >= 0; i--) {
+            if (path.touchpoints[i].interactionType === 'CLICK') {
+                lastClickNode = path.touchpoints[i];
+                break;
+            }
+        }
+
+        if (lastClickNode) {
+            credits.set(this.getChannelKey(lastClickNode), 1.0);
+        } else if (path.touchpoints.length > 0) {
+            // Fallback to last touch (View)
+            const lastTouch = path.touchpoints[path.touchpoints.length - 1];
+            credits.set(this.getChannelKey(lastTouch), 1.0);
+        }
+        return credits;
+    }
+
+    /**
+     * Last Click: 100% to Last Click. If no click, no attribution (or attributed to 'None' implicitly by omission)
+     */
+    private lastClick(path: ConversionPath): Map<string, number> {
+        const credits = new Map<string, number>();
+
+        // Find the last click
+        let lastClickNode: Touchpoint | undefined;
+        for (let i = path.touchpoints.length - 1; i >= 0; i--) {
+            if (path.touchpoints[i].interactionType === 'CLICK') {
+                lastClickNode = path.touchpoints[i];
+                break;
+            }
+        }
+
+        if (lastClickNode) {
+            credits.set(this.getChannelKey(lastClickNode), 1.0);
+        }
+
         return credits;
     }
 
@@ -206,7 +258,9 @@ export class AttributionEngine {
             'LAST_TOUCH',
             'LINEAR',
             'TIME_DECAY',
-            'POSITION_BASED'
+            'POSITION_BASED',
+            'BLENDED',
+            'LAST_CLICK'
         ];
 
         const results = new Map<AttributionModel, AttributionResult[]>();

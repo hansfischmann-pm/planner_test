@@ -198,8 +198,8 @@ export const AttributionDashboard: React.FC<AttributionDashboardProps> = ({
                                     key={item.id}
                                     onClick={() => handleViewChange(item.id as AttributionView)}
                                     className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isActive
-                                            ? 'bg-purple-50 text-purple-700 dark:bg-purple-900/20 dark:text-purple-300'
-                                            : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                                        ? 'bg-purple-50 text-purple-700 dark:bg-purple-900/20 dark:text-purple-300'
+                                        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
                                         }`}
                                 >
                                     <Icon className={`w-5 h-5 mr-3 ${isActive ? 'text-purple-600 dark:text-purple-400' : 'text-gray-400 dark:text-gray-500'
@@ -253,6 +253,8 @@ export const AttributionDashboard: React.FC<AttributionDashboardProps> = ({
                                     onChange={(e) => handleModelChange(e.target.value as AttributionModel)}
                                     className="px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent cursor-pointer"
                                 >
+                                    <option value="BLENDED">Blended (AdRoll Default)</option>
+                                    <option value="LAST_CLICK">Last Click</option>
                                     <option value="LINEAR">Linear</option>
                                     <option value="FIRST_TOUCH">First Touch</option>
                                     <option value="LAST_TOUCH">Last Touch</option>
