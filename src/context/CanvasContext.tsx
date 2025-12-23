@@ -86,6 +86,15 @@ const loadCanvasState = (): CanvasState | null => {
           }
         }
 
+        // Ensure canvasZoom and canvasOffset have default values
+        // (older saved states may not have these fields)
+        if (state.canvasZoom === undefined) {
+          state.canvasZoom = 1.0;
+        }
+        if (!state.canvasOffset) {
+          state.canvasOffset = { x: 0, y: 0 };
+        }
+
         return state;
       }
     }

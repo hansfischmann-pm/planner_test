@@ -32,10 +32,9 @@ function handleUploadCreative(input: string): AgentMessage {
     const nameMatch = input.match(/upload\s+(?:creative\s+)?["']?([^"']+)["']?/i);
     const name = nameMatch ? nameMatch[1] : `New Creative ${Date.now()}`;
 
-    // In a real app, we'd add this to a global library
     return createAgentMessage(
-        `**Creative Uploaded!**\n\nI've added "**${name}**" to your library.\n\nYou can now assign it to a placement.`,
-        ['Assign to all display placements']
+        `Added "${name}" to your library. Assign it to placements?`,
+        ['Assign to display placements', 'Assign to social placements']
     );
 }
 
@@ -69,8 +68,8 @@ function handleAssignCreative(plan: MediaPlan): CreativeCommandResult {
 
     if (count > 0) {
         const response = createAgentMessage(
-            `**Creatives Assigned!**\n\nI've assigned new creatives to ${count} placements.`,
-            ['Check performance']
+            `Assigned creatives to ${count} placement${count > 1 ? 's' : ''}.`,
+            ['Show performance', 'Upload another']
         );
         response.updatedMediaPlan = { ...plan };
         return {
@@ -83,8 +82,8 @@ function handleAssignCreative(plan: MediaPlan): CreativeCommandResult {
     return {
         handled: true,
         response: createAgentMessage(
-            "I couldn't find any suitable placements to assign creatives to.",
-            ['Add display placement']
+            "No Display or Social placements to assign to. Add some first?",
+            ['Add display placement', 'Add social placement']
         )
     };
 }
@@ -107,16 +106,16 @@ function handleWinningCreative(plan: MediaPlan): AgentMessage {
         });
     });
 
-    if (bestCreative) {
+    if (bestCreative && bestCtr > 0) {
         return createAgentMessage(
-            `**Winning Creative Found!**\n\n**${(bestCreative as Creative).name}** is your top performer.\n\n- **CTR:** ${(bestCtr * 100).toFixed(2)}%\n- **Placement:** ${bestPlacementName}`,
-            ['Optimize rotation']
+            `**${(bestCreative as Creative).name}** is winning at ${(bestCtr * 100).toFixed(2)}% CTR (on ${bestPlacementName}).`,
+            ['Scale this creative', 'Show all creatives']
         );
     }
 
     return createAgentMessage(
-        "I don't have enough performance data yet to determine a winner.",
-        ['Wait for data']
+        "Not enough performance data yet to pick a winner.",
+        ['Show placements', 'Check back later']
     );
 }
 
@@ -131,7 +130,7 @@ export function handleCreativeCommand(input: string, context: AgentContext): Cre
         return {
             handled: true,
             response: createAgentMessage(
-                "I need an active media plan to manage creatives.",
+                "Create a campaign first to manage creatives.",
                 ['Create new campaign']
             )
         };

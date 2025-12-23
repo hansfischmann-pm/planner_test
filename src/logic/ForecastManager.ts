@@ -49,38 +49,31 @@ function handleSeasonalImpact(startDate: string): AgentMessage {
     const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
         'July', 'August', 'September', 'October', 'November', 'December'];
 
-    const seasonalFactors: Record<number, string> = {
-        0: 'Post-holiday slump - 10-15% lower CPMs',
-        1: 'Valentine\'s/Presidents Day - slightly elevated',
-        2: 'Spring awakening - baseline CPMs',
-        3: 'Spring growth - moderately elevated (5-10%)',
-        4: 'Summer prep - elevated (10-15%)',
-        5: 'Summer begins - moderately elevated',
-        6: 'Summer slump - 5-10% lower CPMs',
-        7: 'Back to school prep - lower competition (10-15% cheaper)',
-        8: 'Fall activation - back to baseline',
-        9: 'Q4 buildup - elevated (5-10%)',
-        10: 'Holiday peak - VERY HIGH (15-20% premium)',
-        11: 'Holiday peak continues - HIGHEST (15-25% premium)'
+    const seasonalData: Record<number, { trend: string; cpmChange: string; tip: string }> = {
+        0: { trend: 'Post-holiday slump', cpmChange: '10-15% below average', tip: 'Good time to lock in lower rates' },
+        1: { trend: 'Valentine\'s/Presidents Day', cpmChange: 'slightly elevated', tip: 'Retail competition picking up' },
+        2: { trend: 'Spring baseline', cpmChange: 'normal', tip: 'Standard competitive environment' },
+        3: { trend: 'Spring growth', cpmChange: '5-10% above average', tip: 'Competition increasing' },
+        4: { trend: 'Summer prep', cpmChange: '10-15% elevated', tip: 'Book early for summer campaigns' },
+        5: { trend: 'Early summer', cpmChange: 'moderately elevated', tip: 'Auto and travel advertisers active' },
+        6: { trend: 'Summer slump', cpmChange: '5-10% below average', tip: 'Great time to test new channels' },
+        7: { trend: 'Back-to-school', cpmChange: '10-15% below average', tip: 'Low competition outside retail' },
+        8: { trend: 'Fall activation', cpmChange: 'back to baseline', tip: 'Normal conditions' },
+        9: { trend: 'Q4 buildup', cpmChange: '5-10% above average', tip: 'Book Q4 inventory now' },
+        10: { trend: 'Holiday peak', cpmChange: '15-20% premium', tip: 'Expect high competition—book early' },
+        11: { trend: 'Holiday peak continues', cpmChange: '15-25% premium', tip: 'Highest CPMs of the year' }
     };
 
-    let responseContent = `**Seasonal Impact Analysis**\n\n`;
-    responseContent += `**Campaign Month:** ${monthNames[month]}\n\n`;
-    responseContent += `**${monthNames[month]} Trends:**\n`;
-    responseContent += `- ${seasonalFactors[month] || 'Normal seasonal patterns'}\n\n`;
+    const data = seasonalData[month];
 
-    responseContent += `**Recommendations:**\n`;
+    // Lead with the key insight
+    let responseContent = `**${monthNames[month]}**: ${data.trend}. CPMs ${data.cpmChange}.\n\n`;
+    responseContent += `${data.tip}.`;
+
     if (month === 10 || month === 11) {
-        responseContent += `- Book inventory early - high demand period\n`;
-        responseContent += `- Expect 15-20% higher CPMs than average\n`;
-        responseContent += `- Consider expanding to less competitive channels\n`;
+        responseContent += ` Consider expanding to less competitive channels to maintain efficiency.`;
     } else if (month === 6 || month === 7) {
-        responseContent += `- Great opportunity for efficient spend\n`;
-        responseContent += `- CPMs 10-15% below average\n`;
-        responseContent += `- Good time to test new channels/tactics\n`;
-    } else {
-        responseContent += `- Normal competitive levels expected\n`;
-        responseContent += `- Good balance of efficiency and reach\n`;
+        responseContent += ` Good window to scale or test without premium pricing.`;
     }
 
     return createAgentMessage(responseContent, ['Forecast campaign', 'Optimize my plan']);
@@ -92,23 +85,21 @@ function handleSeasonalImpact(startDate: string): AgentMessage {
 function handleAudienceOverlap(placements: Placement[]): AgentMessage {
     const overlap = calculateAudienceOverlap(placements);
 
-    let responseContent = `**Audience Overlap Analysis**\n\n`;
-    responseContent += `**Total Reach (Uncorrected):** ${Math.round(overlap.totalReach).toLocaleString()}\n`;
-    responseContent += `**Overlap Amount:** ${Math.round(overlap.overlapAmount).toLocaleString()} (${overlap.overlapPercentage.toFixed(1)}%)\n`;
-    responseContent += `**Adjusted Unique Reach:** ${Math.round(overlap.adjustedReach).toLocaleString()}\n\n`;
+    // Lead with the key number
+    let responseContent = `**${overlap.overlapPercentage.toFixed(0)}% audience overlap** — `;
 
     if (overlap.overlapPercentage > 40) {
-        responseContent += `**High Overlap Detected**\n`;
-        responseContent += `Your channels have significant audience overlap (${overlap.overlapPercentage.toFixed(0)}%). This means:\n`;
-        responseContent += `- You're reaching fewer unique people than raw numbers suggest\n`;
-        responseContent += `- Consider diversifying to different audience segments\n`;
-        responseContent += `- Frequency may be higher than optimal\n`;
+        responseContent += `high.\n\n`;
+        responseContent += `Raw reach: ${Math.round(overlap.totalReach).toLocaleString()} → Unique reach: ${Math.round(overlap.adjustedReach).toLocaleString()}\n\n`;
+        responseContent += `You're reaching fewer unique users than the numbers suggest. Consider diversifying channels or tightening targeting to reduce overlap.`;
     } else if (overlap.overlapPercentage > 25) {
-        responseContent += `**Moderate Overlap**\n`;
-        responseContent += `Your channels have typical overlap (${overlap.overlapPercentage.toFixed(0)}%). This is normal for multi-channel campaigns.\n`;
+        responseContent += `typical for multi-channel.\n\n`;
+        responseContent += `Raw reach: ${Math.round(overlap.totalReach).toLocaleString()} → Unique reach: ${Math.round(overlap.adjustedReach).toLocaleString()}\n\n`;
+        responseContent += `Normal overlap. Your channel mix is well-balanced.`;
     } else {
-        responseContent += `**Low Overlap**\n`;
-        responseContent += `Great! Your channels reach relatively distinct audiences (${overlap.overlapPercentage.toFixed(0)}% overlap).\n`;
+        responseContent += `low. Nice work.\n\n`;
+        responseContent += `Raw reach: ${Math.round(overlap.totalReach).toLocaleString()} → Unique reach: ${Math.round(overlap.adjustedReach).toLocaleString()}\n\n`;
+        responseContent += `Your channels reach distinct audiences—efficient spend.`;
     }
 
     return createAgentMessage(responseContent, ['Forecast campaign', 'Optimize my plan']);
@@ -125,8 +116,8 @@ export function handleForecastCommand(input: string, context: AgentContext): For
         return {
             handled: true,
             response: createAgentMessage(
-                "I can't forecast yet - there are no placements to analyze. Add some placements first!",
-                ['Add 3 social placements', 'How should I allocate $50k?']
+                "No placements to forecast yet. Add some first?",
+                ['Add 3 social placements', 'Allocate $50k']
             )
         };
     }

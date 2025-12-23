@@ -90,22 +90,20 @@ function parseGoalValue(input: string, metric: GoalMetric): number | null {
  */
 function handleShowGoals(plan: MediaPlan): AgentMessage {
     const goals = plan.campaign.numericGoals || {};
-    const hasGoals = Object.keys(goals).length > 0;
+    const goalEntries = Object.entries(goals).filter(([_, v]) => v);
 
-    if (!hasGoals) {
+    if (goalEntries.length === 0) {
         return createAgentMessage(
-            "You haven't set any numeric goals yet.",
-            ['Set goal impressions 1M', 'Set goal conversions 500']
+            "No goals set yet. What are you targeting?",
+            ['Set impressions goal', 'Set conversions goal']
         );
     }
 
-    let responseContent = "**Current Campaign Goals**\n\n";
-    if (goals.impressions) responseContent += `- **Impressions:** ${goals.impressions.toLocaleString()}\n`;
-    if (goals.reach) responseContent += `- **Reach:** ${goals.reach.toLocaleString()}\n`;
-    if (goals.conversions) responseContent += `- **Conversions:** ${goals.conversions.toLocaleString()}\n`;
-    if (goals.clicks) responseContent += `- **Clicks:** ${goals.clicks.toLocaleString()}\n`;
+    const formatted = goalEntries.map(([k, v]) =>
+        `**${k.charAt(0).toUpperCase() + k.slice(1)}:** ${(v as number).toLocaleString()}`
+    ).join(' • ');
 
-    return createAgentMessage(responseContent, ['Forecast this campaign']);
+    return createAgentMessage(formatted, ['Forecast campaign', 'Update goals']);
 }
 
 /**
@@ -118,8 +116,8 @@ function handleSetGoal(input: string, plan: MediaPlan): GoalCommandResult {
         return {
             handled: true,
             response: createAgentMessage(
-                "Which goal would you like to set? I support Impressions, Reach, Conversions, and Clicks.",
-                ['Set goal impressions 1M', 'Set goal conversions 500']
+                "Which metric? I can track impressions, reach, conversions, or clicks.",
+                ['Set impressions 1M', 'Set conversions 500']
             )
         };
     }
@@ -130,8 +128,8 @@ function handleSetGoal(input: string, plan: MediaPlan): GoalCommandResult {
         return {
             handled: true,
             response: createAgentMessage(
-                `I couldn't understand the value for ${metric}. Try saying something like "Set goal ${metric} 1.5M" or "Set goal ${metric} 5000".`,
-                [`Set goal ${metric} 100k`]
+                `What's your ${metric} target? (e.g., "1.5M" or "5000")`,
+                [`Set ${metric} 100k`]
             )
         };
     }
@@ -152,8 +150,8 @@ function handleSetGoal(input: string, plan: MediaPlan): GoalCommandResult {
     };
 
     const response = createAgentMessage(
-        `**Goal Updated!**\n\nI've set your **${metric}** goal to **${value.toLocaleString()}**.\n\nThe goal tracking card in your plan view has been updated.`,
-        ['Show goals', 'Forecast this campaign']
+        `Set ${metric} goal to ${value.toLocaleString()}. Goal card updated.`,
+        ['Forecast campaign', 'Show goals']
     );
     response.updatedMediaPlan = updatedPlan;
 
@@ -175,7 +173,7 @@ export function handleGoalCommand(input: string, context: AgentContext): GoalCom
         return {
             handled: true,
             response: createAgentMessage(
-                "I need an active media plan to manage goals. Please create or select a campaign first.",
+                "Create a campaign first to set goals.",
                 ['Create new campaign']
             )
         };

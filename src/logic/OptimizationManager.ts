@@ -26,10 +26,37 @@ export interface OptimizationCommandResult {
     response?: AgentMessage;
     updatedPlan?: MediaPlan;
     pendingAction?: PendingAction;
+    followUp?: { yesAction: string; noAction?: string };
 }
 
 // Default flight budget for calculations
 const DEFAULT_FLIGHT_BUDGET = 100000;
+
+// Escalation thresholds (per FuseIQ guardrails)
+const ESCALATION_THRESHOLDS = {
+    BUDGET_CHANGE: 50000,       // Escalate if single budget change > $50K
+    CAMPAIGN_COUNT: 10,          // Escalate if affecting > 10 campaigns
+    CONFIDENCE_MIN: 0.7          // Escalate if recommendation confidence < 70%
+};
+
+/**
+ * Check if an action should be escalated to a human
+ */
+function shouldEscalate(budgetImpact: number, affectedCount: number): { escalate: boolean; reason?: string } {
+    if (Math.abs(budgetImpact) > ESCALATION_THRESHOLDS.BUDGET_CHANGE) {
+        return {
+            escalate: true,
+            reason: `This is a $${Math.round(Math.abs(budgetImpact)).toLocaleString()} change—larger than I'd make without a human check.`
+        };
+    }
+    if (affectedCount > ESCALATION_THRESHOLDS.CAMPAIGN_COUNT) {
+        return {
+            escalate: true,
+            reason: `This affects ${affectedCount} placements. I'd recommend having someone review before proceeding.`
+        };
+    }
+    return { escalate: false };
+}
 
 /**
  * Check if input is an optimization-related command
@@ -54,56 +81,74 @@ export function isOptimizationCommand(input: string): boolean {
 
 /**
  * Handle "show quick wins"
+ * Returns both the message and any follow-up context to set
  */
-function handleQuickWins(placements: Placement[]): AgentMessage {
+function handleQuickWins(placements: Placement[]): { message: AgentMessage; followUp?: { yesAction: string; noAction?: string } } {
     const report = generateOptimizationReport(placements, DEFAULT_FLIGHT_BUDGET);
 
     if (report.quickWins.length === 0) {
-        return createAgentMessage(
-            "No quick wins needed - your plan is well-optimized!\n\nTry 'optimize my plan' for a full analysis.",
-            ['Optimize my plan']
-        );
+        return {
+            message: createAgentMessage(
+                "No quick wins right now—your plan is running efficiently. Want a full optimization analysis?",
+                ['Optimize my plan']
+            ),
+            followUp: { yesAction: 'optimize my plan' }
+        };
     }
 
-    let responseContent = `**Quick Wins** (${report.quickWins.length} easy, high-impact actions)\n\n`;
+    // Calculate total potential impact
+    const totalImpact = report.quickWins.reduce((sum, rec) => sum + Math.abs(rec.estimatedImpact), 0);
+
+    let responseContent = `Found ${report.quickWins.length} quick wins worth ~$${Math.round(totalImpact).toLocaleString()}:\n\n`;
     report.quickWins.forEach((rec, idx) => {
         const impact = rec.estimatedImpact > 0
-            ? `Save $${Math.round(rec.estimatedImpact).toLocaleString('en-US')}`
-            : `Gain $${Math.round(Math.abs(rec.estimatedImpact)).toLocaleString('en-US')}`;
-        responseContent += `${idx + 1}. ${rec.description}\n`;
-        responseContent += `   ${rec.specificAction}\n`;
-        responseContent += `   ${impact}\n\n`;
+            ? `saves $${Math.round(rec.estimatedImpact).toLocaleString()}`
+            : `gains $${Math.round(Math.abs(rec.estimatedImpact)).toLocaleString()}`;
+        responseContent += `${idx + 1}. **${rec.description}** — ${impact}\n`;
+        responseContent += `   ${rec.specificAction}\n\n`;
     });
 
-    return createAgentMessage(responseContent, ['Optimize my plan']);
+    responseContent += `Want me to apply these?`;
+
+    return {
+        message: createAgentMessage(responseContent, ['Apply all', 'Show full report']),
+        followUp: { yesAction: 'apply all recommendations' }
+    };
 }
 
 /**
  * Handle "show critical issues"
  */
-function handleCriticalIssues(placements: Placement[]): AgentMessage {
+function handleCriticalIssues(placements: Placement[]): { message: AgentMessage; followUp?: { yesAction: string; noAction?: string } } {
     const report = generateOptimizationReport(placements, DEFAULT_FLIGHT_BUDGET);
     const critical = report.recommendations.filter(r => r.priority === 'HIGH');
 
     if (critical.length === 0) {
-        return createAgentMessage(
-            "No critical issues found - great job!\n\nYour plan is in good shape.",
-            ['Show full report']
-        );
+        return {
+            message: createAgentMessage(
+                "No critical issues—your plan is in good shape.",
+                ['Show quick wins', 'Optimize my plan']
+            )
+        };
     }
 
-    let responseContent = `**Critical Issues** (${critical.length})\n\n`;
+    const totalImpact = critical.reduce((sum, rec) => sum + Math.abs(rec.estimatedImpact), 0);
+
+    let responseContent = `${critical.length} critical issue${critical.length > 1 ? 's' : ''} need attention (~$${Math.round(totalImpact).toLocaleString()} at stake):\n\n`;
     critical.forEach((rec, idx) => {
         const impact = rec.estimatedImpact > 0
-            ? `Save $${Math.round(rec.estimatedImpact).toLocaleString('en-US')}`
-            : `Gain $${Math.round(Math.abs(rec.estimatedImpact)).toLocaleString('en-US')}`;
-        responseContent += `${idx + 1}. **${rec.placementName}**\n`;
-        responseContent += `   Issue: ${rec.description}\n`;
-        responseContent += `   Action: ${rec.specificAction}\n`;
-        responseContent += `   ${impact}\n\n`;
+            ? `$${Math.round(rec.estimatedImpact).toLocaleString()} waste`
+            : `$${Math.round(Math.abs(rec.estimatedImpact)).toLocaleString()} opportunity`;
+        responseContent += `${idx + 1}. **${rec.placementName}** — ${impact}\n`;
+        responseContent += `   ${rec.description}. ${rec.specificAction}\n\n`;
     });
 
-    return createAgentMessage(responseContent, ['Show full report', 'Show quick wins']);
+    responseContent += `Want me to fix these?`;
+
+    return {
+        message: createAgentMessage(responseContent, ['Apply all', 'Show full report']),
+        followUp: { yesAction: 'apply all recommendations' }
+    };
 }
 
 /**
@@ -136,8 +181,20 @@ function handlePauseUnderperformers(placements: Placement[], _expressMode: boole
         return {
             handled: true,
             response: createAgentMessage(
-                "No placements qualified for pausing.\n\nAll your placements are performing well.",
-                ['Optimize', 'Show performance']
+                "Nothing to pause—all placements are performing above threshold.",
+                ['Scale winners', 'Show performance']
+            )
+        };
+    }
+
+    // Check escalation thresholds
+    const escalation = shouldEscalate(totalSavings, pausePreview.length);
+    if (escalation.escalate) {
+        return {
+            handled: true,
+            response: createAgentMessage(
+                `${escalation.reason}\n\nI've flagged this for review. Let me know when you'd like to proceed or if you want to adjust the scope.`,
+                ['Proceed anyway', 'Show details', 'Cancel']
             )
         };
     }
@@ -152,13 +209,11 @@ function handlePauseUnderperformers(placements: Placement[], _expressMode: boole
         data: { pausePreview, totalSavings }
     };
 
-    let responseContent = `**Confirm: Pause ${pausePreview.length} underperforming placement${pausePreview.length > 1 ? 's' : ''}?**\n\n`;
-    responseContent += `**Placements to pause:**\n`;
+    let responseContent = `I'll pause ${pausePreview.length} underperformer${pausePreview.length > 1 ? 's' : ''}, saving ~$${Math.round(totalSavings).toLocaleString()}:\n\n`;
     pausePreview.forEach(p => {
-        responseContent += `  - ${p.name} (ROAS: ${p.roas.toFixed(2)})\n`;
+        responseContent += `• ${p.name} (${p.roas.toFixed(1)}x ROAS)\n`;
     });
-    responseContent += `\n**Estimated savings:** $${Math.round(totalSavings).toLocaleString('en-US')}\n\n`;
-    responseContent += `Type **"yes"** to confirm or **"no"** to cancel.`;
+    responseContent += `\nConfirm?`;
 
     const msg = createAgentMessage(responseContent, ['Yes', 'No']);
     msg.agentsInvoked = ['Performance Agent', 'Insights Agent'];
@@ -201,8 +256,20 @@ function handleScaleWinners(placements: Placement[], _expressMode: boolean = fal
         return {
             handled: true,
             response: createAgentMessage(
-                "No placements qualified for scaling (need ROAS > 3.0).\n\nYour high performers may already be well-funded.",
-                ['Optimize', 'Show performance']
+                "No placements hit the scaling threshold (ROAS > 3.0). Your top performers may already be well-funded.",
+                ['Pause underperformers', 'Show performance']
+            )
+        };
+    }
+
+    // Check escalation thresholds
+    const escalation = shouldEscalate(totalBudgetIncrease, scalePreview.length);
+    if (escalation.escalate) {
+        return {
+            handled: true,
+            response: createAgentMessage(
+                `${escalation.reason}\n\nI've flagged this for review. Let me know when you'd like to proceed or if you want to adjust the scope.`,
+                ['Proceed anyway', 'Show details', 'Cancel']
             )
         };
     }
@@ -215,13 +282,11 @@ function handleScaleWinners(placements: Placement[], _expressMode: boolean = fal
         data: { scalePreview, totalBudgetIncrease }
     };
 
-    let responseContent = `**Confirm: Scale ${scalePreview.length} high-performing placement${scalePreview.length > 1 ? 's' : ''}?**\n\n`;
-    responseContent += `**Placements to scale (+25% budget & impressions):**\n`;
+    let responseContent = `I'll scale ${scalePreview.length} winner${scalePreview.length > 1 ? 's' : ''} by 25% (+$${Math.round(totalBudgetIncrease).toLocaleString()}):\n\n`;
     scalePreview.forEach(p => {
-        responseContent += `  - ${p.name} (ROAS: ${p.roas.toFixed(2)}) - $${Math.round(p.currentCost).toLocaleString()} → $${Math.round(p.newCost).toLocaleString()}\n`;
+        responseContent += `• ${p.name} (${p.roas.toFixed(1)}x ROAS) — $${Math.round(p.currentCost).toLocaleString()} → $${Math.round(p.newCost).toLocaleString()}\n`;
     });
-    responseContent += `\n**Total budget increase:** $${Math.round(totalBudgetIncrease).toLocaleString('en-US')}\n\n`;
-    responseContent += `Type **"yes"** to confirm or **"no"** to cancel.`;
+    responseContent += `\nConfirm?`;
 
     const msg = createAgentMessage(responseContent, ['Yes', 'No']);
     msg.agentsInvoked = ['Performance Agent', 'Yield Agent'];
@@ -236,28 +301,34 @@ function handleScaleWinners(placements: Placement[], _expressMode: boolean = fal
 /**
  * Handle "growth opportunities"
  */
-function handleGrowthOpportunities(placements: Placement[]): AgentMessage {
+function handleGrowthOpportunities(placements: Placement[]): { message: AgentMessage; followUp?: { yesAction: string; noAction?: string } } {
     const report = generateOptimizationReport(placements, DEFAULT_FLIGHT_BUDGET);
     const opportunities = report.recommendations.filter(r => r.estimatedImpact < 0);
 
     if (opportunities.length === 0) {
-        return createAgentMessage(
-            "No major growth opportunities identified right now.\n\nYour high performers are already well-funded.",
-            ['Show full report']
-        );
+        return {
+            message: createAgentMessage(
+                "No major growth opportunities right now—your top performers are already well-funded.",
+                ['Show quick wins', 'Optimize my plan']
+            )
+        };
     }
 
-    let responseContent = `**Growth Opportunities** (${opportunities.length})\n\n`;
-    responseContent += `Scale these high-performers to maximize returns:\n\n`;
+    const totalGain = opportunities.reduce((sum, r) => sum + Math.abs(r.estimatedImpact), 0);
+
+    let responseContent = `${opportunities.length} growth opportunit${opportunities.length > 1 ? 'ies' : 'y'} worth ~$${Math.round(totalGain).toLocaleString()}:\n\n`;
     opportunities.forEach((rec, idx) => {
         const gain = Math.abs(rec.estimatedImpact);
-        responseContent += `${idx + 1}. **${rec.placementName}**\n`;
-        responseContent += `   ${rec.currentMetric}\n`;
-        responseContent += `   Action: ${rec.specificAction}\n`;
-        responseContent += `   Potential gain: $${Math.round(gain).toLocaleString('en-US')}\n\n`;
+        responseContent += `${idx + 1}. **${rec.placementName}** — potential +$${Math.round(gain).toLocaleString()}\n`;
+        responseContent += `   ${rec.currentMetric}. ${rec.specificAction}\n\n`;
     });
 
-    return createAgentMessage(responseContent, ['Scale winners', 'Show full report']);
+    responseContent += `Want me to scale these?`;
+
+    return {
+        message: createAgentMessage(responseContent, ['Scale winners', 'Show full report']),
+        followUp: { yesAction: 'scale winners' }
+    };
 }
 
 /**
@@ -302,21 +373,22 @@ function handleApplyAll(plan: MediaPlan): OptimizationCommandResult {
         return {
             handled: true,
             response: createAgentMessage(
-                "No actionable recommendations to apply right now. Your plan is already optimized!",
+                "Nothing to apply—your plan is already optimized.",
                 ['Show performance', 'Export PDF']
             )
         };
     }
 
-    let responseContent = `**Applied All Recommendations**\n\n`;
+    // Build concise summary
+    const actions: string[] = [];
     if (pausedCount > 0) {
-        responseContent += `- Paused **${pausedCount}** underperforming placement${pausedCount > 1 ? 's' : ''}\n`;
-        responseContent += `  Estimated savings: $${Math.round(totalSavings).toLocaleString('en-US')}\n\n`;
+        actions.push(`paused ${pausedCount} underperformer${pausedCount > 1 ? 's' : ''} (saves $${Math.round(totalSavings).toLocaleString()})`);
     }
     if (scaledCount > 0) {
-        responseContent += `- Scaled **${scaledCount}** high-performing placement${scaledCount > 1 ? 's' : ''}\n`;
-        responseContent += `  Budget increase: $${Math.round(totalIncrease).toLocaleString('en-US')}\n\n`;
+        actions.push(`scaled ${scaledCount} winner${scaledCount > 1 ? 's' : ''} (+$${Math.round(totalIncrease).toLocaleString()})`);
     }
+
+    let responseContent = `Done—${actions.join(' and ')}.\n\nNew total spend: $${plan.totalSpend.toLocaleString()}.`;
 
     const msg = createAgentMessage(
         responseContent,
@@ -338,23 +410,24 @@ function handlePlanScore(placements: Placement[]): AgentMessage {
     const analysis = analyzePlan(placements, DEFAULT_FLIGHT_BUDGET);
     const summary = getAnalysisSummary(analysis);
 
-    let responseContent = `**Plan Health Check**\n\n${summary}\n\n`;
+    // Lead with the score
+    let responseContent = `Plan health: **${analysis.overallScore}/100**\n\n${summary}`;
 
     if (analysis.criticalCount > 0) {
-        responseContent += `You have **${analysis.criticalCount} critical issue${analysis.criticalCount > 1 ? 's' : ''}** that need immediate attention.\n\n`;
+        responseContent += `\n\n${analysis.criticalCount} critical issue${analysis.criticalCount > 1 ? 's' : ''} need attention.`;
     }
 
+    // Add contextual next step
     if (analysis.overallScore < 70) {
-        responseContent += `Your plan could benefit from optimization. Would you like me to show you specific recommendations?`;
+        responseContent += ` Want me to show specific fixes?`;
     } else if (analysis.overallScore < 85) {
-        responseContent += `Your plan is in good shape! There are a few minor optimizations that could improve performance.`;
-    } else {
-        responseContent += `Excellent work! Your plan is well-optimized. Keep monitoring for any changes.`;
+        responseContent += `\n\nA few minor tweaks could improve this further.`;
     }
+    // If score >= 85, the summary already conveys it's in good shape
 
     return createAgentMessage(
         responseContent,
-        ['Optimize my plan', 'Show detailed report']
+        analysis.overallScore < 85 ? ['Optimize my plan', 'Show critical issues'] : ['Show quick wins', 'Export PDF']
     );
 }
 
@@ -401,12 +474,8 @@ export function executePauseUnderperformers(
     plan.totalSpend = placements.reduce((acc, p) => acc + p.totalCost, 0);
     plan.metrics = calculatePlanMetrics(placements);
 
-    let responseContent = `**Paused ${pausedCount} underperforming placement${pausedCount > 1 ? 's' : ''}**\n\n`;
-    responseContent += `**Placements paused:**\n`;
-    pausedPlacements.forEach(name => {
-        responseContent += `  - ${name}\n`;
-    });
-    responseContent += `\n**Estimated savings:** $${Math.round(totalSavings).toLocaleString('en-US')}`;
+    let responseContent = `Done—paused ${pausedCount} placement${pausedCount > 1 ? 's' : ''}, saving ~$${Math.round(totalSavings).toLocaleString()}.\n\n`;
+    responseContent += `Paused: ${pausedPlacements.join(', ')}`;
 
     const msg = createAgentMessage(
         responseContent,
@@ -449,13 +518,9 @@ export function executeScaleWinners(
     plan.totalSpend = placements.reduce((acc, p) => acc + p.totalCost, 0);
     plan.metrics = calculatePlanMetrics(placements);
 
-    let responseContent = `**Scaled ${scaledCount} high-performing placement${scaledCount > 1 ? 's' : ''}**\n\n`;
-    responseContent += `**Placements scaled (+25% budget & impressions):**\n`;
-    scaledPlacements.forEach(name => {
-        responseContent += `  - ${name}\n`;
-    });
-    responseContent += `\n**Total budget increase:** $${Math.round(totalBudgetIncrease).toLocaleString('en-US')}`;
-    responseContent += `\n**New total spend:** $${plan.totalSpend.toLocaleString('en-US')}`;
+    let responseContent = `Done—scaled ${scaledCount} placement${scaledCount > 1 ? 's' : ''} by 25% (+$${Math.round(totalBudgetIncrease).toLocaleString()}).\n\n`;
+    responseContent += `Scaled: ${scaledPlacements.join(', ')}\n`;
+    responseContent += `New total spend: $${plan.totalSpend.toLocaleString()}`;
 
     const msg = createAgentMessage(
         responseContent,
@@ -481,8 +546,8 @@ export function handleOptimizationCommand(input: string, context: AgentContext, 
         return {
             handled: true,
             response: createAgentMessage(
-                "I can't analyze your plan yet because there are no placements. Try adding some placements first!",
-                ['Add 3 social placements', 'How should I allocate $50k?']
+                "No placements to analyze yet. Add some first?",
+                ['Add 3 social placements', 'Allocate $50k']
             )
         };
     }
@@ -492,12 +557,14 @@ export function handleOptimizationCommand(input: string, context: AgentContext, 
 
     // Quick wins
     if (lowerInput.includes('quick win')) {
-        return { handled: true, response: handleQuickWins(placements) };
+        const result = handleQuickWins(placements);
+        return { handled: true, response: result.message, followUp: result.followUp };
     }
 
     // Critical issues
     if (lowerInput.includes('critical issue')) {
-        return { handled: true, response: handleCriticalIssues(placements) };
+        const result = handleCriticalIssues(placements);
+        return { handled: true, response: result.message, followUp: result.followUp };
     }
 
     // Pause underperformers
@@ -512,7 +579,8 @@ export function handleOptimizationCommand(input: string, context: AgentContext, 
 
     // Growth opportunities
     if (lowerInput.includes('growth opportunit')) {
-        return { handled: true, response: handleGrowthOpportunities(placements) };
+        const result = handleGrowthOpportunities(placements);
+        return { handled: true, response: result.message, followUp: result.followUp };
     }
 
     // Apply all recommendations

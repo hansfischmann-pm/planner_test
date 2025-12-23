@@ -33,6 +33,41 @@ export type AgentState = 'INIT' | 'BUDGETING' | 'CHANNEL_SELECTION' | 'REFINEMEN
 // PendingActionType and PendingAction are now imported from OptimizationManager
 // WindowContext is now imported from AgentContext
 
+/**
+ * Generate time-aware greeting based on current hour
+ */
+function getTimeGreeting(): string {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Morning';
+    if (hour < 17) return 'Afternoon';
+    return 'Evening';
+}
+
+/**
+ * Generate day-aware context hint
+ */
+function getDayContext(): string {
+    const day = new Date().getDay();
+    const hour = new Date().getHours();
+
+    // Monday morning
+    if (day === 1 && hour < 12) {
+        return " Ready to review weekend performance?";
+    }
+    // Friday afternoon
+    if (day === 5 && hour >= 14) {
+        return " Want to check weekly pacing before the weekend?";
+    }
+    // End of month (last 3 days)
+    const today = new Date();
+    const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+    if (today.getDate() >= lastDay - 2) {
+        return " Heading into month-end—want to review pacing?";
+    }
+
+    return "";
+}
+
 interface AgentContext {
     state: AgentState;
     mediaPlan: MediaPlan | null;
@@ -51,6 +86,12 @@ export class AgentBrain {
 
     constructor() {
         this.sessionId = 'session-' + Date.now();
+
+        // Build time-aware greeting (FuseIQ voice: direct, warm, teammate)
+        const greeting = getTimeGreeting();
+        const dayHint = getDayContext();
+        const welcomeContent = `${greeting}. What are we working on?${dayHint}`;
+
         this.context = {
             state: 'INIT',
             mediaPlan: null,
@@ -59,9 +100,9 @@ export class AgentBrain {
             history: [{
                 id: 'welcome',
                 role: 'agent',
-                content: "Welcome to FuseIQ by AdRoll. I'm your AI assistant. To get started, tell me the Client Name and Total Budget for your new campaign.",
+                content: welcomeContent,
                 timestamp: Date.now(),
-                suggestedActions: ['Create plan for Nike ($500k)', 'Create plan for Local Coffee Shop ($5k)']
+                suggestedActions: ['Create $500k campaign', 'Show my campaigns', 'Check performance']
             }]
         };
     }
@@ -112,6 +153,20 @@ export class AgentBrain {
         // 3. Add to context manager
         contextManager.addMessage(this.sessionId, 'user', input, intent, entities);
 
+        // 4. Track frustration and check if we should offer human help
+        contextManager.trackFrustration(this.sessionId, input);
+        if (contextManager.shouldOfferHumanEscalation(this.sessionId)) {
+            contextManager.markEscalationOffered(this.sessionId);
+            // Return early with escalation offer (per FuseIQ guardrails)
+            const escalationMsg = this.createAgentMessage(
+                "I'm not getting this right for you. Want me to connect you with someone from our team? They can take a look with you directly.",
+                ['Connect me', 'Let me try again']
+            );
+            this.context.history.push(escalationMsg);
+            contextManager.addMessage(this.sessionId, 'assistant', escalationMsg.content);
+            return escalationMsg;
+        }
+
         let responseContent = '';
         let suggestedActions: string[] = [];
         let agentMsg: AgentMessage | null = null;
@@ -119,8 +174,8 @@ export class AgentBrain {
         // ===== PENDING ACTION CONFIRMATION HANDLING =====
         // Check if user is confirming or canceling a pending action
         if (this.context.pendingAction) {
-            const confirmPatterns = /^(yes|confirm|apply|proceed|do it|go ahead|execute|ok|okay)$/i;
-            const cancelPatterns = /^(no|cancel|nevermind|never mind|abort|stop|don't|dont)$/i;
+            const confirmPatterns = /^(yes|confirm|apply|proceed|do it|go ahead|execute|ok|okay|sure|yep|yeah)$/i;
+            const cancelPatterns = /^(no|cancel|nevermind|never mind|abort|stop|don't|dont|nope|nah)$/i;
 
             if (confirmPatterns.test(input.trim())) {
                 // User confirmed - execute the pending action
@@ -140,6 +195,37 @@ export class AgentBrain {
             }
             // If neither confirm nor cancel, clear the pending action and process normally
             this.context.pendingAction = undefined;
+        }
+
+        // ===== CONVERSATIONAL FOLLOW-UP HANDLING =====
+        // Check if user is responding "yes" to a follow-up question (without pending action)
+        const yesPatterns = /^(yes|yep|yeah|sure|do it|go ahead|ok|okay|please|y)$/i;
+        const noPatterns = /^(no|nope|nah|never mind|skip|cancel|n)$/i;
+        const followUp = contextManager.getFollowUp(this.sessionId);
+
+        if (followUp && yesPatterns.test(input.trim())) {
+            // Clear the follow-up context and re-process with the yesAction
+            contextManager.clearFollowUp(this.sessionId);
+            // Recursively process the implied action
+            return this.processInput(followUp.yesAction);
+        } else if (followUp && noPatterns.test(input.trim())) {
+            contextManager.clearFollowUp(this.sessionId);
+            if (followUp.noAction) {
+                return this.processInput(followUp.noAction);
+            }
+            // Default "no" response
+            const response = this.createAgentMessage(
+                "Got it. What else can I help with?",
+                ['Show performance', 'Show quick wins']
+            );
+            this.context.history.push(response);
+            contextManager.addMessage(this.sessionId, 'assistant', response.content);
+            return response;
+        }
+
+        // Clear stale follow-up if user says something else
+        if (followUp) {
+            contextManager.clearFollowUp(this.sessionId);
         }
 
         // GLOBAL: Layout Commands (work regardless of media plan state)
@@ -632,6 +718,10 @@ export class AgentBrain {
                 // Store pending action if returned
                 if (result.pendingAction) {
                     this.context.pendingAction = result.pendingAction;
+                }
+                // Set follow-up context for yes/no handling
+                if (result.followUp) {
+                    contextManager.setFollowUp(this.sessionId, result.followUp.yesAction, undefined, result.followUp.noAction);
                 }
                 return result.response;
             }

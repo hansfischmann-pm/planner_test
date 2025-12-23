@@ -229,9 +229,19 @@ export function Canvas({ chatComponent, renderWindowContent, getWindowActions }:
   // Must use native listener with { passive: false } to prevent browser back/forward gestures
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas) {
+      console.warn('[Canvas] canvasRef.current is null - wheel handler not attached');
+      return;
+    }
+    console.log('[Canvas] Attaching wheel handler to canvas element', {
+      canvasZoom: state.canvasZoom,
+      canvasOffset: state.canvasOffset
+    });
 
     const handleWheel = (e: WheelEvent) => {
+      const currentZoom = state.canvasZoom ?? 1.0;
+      const currentOffset = state.canvasOffset ?? { x: 0, y: 0 };
+
       // 1. Zoom Logic (Ctrl + Wheel or Pinch) - Global
       // We process this first because we usually want zoom to work everywhere
       if (e.ctrlKey || e.metaKey) {
@@ -247,7 +257,7 @@ export function Canvas({ chatComponent, renderWindowContent, getWindowActions }:
         // Scroll wheel: use larger step
         const zoomSpeed = isPinchGesture ? 0.01 : 0.1;
         const zoomDelta = -e.deltaY * zoomSpeed;
-        const newZoom = Math.max(0.25, Math.min(2.0, state.canvasZoom! + zoomDelta)); // state.canvasZoom can be undefined in types but has default in context
+        const newZoom = Math.max(0.25, Math.min(2.0, currentZoom + zoomDelta));
 
         // Zoom toward the mouse position
         // Calculate mouse position relative to canvas
@@ -256,13 +266,13 @@ export function Canvas({ chatComponent, renderWindowContent, getWindowActions }:
         const mouseY = e.clientY - rect.top;
 
         // Adjust offset to zoom toward mouse position
-        const zoomRatio = newZoom / (state.canvasZoom || 1);
-        const currentOffset = state.canvasOffset || { x: 0, y: 0 };
+        const zoomRatio = newZoom / currentZoom;
         const newOffset = {
           x: mouseX - (mouseX - currentOffset.x) * zoomRatio,
           y: mouseY - (mouseY - currentOffset.y) * zoomRatio
         };
 
+        console.log('[Canvas] Zoom:', { currentZoom, newZoom, zoomDelta, isPinchGesture });
         setCanvasZoom(newZoom);
         setCanvasOffset(newOffset);
         return;
@@ -282,8 +292,6 @@ export function Canvas({ chatComponent, renderWindowContent, getWindowActions }:
       e.preventDefault();
       e.stopPropagation();
 
-      const currentOffset = state.canvasOffset || { x: 0, y: 0 };
-
       // Regular scroll/trackpad panning
       // deltaX for horizontal, deltaY for vertical
       // Invert the delta so dragging "pulls" the canvas in the intuitive direction
@@ -292,14 +300,60 @@ export function Canvas({ chatComponent, renderWindowContent, getWindowActions }:
         y: currentOffset.y - e.deltaY
       };
 
+      console.log('[Canvas] Pan:', { deltaX: e.deltaX, deltaY: e.deltaY, newOffset });
       setCanvasOffset(newOffset);
     };
 
     // Use passive: false to allow preventDefault() on wheel events
     canvas.addEventListener('wheel', handleWheel, { passive: false });
 
+    // Handle Safari/macOS gesture events for pinch-to-zoom
+    // These are separate from wheel events on some browsers
+    const handleGestureStart = (e: Event) => {
+      e.preventDefault();
+    };
+
+    const handleGestureChange = (e: Event) => {
+      e.preventDefault();
+      // GestureEvent has a 'scale' property (1.0 = no change, >1 = zoom in, <1 = zoom out)
+      const gestureEvent = e as unknown as { scale: number; clientX: number; clientY: number };
+      const currentZoom = state.canvasZoom ?? 1.0;
+      const currentOffset = state.canvasOffset ?? { x: 0, y: 0 };
+
+      // Scale is multiplicative, so we multiply current zoom by it
+      // But we need to smooth it out since the change is cumulative
+      const newZoom = Math.max(0.25, Math.min(2.0, currentZoom * gestureEvent.scale));
+
+      // Zoom toward the gesture center point
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = gestureEvent.clientX - rect.left;
+      const mouseY = gestureEvent.clientY - rect.top;
+
+      const zoomRatio = newZoom / currentZoom;
+      const newOffset = {
+        x: mouseX - (mouseX - currentOffset.x) * zoomRatio,
+        y: mouseY - (mouseY - currentOffset.y) * zoomRatio
+      };
+
+      console.log('[Canvas] Gesture zoom:', { currentZoom, newZoom, scale: gestureEvent.scale });
+      setCanvasZoom(newZoom);
+      setCanvasOffset(newOffset);
+    };
+
+    const handleGestureEnd = (e: Event) => {
+      e.preventDefault();
+    };
+
+    // Safari-specific gesture events
+    canvas.addEventListener('gesturestart', handleGestureStart);
+    canvas.addEventListener('gesturechange', handleGestureChange);
+    canvas.addEventListener('gestureend', handleGestureEnd);
+
     return () => {
       canvas.removeEventListener('wheel', handleWheel);
+      canvas.removeEventListener('gesturestart', handleGestureStart);
+      canvas.removeEventListener('gesturechange', handleGestureChange);
+      canvas.removeEventListener('gestureend', handleGestureEnd);
     };
   }, [state.canvasOffset, state.canvasZoom, setCanvasOffset, setCanvasZoom]);
 

@@ -999,7 +999,12 @@ function WindowedAppInner({ brand, allBrands, onBrandUpdate, onBrandSelect, onBa
 
   // Agent state
   const brainRef = useRef<AgentBrain>(new AgentBrain());
-  const [messages, setMessages] = useState<AgentMessage[]>([]);
+  // Initialize messages from AgentBrain's history (includes welcome message)
+  const [messages, setMessages] = useState<AgentMessage[]>(() => {
+    const initialHistory = brainRef.current.getContext().history;
+    console.log('[WindowedApp] Initializing messages from AgentBrain history:', initialHistory);
+    return initialHistory;
+  });
   const [agentState, setAgentState] = useState<AgentState>('INIT');
   const [isTyping, setIsTyping] = useState(false);
 
@@ -2130,6 +2135,7 @@ function WindowedAppInner({ brand, allBrands, onBrandUpdate, onBrandSelect, onBa
 
     // Handle actions
     const action = agentResponse.action as any;
+    console.log('[WindowedApp] handleSendMessage - action from agentResponse:', action);
     if (action) {
       // Window management actions
       if (typeof action === 'string' && action.startsWith('WINDOW_')) {
@@ -2148,6 +2154,21 @@ function WindowedAppInner({ brand, allBrands, onBrandUpdate, onBrandSelect, onBa
         generateMediaPlanPDF(ctx.mediaPlan);
       } else if (action === 'EXPORT_PPT' && ctx.mediaPlan) {
         generateMediaPlanPPT(ctx.mediaPlan);
+      } else if (action === 'OPEN_TEMPLATE_LIBRARY') {
+        // Open template library
+        // Use contextBrand's first campaign, or create a placeholder campaign ID
+        const campaigns = contextBrand?.campaigns || [];
+        console.log('[WindowedApp] OPEN_TEMPLATE_LIBRARY action triggered', {
+          contextBrand: contextBrand?.name,
+          campaignCount: campaigns.length
+        });
+        if (campaigns.length > 0) {
+          setTemplateLibraryCampaignId(campaigns[0].id);
+        } else {
+          // No campaigns exist - create a temporary ID so template library opens
+          // The template will prompt for campaign creation when selected
+          setTemplateLibraryCampaignId('__new_campaign__');
+        }
       } else if (action.type === 'CREATE_CAMPAIGN' && action.payload?.name) {
         // Create the new campaign
         const campaignName = action.payload.name;

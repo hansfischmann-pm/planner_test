@@ -38,6 +38,23 @@ export interface PendingAction {
     confirmed: boolean;
 }
 
+export interface FrustrationState {
+    consecutiveCorrections: number;   // "No, I meant X" type messages
+    lastCorrectionTime: number;
+    escalatedToHuman: boolean;
+}
+
+/**
+ * Tracks the last follow-up question asked by the agent.
+ * This allows "yes" responses to trigger the appropriate action.
+ */
+export interface LastFollowUp {
+    question: string;              // The question asked (e.g., "Want a full optimization analysis?")
+    yesAction: string;            // Action to trigger on "yes" (e.g., "optimize my plan")
+    noAction?: string;            // Optional action for "no"
+    timestamp: number;
+}
+
 export interface ConversationContext {
     sessionId: string;
     history: Message[];
@@ -45,6 +62,8 @@ export interface ConversationContext {
     userProfile: UserProfile;
     pendingActions: PendingAction[];
     accumulatedEntities: ExtractedEntities;
+    frustration: FrustrationState;
+    lastFollowUp?: LastFollowUp;
 }
 
 export class ContextManager {
@@ -67,7 +86,12 @@ export class ContextManager {
                     interactionCount: 0
                 },
                 pendingActions: [],
-                accumulatedEntities: {}
+                accumulatedEntities: {},
+                frustration: {
+                    consecutiveCorrections: 0,
+                    lastCorrectionTime: 0,
+                    escalatedToHuman: false
+                }
             });
         }
 
@@ -248,6 +272,115 @@ export class ContextManager {
         if (newEntities.placements) {
             acc.placements = { ...acc.placements, ...newEntities.placements };
         }
+    }
+
+    /**
+     * Detect if a message indicates frustration/correction
+     */
+    private isCorrectionMessage(message: string): boolean {
+        const correctionPatterns = [
+            /^no[,.]?\s/i,
+            /that's not/i,
+            /that isn't/i,
+            /wrong/i,
+            /i meant/i,
+            /i said/i,
+            /not what i/i,
+            /i asked for/i,
+            /try again/i,
+            /you misunderstood/i,
+            /didn't ask/i
+        ];
+        return correctionPatterns.some(pattern => pattern.test(message));
+    }
+
+    /**
+     * Update frustration state based on user message
+     */
+    trackFrustration(sessionId: string, message: string): FrustrationState {
+        const context = this.getContext(sessionId);
+        const now = Date.now();
+        const fiveMinutes = 5 * 60 * 1000;
+
+        if (this.isCorrectionMessage(message)) {
+            // Reset counter if more than 5 minutes since last correction
+            if (now - context.frustration.lastCorrectionTime > fiveMinutes) {
+                context.frustration.consecutiveCorrections = 1;
+            } else {
+                context.frustration.consecutiveCorrections++;
+            }
+            context.frustration.lastCorrectionTime = now;
+        } else {
+            // Positive/neutral message - reset frustration if not recent
+            if (now - context.frustration.lastCorrectionTime > fiveMinutes) {
+                context.frustration.consecutiveCorrections = 0;
+            }
+        }
+
+        return context.frustration;
+    }
+
+    /**
+     * Check if user should be offered human escalation
+     */
+    shouldOfferHumanEscalation(sessionId: string): boolean {
+        const context = this.getContext(sessionId);
+        // Offer after 2+ corrections, but only once per session
+        return context.frustration.consecutiveCorrections >= 2 &&
+               !context.frustration.escalatedToHuman;
+    }
+
+    /**
+     * Mark that human escalation was offered
+     */
+    markEscalationOffered(sessionId: string): void {
+        const context = this.getContext(sessionId);
+        context.frustration.escalatedToHuman = true;
+    }
+
+    /**
+     * Get frustration state
+     */
+    getFrustrationState(sessionId: string): FrustrationState {
+        return this.getContext(sessionId).frustration;
+    }
+
+    /**
+     * Set a follow-up question context for handling "yes/no" responses
+     */
+    setFollowUp(sessionId: string, yesAction: string, question?: string, noAction?: string): void {
+        const context = this.getContext(sessionId);
+        context.lastFollowUp = {
+            question: question || '',
+            yesAction,
+            noAction,
+            timestamp: Date.now()
+        };
+    }
+
+    /**
+     * Get the last follow-up question (if still valid - within 2 minutes)
+     */
+    getFollowUp(sessionId: string): LastFollowUp | null {
+        const context = this.getContext(sessionId);
+        if (!context.lastFollowUp) return null;
+
+        // Follow-up expires after 2 minutes
+        const twoMinutes = 2 * 60 * 1000;
+        if (Date.now() - context.lastFollowUp.timestamp > twoMinutes) {
+            context.lastFollowUp = undefined;
+            return null;
+        }
+
+        return context.lastFollowUp;
+    }
+
+    /**
+     * Clear the follow-up context after it's been used
+     */
+    clearFollowUp(sessionId: string): void {
+        const context = this.getContext(sessionId);
+        context.lastFollowUp = undefined;
     }
 
     /**

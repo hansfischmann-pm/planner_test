@@ -25,21 +25,19 @@ export function isTemplateCommand(input: string): boolean {
  * Handle showing/listing all templates
  */
 function handleShowTemplates(): AgentMessage {
-    let responseContent = "**Campaign Templates**\n\nI have 6 pre-configured templates to help you get started quickly:\n\n";
+    let responseContent = `${CAMPAIGN_TEMPLATES.length} templates available:\n\n`;
 
     CAMPAIGN_TEMPLATES.forEach(template => {
-        responseContent += `${template.icon} **${template.name}**\n`;
-        responseContent += `   ${template.description}\n`;
-        responseContent += `   - Budget: $${(template.recommendedBudget.optimal / 1000).toFixed(0)}k (optimal)\n`;
-        responseContent += `   - Channels: ${template.channelMix.map(m => m.channel).join(', ')}\n\n`;
+        responseContent += `${template.icon} **${template.name}** — $${(template.recommendedBudget.optimal / 1000).toFixed(0)}k optimal\n`;
+        responseContent += `   ${template.channelMix.map(m => m.channel).join(', ')}\n\n`;
     });
 
-    responseContent += "To use a template, click the **Use Template** button in the campaign list or say \"create campaign from [template name]\".";
+    responseContent += `Say "tell me about [name]" or "what's best for B2B?" for details.`;
 
     return createAgentMessage(responseContent, [
-        'Use Template',
-        'Tell me about the Retail Holiday template',
-        'What\'s best for B2B?'
+        'What\'s best for B2B?',
+        'What\'s best for retail?',
+        'Use Template'
     ]);
 }
 
@@ -57,17 +55,18 @@ function handleExplainTemplate(input: string): AgentMessage | null {
 
     if (!matchedTemplate) return null;
 
-    let responseContent = `**${matchedTemplate.icon} ${matchedTemplate.name}**\n\n`;
-    responseContent += `${matchedTemplate.description}\n\n`;
-    responseContent += `**Recommended Budget:** $${(matchedTemplate.recommendedBudget.min / 1000).toFixed(0)}k - $${(matchedTemplate.recommendedBudget.max / 1000).toFixed(0)}k (optimal: $${(matchedTemplate.recommendedBudget.optimal / 1000).toFixed(0)}k)\n\n`;
-    responseContent += `**Channel Mix:**\n`;
-    matchedTemplate.channelMix.forEach(mix => {
-        responseContent += `- ${mix.channel} (${mix.percentage}%): ${mix.rationale}\n`;
-    });
-    responseContent += `\n**Default Goals:**\n`;
-    if (matchedTemplate.defaultGoals.impressions) responseContent += `- Impressions: ${matchedTemplate.defaultGoals.impressions.toLocaleString()}\n`;
-    if (matchedTemplate.defaultGoals.reach) responseContent += `- Reach: ${matchedTemplate.defaultGoals.reach.toLocaleString()}\n`;
-    if (matchedTemplate.defaultGoals.conversions) responseContent += `- Conversions: ${matchedTemplate.defaultGoals.conversions.toLocaleString()}\n`;
+    const t = matchedTemplate;
+    let responseContent = `${t.icon} **${t.name}**\n\n`;
+    responseContent += `${t.description}\n\n`;
+    responseContent += `**Budget:** $${(t.recommendedBudget.min / 1000).toFixed(0)}k–$${(t.recommendedBudget.max / 1000).toFixed(0)}k (optimal $${(t.recommendedBudget.optimal / 1000).toFixed(0)}k)\n\n`;
+    responseContent += `**Channels:** ${t.channelMix.map(m => `${m.channel} (${m.percentage}%)`).join(', ')}\n\n`;
+
+    // Condense goals
+    const goalParts: string[] = [];
+    if (t.defaultGoals.impressions) goalParts.push(`${(t.defaultGoals.impressions / 1000000).toFixed(1)}M impressions`);
+    if (t.defaultGoals.reach) goalParts.push(`${(t.defaultGoals.reach / 1000).toFixed(0)}k reach`);
+    if (t.defaultGoals.conversions) goalParts.push(`${t.defaultGoals.conversions.toLocaleString()} conversions`);
+    if (goalParts.length) responseContent += `**Default Goals:** ${goalParts.join(', ')}`;
 
     return createAgentMessage(responseContent, ['Use this template', 'Show all templates']);
 }
@@ -98,7 +97,11 @@ function handleTemplateRecommendation(input: string): AgentMessage | null {
 
     if (!recommendation) return null;
 
-    const responseContent = `Based on your requirements, I recommend the **${recommendation.icon} ${recommendation.name}** template.\n\n${recommendation.description}\n\nThis template is optimized with:\n- ${recommendation.channelMix.length} channels including ${recommendation.channelMix.slice(0, 3).map(m => m.channel).join(', ')}\n- Recommended budget: $${(recommendation.recommendedBudget.optimal / 1000).toFixed(0)}k\n- Complexity: ${recommendation.complexity}\n\nClick **Use Template** in the campaign list to get started!`;
+    const r = recommendation;
+    const responseContent = `I'd use **${r.icon} ${r.name}** — ${r.description.toLowerCase()}\n\n` +
+        `${r.channelMix.length} channels (${r.channelMix.slice(0, 3).map(m => m.channel).join(', ')}), ` +
+        `$${(r.recommendedBudget.optimal / 1000).toFixed(0)}k optimal budget.\n\n` +
+        `Want to use this template?`;
 
     return createAgentMessage(responseContent, ['Use Template', 'Show all templates']);
 }
@@ -108,6 +111,19 @@ function handleTemplateRecommendation(input: string): AgentMessage | null {
  */
 export function handleTemplateCommand(input: string, _context: AgentContext): TemplateCommandResult {
     const lowerInput = input.toLowerCase();
+
+    // Handle "Use Template" / "Use this template" - opens template library
+    if (lowerInput.includes('use template') || lowerInput === 'use this template') {
+        const msg = createAgentMessage(
+            "Opening the template library...",
+            ['Show all templates']
+        );
+        msg.action = 'OPEN_TEMPLATE_LIBRARY' as any;
+        return {
+            handled: true,
+            response: msg
+        };
+    }
 
     // Handle "Show me templates" or "List templates"
     if (lowerInput.includes('show') || lowerInput.includes('list') || lowerInput.includes('browse') || lowerInput.includes('what') || lowerInput.includes('available')) {
