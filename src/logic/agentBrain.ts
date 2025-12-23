@@ -1,7 +1,6 @@
 
-import { MediaPlan, AgentMessage, Placement, Brand, AgentInfo, AgentExecution, Creative } from '../types';
+import { MediaPlan, AgentMessage, Placement, Brand, AgentInfo, AgentExecution } from '../types';
 import { generateCampaign, generateLine, calculatePlanMetrics, SAMPLE_AGENTS, generateId } from './dummyData';
-import { findMatchingCommand } from './CommandRegistry';
 
 // Unique message ID generator to prevent React key collisions
 const generateMessageId = (prefix: string = 'msg') =>
@@ -13,37 +12,26 @@ import { extractAllEntities, extractBudget, extractChannels } from './entityExtr
 import { contextManager } from './contextManager';
 import { recommendBudgetAllocation } from '../utils/budgetOptimizer';
 import { actionHistory } from '../utils/actionHistory';
-import { CAMPAIGN_TEMPLATES } from './campaignTemplates';
-import { generateOptimizationReport, formatOptimizationReport } from '../utils/optimizationEngine';
-import { analyzePlan, getAnalysisSummary } from '../utils/performanceAnalyzer';
-import { forecastCampaign, formatForecastResult, calculateAudienceOverlap } from '../utils/forecastingEngine';
 
 // Extracted modules for AgentBrain decomposition
 import { channelManager } from './ChannelManager';
 import { inventoryService } from './InventoryService';
+import { goalManager, isGoalCommand } from './GoalManager';
+import { templateManager, isTemplateCommand } from './TemplateManager';
+import { creativeManager, isCreativeCommand } from './CreativeManager';
+import { optimizationManager, isOptimizationCommand, PendingAction, executePauseUnderperformers, executeScaleWinners } from './OptimizationManager';
+import { forecastManager, isForecastCommand } from './ForecastManager';
+import { windowManager } from './WindowManager';
+import { attributionManager } from './AttributionManager';
+import { WindowContext } from './AgentContext';
+
+// Re-export WindowContext for backwards compatibility
+export type { WindowContext } from './AgentContext';
 
 export type AgentState = 'INIT' | 'BUDGETING' | 'CHANNEL_SELECTION' | 'REFINEMENT' | 'OPTIMIZATION' | 'FINISHED';
 
-export type PendingActionType = 'PAUSE_UNDERPERFORMERS' | 'SCALE_WINNERS' | 'APPLY_OPTIMIZATION';
-
-export interface PendingAction {
-    type: PendingActionType;
-    description: string;
-    details: string[];
-    estimatedImpact: number;
-    data?: any; // Additional data needed to execute the action
-}
-
-// Window context for context-aware chat in windowed mode
-export interface WindowContext {
-    windowType: 'campaign' | 'flight' | 'portfolio' | 'report' | 'settings' | 'media-plan' | 'client' | 'client-list' | null;
-    brandId?: string;      // Brand/Client ID for this window
-    brandName?: string;    // Brand/Client name for display
-    campaignId?: string;
-    campaignName?: string;
-    flightId?: string;
-    flightName?: string;
-}
+// PendingActionType and PendingAction are now imported from OptimizationManager
+// WindowContext is now imported from AgentContext
 
 interface AgentContext {
     state: AgentState;
@@ -176,7 +164,7 @@ export class AgentBrain {
         }
 
         // GLOBAL: Window Management Commands (work in windowed canvas mode)
-        const windowCommandResult = this.handleWindowCommands(input);
+        const windowCommandResult = windowManager.handleWindowCommand(input);
         if (windowCommandResult) {
             this.context.history.push(windowCommandResult);
             contextManager.addMessage(this.sessionId, 'assistant', windowCommandResult.content);
@@ -184,7 +172,11 @@ export class AgentBrain {
         }
 
         // GLOBAL: Attribution Commands (work in windowed canvas mode with campaign context)
-        const attributionCommandResult = this.handleAttributionCommands(input);
+        const attributionCommandResult = attributionManager.handleAttributionCommand(input, {
+            windowContext: this.context.windowContext,
+            mediaPlan: this.context.mediaPlan,
+            brand: this.context.brand
+        });
         if (attributionCommandResult) {
             this.context.history.push(attributionCommandResult);
             contextManager.addMessage(this.sessionId, 'assistant', attributionCommandResult.content);
@@ -260,123 +252,19 @@ export class AgentBrain {
         }
 
         // =================================================================
-        // GOAL SETTING COMMANDS (Global - Overrides State)
+        // DELEGATED COMMAND HANDLERS (Extracted to separate managers)
         // =================================================================
-        // Patterns: "set goal impressions 1M", "update goal conversions 500", "show goals", "increase reach to 1M"
         const lowerInput = input.toLowerCase();
-        const hasGoalKeyword = lowerInput.includes('goal') ||
-            (lowerInput.includes('increase') && (lowerInput.includes('reach') || lowerInput.includes('impression') || lowerInput.includes('conversion') || lowerInput.includes('click'))) ||
-            (lowerInput.includes('set') && (lowerInput.includes('reach') || lowerInput.includes('impression') || lowerInput.includes('conversion') || lowerInput.includes('click')));
 
-        if (hasGoalKeyword && (lowerInput.includes('set') || lowerInput.includes('show') || lowerInput.includes('update') || lowerInput.includes('change') || lowerInput.includes('list') || lowerInput.includes('what are') || lowerInput.includes('increase'))) {
+        // Goal Commands (via GoalManager)
+        if (isGoalCommand(input)) {
+            console.log('[AgentBrain] Matched: Goal command (via GoalManager)');
             try {
-                const plan = this.context.mediaPlan;
-                if (!plan) {
-                    const response = this.createAgentMessage(
-                        "I need an active media plan to manage goals. Please create or select a campaign first.",
-                        ['Create new campaign']
-                    );
-                    this.context.history.push(response);
-                    contextManager.addMessage(this.sessionId, 'assistant', response.content);
-                    return response;
-                }
-
-                // Handle "Show Goals"
-                if (lowerInput.includes('show') || lowerInput.includes('list') || lowerInput.includes('what are')) {
-                    console.log('[AgentBrain] Matched: Show goals');
-                    const goals = plan.campaign.numericGoals || {};
-                    const hasGoals = Object.keys(goals).length > 0;
-
-                    if (!hasGoals) {
-                        const response = this.createAgentMessage(
-                            "You haven't set any numeric goals yet.",
-                            ['Set goal impressions 1M', 'Set goal conversions 500']
-                        );
-                        this.context.history.push(response);
-                        contextManager.addMessage(this.sessionId, 'assistant', response.content);
-                        return response;
-                    }
-
-                    let responseContent = "**🎯 Current Campaign Goals**\n\n";
-                    if (goals.impressions) responseContent += `• **Impressions:** ${goals.impressions.toLocaleString()}\n`;
-                    if (goals.reach) responseContent += `• **Reach:** ${goals.reach.toLocaleString()}\n`;
-                    if (goals.conversions) responseContent += `• **Conversions:** ${goals.conversions.toLocaleString()}\n`;
-                    if (goals.clicks) responseContent += `• **Clicks:** ${goals.clicks.toLocaleString()}\n`;
-
-                    const response = this.createAgentMessage(responseContent, ['Forecast this campaign']);
-                    this.context.history.push(response);
-                    contextManager.addMessage(this.sessionId, 'assistant', responseContent);
-                    return response;
-                }
-
-                // Handle "Set/Update/Increase Goal"
-                if (lowerInput.includes('set') || lowerInput.includes('update') || lowerInput.includes('change') || lowerInput.includes('add') || lowerInput.includes('increase')) {
-                    console.log('[AgentBrain] Matched: Set/Update/Increase goal');
-
-                    // Parse metric
-                    let metric: 'impressions' | 'reach' | 'conversions' | 'clicks' | null = null;
-                    if (lowerInput.includes('impression')) metric = 'impressions';
-                    else if (lowerInput.includes('reach')) metric = 'reach';
-                    else if (lowerInput.includes('conversion')) metric = 'conversions';
-                    else if (lowerInput.includes('click')) metric = 'clicks';
-
-                    if (!metric) {
-                        const response = this.createAgentMessage(
-                            "Which goal would you like to set? I support Impressions, Reach, Conversions, and Clicks.",
-                            ['Set goal impressions 1M', 'Set goal conversions 500']
-                        );
-                        this.context.history.push(response);
-                        contextManager.addMessage(this.sessionId, 'assistant', response.content);
-                        return response;
-                    }
-
-                    // Parse value - look for number after the metric keyword
-                    // This ensures we get "100" from "set goal impressions 100M" not just any first number
-                    const metricIndex = lowerInput.indexOf(metric);
-                    const afterMetric = metricIndex >= 0 ? lowerInput.substring(metricIndex + metric.length) : lowerInput;
-                    const valueMatch = afterMetric.match(/(\d+(?:\.\d+)?)\s*([kKmMbB])?/);
-
-                    if (!valueMatch) {
-                        const response = this.createAgentMessage(
-                            `I couldn't understand the value for ${metric}. Try saying something like "Set goal ${metric} 1.5M" or "Set goal ${metric} 5000".`,
-                            [`Set goal ${metric} 100k`]
-                        );
-                        this.context.history.push(response);
-                        contextManager.addMessage(this.sessionId, 'assistant', response.content);
-                        return response;
-                    }
-
-                    let value = parseFloat(valueMatch[1]);
-                    const suffix = valueMatch[2]?.toLowerCase();
-
-                    if (suffix === 'k') value *= 1000;
-                    else if (suffix === 'm') value *= 1000000;
-                    else if (suffix === 'b') value *= 1000000000;
-
-                    // Update plan with goal - preserve all existing data
-                    if (!plan.campaign.numericGoals) {
-                        plan.campaign.numericGoals = {};
-                    }
-                    plan.campaign.numericGoals[metric] = Math.floor(value);
-
-                    // Return updated plan in response - preserve all existing data
-                    const response = this.createAgentMessage(
-                        `✅ **Goal Updated!**\n\nI've set your **${metric}** goal to **${Math.floor(value).toLocaleString()}**.\n\nThe goal tracking card in your plan view has been updated.`,
-                        ['Show goals', 'Forecast this campaign']
-                    );
-
-                    // Important: Attach updated plan to trigger UI update
-                    // Use shallow copy to preserve all references (especially placements)
-                    response.updatedMediaPlan = {
-                        ...plan,
-                        campaign: {
-                            ...plan.campaign,
-                            numericGoals: { ...plan.campaign.numericGoals }
-                        }
-                    };
-                    this.context.history.push(response);
-                    contextManager.addMessage(this.sessionId, 'assistant', response.content);
-                    return response;
+                const result = goalManager.handleGoalCommand(input, this.context as any);
+                if (result.handled && result.response) {
+                    this.context.history.push(result.response);
+                    contextManager.addMessage(this.sessionId, 'assistant', result.response.content);
+                    return result.response;
                 }
             } catch (e: any) {
                 console.error("Error in goal logic:", e);
@@ -385,89 +273,20 @@ export class AgentBrain {
                     ['Show goals']
                 );
                 this.context.history.push(response);
-                contextManager.addMessage(this.sessionId, 'assistant', response.content);
                 return response;
             }
         }
 
-        // =================================================================
-        // CAMPAIGN TEMPLATE COMMANDS (Phase 5.4)
-        // =================================================================
-        if (lowerInput.includes('template')) {
+        // Template Commands (via TemplateManager)
+        if (isTemplateCommand(input)) {
+            console.log('[AgentBrain] Matched: Template command (via TemplateManager)');
             try {
-                // "Show me templates" or "List templates"
-                if (lowerInput.includes('show') || lowerInput.includes('list') || lowerInput.includes('browse') || lowerInput.includes('what') || lowerInput.includes('available')) {
-                    let responseContent = "**📋 Campaign Templates**\n\nI have 6 pre-configured templates to help you get started quickly:\n\n";
-
-                    CAMPAIGN_TEMPLATES.forEach(template => {
-                        responseContent += `${template.icon} **${template.name}**\n`;
-                        responseContent += `   ${template.description}\n`;
-                        responseContent += `   • Budget: $${(template.recommendedBudget.optimal / 1000).toFixed(0)}k (optimal)\n`;
-                        responseContent += `   • Channels: ${template.channelMix.map(m => m.channel).join(', ')}\n\n`;
-                    });
-
-                    responseContent += "To use a template, click the **Use Template** button in the campaign list or say \"create campaign from [template name]\".";
-
-                    const response = this.createAgentMessage(responseContent, [
-                        'Use Template',
-                        'Tell me about the Retail Holiday template',
-                        'What\'s best for B2B?'
-                    ]);
-                    this.context.history.push(response);
-                    contextManager.addMessage(this.sessionId, 'assistant', responseContent);
-                    return response;
+                const result = templateManager.handleTemplateCommand(input, this.context as any);
+                if (result.handled && result.response) {
+                    this.context.history.push(result.response);
+                    contextManager.addMessage(this.sessionId, 'assistant', result.response.content);
+                    return result.response;
                 }
-
-                // "Tell me about [template]" or "What's the [template] template?"
-                const templateNames = ['retail holiday', 'b2b lead gen', 'brand launch', 'performance max', 'local store', 'mobile app'];
-                const matchedTemplate = CAMPAIGN_TEMPLATES.find(t =>
-                    templateNames.some(name => lowerInput.includes(name)) && lowerInput.includes(t.name.toLowerCase().split(' ')[0])
-                );
-
-                if (matchedTemplate) {
-                    let responseContent = `**${matchedTemplate.icon} ${matchedTemplate.name}**\n\n`;
-                    responseContent += `${matchedTemplate.description}\n\n`;
-                    responseContent += `**📊 Recommended Budget:** $${(matchedTemplate.recommendedBudget.min / 1000).toFixed(0)}k - $${(matchedTemplate.recommendedBudget.max / 1000).toFixed(0)}k (optimal: $${(matchedTemplate.recommendedBudget.optimal / 1000).toFixed(0)}k)\n\n`;
-                    responseContent += `**📺 Channel Mix:**\n`;
-                    matchedTemplate.channelMix.forEach(mix => {
-                        responseContent += `• ${mix.channel} (${mix.percentage}%): ${mix.rationale}\n`;
-                    });
-                    responseContent += `\n**🎯 Default Goals:**\n`;
-                    if (matchedTemplate.defaultGoals.impressions) responseContent += `• Impressions: ${matchedTemplate.defaultGoals.impressions.toLocaleString()}\n`;
-                    if (matchedTemplate.defaultGoals.reach) responseContent += `• Reach: ${matchedTemplate.defaultGoals.reach.toLocaleString()}\n`;
-                    if (matchedTemplate.defaultGoals.conversions) responseContent += `• Conversions: ${matchedTemplate.defaultGoals.conversions.toLocaleString()}\n`;
-
-                    const response = this.createAgentMessage(responseContent, ['Use this template', 'Show all templates']);
-                    this.context.history.push(response);
-                    contextManager.addMessage(this.sessionId, 'assistant', responseContent);
-                    return response;
-                }
-
-                // "What's best for [industry/goal]?"
-                if (lowerInput.includes('best for') || lowerInput.includes('recommend')) {
-                    let recommendation = null;
-
-                    if (lowerInput.includes('b2b') || lowerInput.includes('lead')) {
-                        recommendation = CAMPAIGN_TEMPLATES.find(t => t.id === 'b2b-lead-gen');
-                    } else if (lowerInput.includes('retail') || lowerInput.includes('ecommerce') || lowerInput.includes('store')) {
-                        recommendation = CAMPAIGN_TEMPLATES.find(t => t.id === 'retail-holiday');
-                    } else if (lowerInput.includes('brand') || lowerInput.includes('awareness') || lowerInput.includes('launch')) {
-                        recommendation = CAMPAIGN_TEMPLATES.find(t => t.id === 'brand-launch');
-                    } else if (lowerInput.includes('performance') || lowerInput.includes('conversion') || lowerInput.includes('roi')) {
-                        recommendation = CAMPAIGN_TEMPLATES.find(t => t.id === 'performance-max');
-                    } else if (lowerInput.includes('app') || lowerInput.includes('mobile')) {
-                        recommendation = CAMPAIGN_TEMPLATES.find(t => t.id === 'mobile-app-launch');
-                    }
-
-                    if (recommendation) {
-                        const responseContent = `Based on your requirements, I recommend the **${recommendation.icon} ${recommendation.name}** template.\n\n${recommendation.description}\n\nThis template is optimized with:\n• ${recommendation.channelMix.length} channels including ${recommendation.channelMix.slice(0, 3).map(m => m.channel).join(', ')}\n• Recommended budget: $${(recommendation.recommendedBudget.optimal / 1000).toFixed(0)}k\n• Complexity: ${recommendation.complexity}\n\nClick **Use Template** in the campaign list to get started!`;
-                        const response = this.createAgentMessage(responseContent, ['Use Template', 'Show all templates']);
-                        this.context.history.push(response);
-                        contextManager.addMessage(this.sessionId, 'assistant', responseContent);
-                        return response;
-                    }
-                }
-
             } catch (e: any) {
                 console.error("Error in template logic:", e);
                 const response = this.createAgentMessage(
@@ -475,112 +294,20 @@ export class AgentBrain {
                     ['Show campaigns']
                 );
                 this.context.history.push(response);
-                contextManager.addMessage(this.sessionId, 'assistant', response.content);
                 return response;
             }
         }
 
-        // =================================================================
-        // CREATIVE MANAGEMENT COMMANDS (NEW - Phase 5.3)
-        // =================================================================
-        if (input.toLowerCase().includes('creative') || input.toLowerCase().includes('upload') || input.toLowerCase().includes('assign')) {
+        // Creative Commands (via CreativeManager)
+        if (isCreativeCommand(input)) {
+            console.log('[AgentBrain] Matched: Creative command (via CreativeManager)');
             try {
-                const lowerInput = input.toLowerCase();
-                const plan = this.context.mediaPlan;
-                if (!plan) {
-                    return this.createAgentMessage(
-                        "I need an active media plan to manage creatives.",
-                        ['Create new campaign']
-                    );
+                const result = creativeManager.handleCreativeCommand(input, this.context as any);
+                if (result.handled && result.response) {
+                    this.context.history.push(result.response);
+                    contextManager.addMessage(this.sessionId, 'assistant', result.response.content);
+                    return result.response;
                 }
-
-                // 1. Upload Creative
-                if (lowerInput.includes('upload')) {
-                    const nameMatch = input.match(/upload\s+(?:creative\s+)?["']?([^"']+)["']?/i);
-                    const name = nameMatch ? nameMatch[1] : `New Creative ${Date.now()}`;
-
-                    // Mock upload
-                    // In a real app, we'd add this to a global library. 
-                    // For now, we'll just confirm it's ready to be assigned.
-                    return this.createAgentMessage(
-                        `✅ **Creative Uploaded!**\n\nI've added "**${name}**" to your library.\n\nYou can now assign it to a placement.`,
-                        ['Assign to all display placements']
-                    );
-                }
-
-                // 2. Assign Creative
-                if (lowerInput.includes('assign')) {
-                    // Assigns to all Display/Social placements
-                    // Future: use 'all' vs 'first' logic based on input
-
-                    let count = 0;
-                    plan.campaign.placements?.forEach(p => {
-                        if (p.channel === 'Display' || p.channel === 'Social') {
-                            const newCreative: Creative = {
-                                id: generateId(),
-                                name: `Assigned Creative ${count + 1}`,
-                                type: 'IMAGE',
-                                url: `https://picsum.photos/seed/${Math.random()}/400/300`,
-                                dimensions: '300x250',
-                                metrics: { ctr: 0, conversions: 0 }
-                            };
-                            p.creatives = [...(p.creatives || []), newCreative];
-                            // Sync legacy
-                            p.creative = {
-                                id: newCreative.id,
-                                name: newCreative.name,
-                                type: 'image',
-                                url: newCreative.url
-                            };
-                            count++;
-                        }
-                    });
-
-                    if (count > 0) {
-                        const response = this.createAgentMessage(
-                            `✅ **Creatives Assigned!**\n\nI've assigned new creatives to ${count} placements.`,
-                            ['Check performance']
-                        );
-                        response.updatedMediaPlan = { ...plan };
-                        return response;
-                    } else {
-                        return this.createAgentMessage(
-                            "I couldn't find any suitable placements to assign creatives to.",
-                            ['Add display placement']
-                        );
-                    }
-                }
-
-                // 3. Performance Analysis
-                if (lowerInput.includes('winning') || lowerInput.includes('best performing')) {
-                    // Find best creative across all placements
-                    let bestCreative: Creative | null = null;
-                    let bestCtr = -1;
-                    let bestPlacementName = '';
-
-                    plan.campaign.placements?.forEach(p => {
-                        p.creatives?.forEach(c => {
-                            if ((c.metrics?.ctr || 0) > bestCtr) {
-                                bestCtr = c.metrics?.ctr || 0;
-                                bestCreative = c;
-                                bestPlacementName = p.name;
-                            }
-                        });
-                    });
-
-                    if (bestCreative) {
-                        return this.createAgentMessage(
-                            `🏆 **Winning Creative Found!**\n\n**${(bestCreative as Creative).name}** is your top performer.\n\n• **CTR:** ${((bestCtr) * 100).toFixed(2)}%\n• **Placement:** ${bestPlacementName}`,
-                            ['Optimize rotation']
-                        );
-                    } else {
-                        return this.createAgentMessage(
-                            "I don't have enough performance data yet to determine a winner.",
-                            ['Wait for data']
-                        );
-                    }
-                }
-
             } catch (e: any) {
                 console.error("Error in creative logic:", e);
                 return this.createAgentMessage(
@@ -896,565 +623,29 @@ export class AgentBrain {
         }
 
         // =================================================================
-        // OPTIMIZATION COMMANDS (NEW - Phase 5.1)
+        // OPTIMIZATION COMMANDS (via OptimizationManager)
         // =================================================================
-
-        // Handle specific optimization views (suggested actions)
-        if (lowerInput.includes('quick win')) {
-            console.log('[AgentBrain] Matched: Quick wins query');
-
-            const plan = this.context.mediaPlan;
-            if (!plan || !plan.campaign.placements || plan.campaign.placements.length === 0) {
-                return this.createAgentMessage(
-                    "I can't show quick wins yet - there are no placements to analyze.",
-                    ['Add placements first']
-                );
-            }
-
-            const flightBudget = 100000;
-            const report = generateOptimizationReport(plan.campaign.placements, flightBudget);
-
-            if (report.quickWins.length === 0) {
-                return this.createAgentMessage(
-                    "🎉 No quick wins needed - your plan is well-optimized!\n\nTry 'optimize my plan' for a full analysis.",
-                    ['Optimize my plan']
-                );
-            }
-
-            let responseContent = `💡 **Quick Wins** (${report.quickWins.length} easy, high-impact actions)\n\n`;
-            report.quickWins.forEach((rec, idx) => {
-                const impact = rec.estimatedImpact > 0
-                    ? `Save $${Math.round(rec.estimatedImpact).toLocaleString('en-US')}`
-                    : `Gain $${Math.round(Math.abs(rec.estimatedImpact)).toLocaleString('en-US')}`;
-                responseContent += `${idx + 1}. ${rec.description}\n`;
-                responseContent += `   ${rec.specificAction}\n`;
-                responseContent += `   💰 ${impact}\n\n`;
-            });
-
-            return this.createAgentMessage(responseContent, ['Optimize my plan']);
-        }
-
-        if (lowerInput.includes('critical issue')) {
-            console.log('[AgentBrain] Matched: Critical issues query');
-
-            const plan = this.context.mediaPlan;
-            if (!plan || !plan.campaign.placements || plan.campaign.placements.length === 0) {
-                return this.createAgentMessage(
-                    "I can't show critical issues yet - there are no placements to analyze.",
-                    ['Add placements first']
-                );
-            }
-
-            const flightBudget = 100000;
-            const report = generateOptimizationReport(plan.campaign.placements, flightBudget);
-            const critical = report.recommendations.filter(r => r.priority === 'HIGH');
-
-            if (critical.length === 0) {
-                return this.createAgentMessage(
-                    "✅ No critical issues found - great job!\n\nYour plan is in good shape.",
-                    ['Show full report']
-                );
-            }
-
-            let responseContent = `🚨 **Critical Issues** (${critical.length})\n\n`;
-            critical.forEach((rec, idx) => {
-                const impact = rec.estimatedImpact > 0
-                    ? `Save $${Math.round(rec.estimatedImpact).toLocaleString('en-US')}`
-                    : `Gain $${Math.round(Math.abs(rec.estimatedImpact)).toLocaleString('en-US')}`;
-                responseContent += `${idx + 1}. **${rec.placementName}**\n`;
-                responseContent += `   Issue: ${rec.description}\n`;
-                responseContent += `   Action: ${rec.specificAction}\n`;
-                responseContent += `   💰 ${impact}\n\n`;
-            });
-
-            return this.createAgentMessage(responseContent, ['Show full report', 'Show quick wins']);
-        }
-
-        // Handle "pause underperformers" - pause placements with poor performance
-        if (lowerInput.includes('pause') && lowerInput.includes('underperform')) {
-            console.log('[AgentBrain] Matched: Pause underperformers ACTION');
-
-            const plan = this.context.mediaPlan;
-            if (!plan || !plan.campaign.placements || plan.campaign.placements.length === 0) {
-                return this.createAgentMessage(
-                    "I can't pause underperformers yet - there are no placements to analyze.",
-                    ['Add placements first']
-                );
-            }
-
-            // Get recommendations from the optimization report
-            const flightBudget = 100000;
-            const report = generateOptimizationReport(plan.campaign.placements, flightBudget);
-            const pauseRecs = report.recommendations.filter(r =>
-                r.action === 'PAUSE' || r.action === 'REDUCE_BUDGET'
-            );
-
-            // Preview what would be paused (without actually pausing)
-            let totalSavings = 0;
-            const pausePreview: { placementId: string; name: string; roas: number }[] = [];
-
-            pauseRecs.forEach(rec => {
-                const placement = plan.campaign.placements?.find(p =>
-                    p.vendor === rec.placementName || p.id === rec.placementId
-                );
-                if (placement && placement.performance && placement.performance.status !== 'PAUSED') {
-                    totalSavings += rec.estimatedImpact;
-                    pausePreview.push({
-                        placementId: placement.id,
-                        name: placement.vendor,
-                        roas: placement.performance.roas
-                    });
+        if (isOptimizationCommand(lowerInput)) {
+            console.log('[AgentBrain] Matched: Optimization command (via OptimizationManager)');
+            const result = optimizationManager.handleOptimizationCommand(input, this.context as any, this.context.expressMode);
+            if (result.handled && result.response) {
+                // Store pending action if returned
+                if (result.pendingAction) {
+                    this.context.pendingAction = result.pendingAction;
                 }
-            });
-
-            if (pausePreview.length === 0) {
-                return this.createAgentMessage(
-                    "No placements qualified for pausing.\n\nAll your placements are performing well.",
-                    ['Optimize', 'Show performance']
-                );
+                return result.response;
             }
-
-            // Check for express mode - if enabled, execute immediately
-            if (this.context.expressMode) {
-                return this.executePauseUnderperformers(pausePreview, totalSavings);
-            }
-
-            // Store the pending action for confirmation
-            this.context.pendingAction = {
-                type: 'PAUSE_UNDERPERFORMERS',
-                description: `Pause ${pausePreview.length} underperforming placement${pausePreview.length > 1 ? 's' : ''}`,
-                details: pausePreview.map(p => `${p.name} (ROAS: ${p.roas.toFixed(2)})`),
-                estimatedImpact: totalSavings,
-                data: { pausePreview, totalSavings }
-            };
-
-            // Show confirmation dialog
-            let responseContent = `**Confirm: Pause ${pausePreview.length} underperforming placement${pausePreview.length > 1 ? 's' : ''}?**\n\n`;
-            responseContent += `**Placements to pause:**\n`;
-            pausePreview.forEach(p => {
-                responseContent += `  • ${p.name} (ROAS: ${p.roas.toFixed(2)})\n`;
-            });
-            responseContent += `\n**Estimated savings:** $${Math.round(totalSavings).toLocaleString('en-US')}\n\n`;
-            responseContent += `Type **"yes"** to confirm or **"no"** to cancel.`;
-
-            const msg = this.createAgentMessage(
-                responseContent,
-                ['Yes', 'No']
-            );
-            msg.agentsInvoked = ['Performance Agent', 'Insights Agent'];
-            return msg;
         }
-
-        // Handle "scale winners" - actually scale high-performing placements
-        if (lowerInput.includes('scale') && lowerInput.includes('winner')) {
-            console.log('[AgentBrain] Matched: Scale winners ACTION');
-
-            const plan = this.context.mediaPlan;
-            if (!plan || !plan.campaign.placements || plan.campaign.placements.length === 0) {
-                return this.createAgentMessage(
-                    "I can't scale winners yet - there are no placements to analyze.",
-                    ['Add placements first']
-                );
-            }
-
-            // Get recommendations from the optimization report
-            const flightBudget = 100000;
-            const report = generateOptimizationReport(plan.campaign.placements, flightBudget);
-            const scaleRecs = report.recommendations.filter(r => r.action === 'INCREASE_BUDGET');
-
-            // Preview what would be scaled (without actually scaling)
-            let totalBudgetIncrease = 0;
-            const scalePreview: { placementId: string; name: string; roas: number; currentCost: number; newCost: number }[] = [];
-
-            scaleRecs.forEach(rec => {
-                const placement = plan.campaign.placements?.find(p =>
-                    p.vendor === rec.placementName || p.id === rec.placementId
-                );
-                if (placement) {
-                    const increase = placement.totalCost * 0.25;
-                    totalBudgetIncrease += increase;
-                    scalePreview.push({
-                        placementId: placement.id,
-                        name: placement.vendor,
-                        roas: placement.performance?.roas || 0,
-                        currentCost: placement.totalCost,
-                        newCost: placement.totalCost * 1.25
-                    });
-                }
-            });
-
-            if (scalePreview.length === 0) {
-                return this.createAgentMessage(
-                    "No placements qualified for scaling (need ROAS > 3.0).\n\nYour high performers may already be well-funded.",
-                    ['Optimize', 'Show performance']
-                );
-            }
-
-            // Check for express mode - if enabled, execute immediately
-            if (this.context.expressMode) {
-                return this.executeScaleWinners(scalePreview, totalBudgetIncrease);
-            }
-
-            // Store the pending action for confirmation
-            this.context.pendingAction = {
-                type: 'SCALE_WINNERS',
-                description: `Scale ${scalePreview.length} high-performing placement${scalePreview.length > 1 ? 's' : ''} (+25%)`,
-                details: scalePreview.map(p => `${p.name} (ROAS: ${p.roas.toFixed(2)}) - $${Math.round(p.currentCost).toLocaleString()} → $${Math.round(p.newCost).toLocaleString()}`),
-                estimatedImpact: totalBudgetIncrease,
-                data: { scalePreview, totalBudgetIncrease }
-            };
-
-            // Show confirmation dialog
-            let responseContent = `**Confirm: Scale ${scalePreview.length} high-performing placement${scalePreview.length > 1 ? 's' : ''}?**\n\n`;
-            responseContent += `**Placements to scale (+25% budget & impressions):**\n`;
-            scalePreview.forEach(p => {
-                responseContent += `  • ${p.name} (ROAS: ${p.roas.toFixed(2)}) - $${Math.round(p.currentCost).toLocaleString()} → $${Math.round(p.newCost).toLocaleString()}\n`;
-            });
-            responseContent += `\n**Total budget increase:** $${Math.round(totalBudgetIncrease).toLocaleString('en-US')}\n\n`;
-            responseContent += `Type **"yes"** to confirm or **"no"** to cancel.`;
-
-            const msg = this.createAgentMessage(
-                responseContent,
-                ['Yes', 'No']
-            );
-            msg.agentsInvoked = ['Performance Agent', 'Yield Agent'];
-            return msg;
-        }
-
-        // Handle "growth opportunities" - show opportunities without taking action
-        if (lowerInput.includes('growth opportunit')) {
-            console.log('[AgentBrain] Matched: Growth opportunities query');
-
-            const plan = this.context.mediaPlan;
-            if (!plan || !plan.campaign.placements || plan.campaign.placements.length === 0) {
-                return this.createAgentMessage(
-                    "I can't show growth opportunities yet - there are no placements to analyze.",
-                    ['Add placements first']
-                );
-            }
-
-            const flightBudget = 100000;
-            const report = generateOptimizationReport(plan.campaign.placements, flightBudget);
-            const opportunities = report.recommendations.filter(r => r.estimatedImpact < 0);
-
-            if (opportunities.length === 0) {
-                return this.createAgentMessage(
-                    "📊 No major growth opportunities identified right now.\n\nYour high performers are already well-funded.",
-                    ['Show full report']
-                );
-            }
-
-            let responseContent = `✨ **Growth Opportunities** (${opportunities.length})\n\n`;
-            responseContent += `Scale these high-performers to maximize returns:\n\n`;
-            opportunities.forEach((rec, idx) => {
-                const gain = Math.abs(rec.estimatedImpact);
-                responseContent += `${idx + 1}. **${rec.placementName}**\n`;
-                responseContent += `   ${rec.currentMetric}\n`;
-                responseContent += `   Action: ${rec.specificAction}\n`;
-                responseContent += `   💰 Potential gain: $${Math.round(gain).toLocaleString('en-US')}\n\n`;
-            });
-
-            return this.createAgentMessage(responseContent, ['Scale winners', 'Show full report']);
-        }
-
-        // Handle "apply all recommendations" - execute all optimization actions
-        if (lowerInput.includes('apply all') || lowerInput.includes('apply recommendation')) {
-            console.log('[AgentBrain] Matched: Apply all recommendations ACTION');
-
-            const plan = this.context.mediaPlan;
-            if (!plan || !plan.campaign.placements || plan.campaign.placements.length === 0) {
-                return this.createAgentMessage(
-                    "I can't apply recommendations yet - there are no placements to analyze.",
-                    ['Add placements first']
-                );
-            }
-
-            const flightBudget = 100000;
-            const report = generateOptimizationReport(plan.campaign.placements, flightBudget);
-
-            let pausedCount = 0;
-            let scaledCount = 0;
-            let totalSavings = 0;
-            let totalIncrease = 0;
-
-            // Apply all recommendations
-            report.recommendations.forEach(rec => {
-                const placement = plan.campaign.placements?.find(p =>
-                    p.vendor === rec.placementName || p.id === rec.placementId
-                );
-                if (!placement) return;
-
-                // Handle PAUSE and REDUCE_BUDGET as "pause" actions
-                if ((rec.action === 'PAUSE' || rec.action === 'REDUCE_BUDGET') && placement.performance) {
-                    placement.performance.status = 'PAUSED';
-                    totalSavings += rec.estimatedImpact;
-                    pausedCount++;
-                }
-                // Handle INCREASE_BUDGET as "scale" action
-                else if (rec.action === 'INCREASE_BUDGET') {
-                    const increase = placement.totalCost * 0.25;
-                    placement.totalCost = placement.totalCost * 1.25;
-                    placement.quantity = Math.floor(placement.quantity * 1.25);
-                    if (placement.forecast) {
-                        placement.forecast.impressions = Math.floor(placement.forecast.impressions * 1.25);
-                    }
-                    totalIncrease += increase;
-                    scaledCount++;
-                }
-            });
-
-            // Recalculate plan metrics
-            plan.totalSpend = plan.campaign.placements?.reduce((acc, p) => acc + p.totalCost, 0) || 0;
-            plan.metrics = calculatePlanMetrics(plan.campaign.placements || []);
-
-            let responseContent = `🎯 **Applied All Recommendations**\n\n`;
-            if (pausedCount > 0) {
-                responseContent += `• Paused **${pausedCount}** underperforming placement${pausedCount > 1 ? 's' : ''}\n`;
-                responseContent += `  💰 Estimated savings: $${Math.round(totalSavings).toLocaleString('en-US')}\n\n`;
-            }
-            if (scaledCount > 0) {
-                responseContent += `• Scaled **${scaledCount}** high-performing placement${scaledCount > 1 ? 's' : ''}\n`;
-                responseContent += `  📈 Budget increase: $${Math.round(totalIncrease).toLocaleString('en-US')}\n\n`;
-            }
-
-            if (pausedCount === 0 && scaledCount === 0) {
-                return this.createAgentMessage(
-                    "No actionable recommendations to apply right now. Your plan is already optimized!",
-                    ['Show performance', 'Export PDF']
-                );
-            }
-
-            const msg = this.createAgentMessage(
-                responseContent,
-                ['Show performance', 'Undo', 'Export PDF']
-            );
-            msg.agentsInvoked = ['Performance Agent', 'Insights Agent', 'Yield Agent'];
-            return msg;
-        }
-
-        if (lowerInput.includes('detailed report') || lowerInput.includes('full report')) {
-            console.log('[AgentBrain] Matched: Detailed/Full report query');
-            // This will fall through to the main optimize command below
-            // Replace the input to trigger the main handler
-            input = 'optimize my plan';
-        }
-
-        // Patterns: "optimize my plan", "optimize plan", "what's wrong with my plan"
-        if (lowerInput.includes('optimize') ||
-            (lowerInput.includes('what') && (lowerInput.includes('wrong') || lowerInput.includes('issue'))) ||
-            lowerInput.includes('improvement') ||
-            lowerInput.includes('opportunities')) {
-            console.log('[AgentBrain] Matched: Optimization query');
-
-            const plan = this.context.mediaPlan;
-            if (!plan || !plan.campaign.placements || plan.campaign.placements.length === 0) {
-                return this.createAgentMessage(
-                    "I can't analyze your plan yet because there are no placements. Try adding some placements first!",
-                    ['Add 3 social placements', 'How should I allocate $50k?']
-                );
-            }
-
-            // Get flight budget
-            const flightBudget = 100000; // Default, would ideally get from activeFlightId
-
-            // Generate optimization report
-            const report = generateOptimizationReport(plan.campaign.placements, flightBudget);
-
-            // Format the report with placement details
-            const formattedReport = formatOptimizationReport(report, plan.campaign.placements);
-
-            // Add ACTIONABLE suggested actions based on recommendations
-            const suggestedActions: string[] = [];
-
-            // If there are underperformers to pause (PAUSE or REDUCE_BUDGET actions)
-            const pauseRecommendations = report.recommendations.filter(r =>
-                r.action === 'PAUSE' || r.action === 'REDUCE_BUDGET'
-            );
-            if (pauseRecommendations.length > 0) {
-                suggestedActions.push('Pause underperformers');
-            }
-
-            // If there are winners to scale (INCREASE_BUDGET action)
-            const scaleRecommendations = report.recommendations.filter(r => r.action === 'INCREASE_BUDGET');
-            if (scaleRecommendations.length > 0) {
-                suggestedActions.push('Scale winners');
-            }
-
-            // If there are any recommendations at all
-            if (report.recommendations.length > 0) {
-                suggestedActions.push('Apply all recommendations');
-            }
-
-            return this.createAgentMessage(
-                formattedReport,
-                suggestedActions.slice(0, 3)
-            );
-        }
-
-        // Show plan analysis/score
-        // Must check for "plan" + "score"/"health"/"grade" to avoid conflicts with other commands
-        if ((lowerInput.includes('plan') && (lowerInput.includes('score') || lowerInput.includes('health') || lowerInput.includes('grade'))) ||
-            lowerInput.includes('plan score') ||
-            lowerInput.includes('plan health')) {
-            console.log('[AgentBrain] Matched: Plan score query');
-
-            const plan = this.context.mediaPlan;
-            if (!plan || !plan.campaign.placements || plan.campaign.placements.length === 0) {
-                return this.createAgentMessage(
-                    "I can't score your plan yet - there are no placements to analyze.",
-                    ['Add placements first']
-                );
-            }
-
-            const flightBudget = 100000;
-            const analysis = analyzePlan(plan.campaign.placements, flightBudget);
-            const summary = getAnalysisSummary(analysis);
-
-            let responseContent = `**📊 Plan Health Check**\n\n${summary}\n\n`;
-
-            if (analysis.criticalCount > 0) {
-                responseContent += `You have **${analysis.criticalCount} critical issue${analysis.criticalCount > 1 ? 's' : ''}** that need immediate attention.\n\n`;
-            }
-
-            if (analysis.overallScore < 70) {
-                responseContent += `Your plan could benefit from optimization. Would you like me to show you specific recommendations?`;
-            } else if (analysis.overallScore < 85) {
-                responseContent += `Your plan is in good shape! There are a few minor optimizations that could improve performance.`;
-            } else {
-                responseContent += `Excellent work! Your plan is well-optimized. Keep monitoring for any changes.`;
-            }
-
-            return this.createAgentMessage(
-                responseContent,
-                ['Optimize my plan', 'Show detailed report']
-            );
-        }
-
 
         // =================================================================
-        // FORECASTING COMMANDS (NEW - Phase 5.2)
+        // FORECASTING COMMANDS (via ForecastManager)
         // =================================================================
-        // Patterns: "forecast this campaign", "what's the seasonal impact", "audience overlap"
-        if (lowerInput.includes('forecast') ||
-            (lowerInput.includes('predict') && (lowerInput.includes('performance') || lowerInput.includes('campaign'))) ||
-            lowerInput.includes('will we hit')) {
-            console.log('[AgentBrain] Matched: Forecast query');
-
-            const plan = this.context.mediaPlan;
-            if (!plan || !plan.campaign.placements || plan.campaign.placements.length === 0) {
-                return this.createAgentMessage(
-                    "I can't forecast yet - there are no placements to analyze. Add some placements first!",
-                    ['Add 3 social placements', 'How should I allocate $50k?']
-                );
+        if (isForecastCommand(lowerInput)) {
+            console.log('[AgentBrain] Matched: Forecast command (via ForecastManager)');
+            const result = forecastManager.handleForecastCommand(input, this.context as any);
+            if (result.handled && result.response) {
+                return result.response;
             }
-
-            // Get campaign date range
-            const campaign = plan.campaign;
-            const startDate = campaign.startDate || new Date().toISOString();
-            const endDate = campaign.endDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-
-            // Generate forecast
-            const forecast = forecastCampaign(plan.campaign.placements, startDate, endDate);
-            const formattedForecast = formatForecastResult(forecast);
-
-            return this.createAgentMessage(
-                formattedForecast,
-                ['Show seasonal impact', 'Check audience overlap', 'Optimize my plan']
-            );
-        }
-
-        // Seasonal impact query
-        if (lowerInput.includes('seasonal') && (lowerInput.includes('impact') || lowerInput.includes('factor'))) {
-            console.log('[AgentBrain] Matched: Seasonal impact query');
-
-            const plan = this.context.mediaPlan;
-            if (!plan || !plan.campaign.placements || plan.campaign.placements.length === 0) {
-                return this.createAgentMessage(
-                    "I can't analyze seasonal impact yet - add placements first.",
-                    ['Add placements']
-                );
-            }
-
-            const campaign = plan.campaign;
-            const startDate = new Date(campaign.startDate || Date.now());
-            const month = startDate.getMonth();
-            const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
-                'July', 'August', 'September', 'October', 'November', 'December'];
-
-            let responseContent = `🌡️ **Seasonal Impact Analysis**\n\n`;
-            responseContent += `**Campaign Month:** ${monthNames[month]}\n\n`;
-
-            // Import seasonality factors (would ideally come from forecastingEngine)
-            const seasonalFactors: Record<number, string> = {
-                0: 'Post-holiday slump - 10-15% lower CPMs',
-                1: 'Valentine\'s/Presidents Day - slightly elevated',
-                2: 'Spring awakening - baseline CPMs',
-                3: 'Spring growth - moderately elevated (5-10%)',
-                4: 'Summer prep - elevated (10-15%)',
-                5: 'Summer begins - moderately elevated',
-                6: 'Summer slump - 5-10% lower CPMs',
-                7: 'Back to school prep - lower competition (10-15% cheaper)',
-                8: 'Fall activation - back to baseline',
-                9: 'Q4 buildup - elevated (5-10%)',
-                10: 'Holiday peak - VERY HIGH (15-20% premium)',
-                11: 'Holiday peak continues - HIGHEST (15-25% premium)'
-            };
-
-            responseContent += `**${monthNames[month]} Trends:**\n`;
-            responseContent += `• ${seasonalFactors[month] || 'Normal seasonal patterns'}\n\n`;
-
-            responseContent += `**Recommendations:**\n`;
-            if (month === 10 || month === 11) {
-                responseContent += `• Book inventory early - high demand period\n`;
-                responseContent += `• Expect 15-20% higher CPMs than average\n`;
-                responseContent += `• Consider expanding to less competitive channels\n`;
-            } else if (month === 6 || month === 7) {
-                responseContent += `• Great opportunity for efficient spend\n`;
-                responseContent += `• CPMs 10-15% below average\n`;
-                responseContent += `• Good time to test new channels/tactics\n`;
-            } else {
-                responseContent += `• Normal competitive levels expected\n`;
-                responseContent += `• Good balance of efficiency and reach\n`;
-            }
-
-            return this.createAgentMessage(responseContent, ['Forecast campaign', 'Optimize my plan']);
-        }
-
-        // Audience overlap query
-        if (lowerInput.includes('audience overlap') ||
-            (lowerInput.includes('overlap') && lowerInput.includes('reach'))) {
-            console.log('[AgentBrain] Matched: Audience overlap query');
-
-            const plan = this.context.mediaPlan;
-            if (!plan || !plan.campaign.placements || plan.campaign.placements.length === 0) {
-                return this.createAgentMessage(
-                    "I can't calculate audience overlap yet - add placements first.",
-                    ['Add placements']
-                );
-            }
-
-            const overlap = calculateAudienceOverlap(plan.campaign.placements);
-
-            let responseContent = `👥 **Audience Overlap Analysis**\n\n`;
-            responseContent += `**Total Reach (Uncorrected):** ${Math.round(overlap.totalReach).toLocaleString()}\n`;
-            responseContent += `**Overlap Amount:** ${Math.round(overlap.overlapAmount).toLocaleString()} (${overlap.overlapPercentage.toFixed(1)}%)\n`;
-            responseContent += `**Adjusted Unique Reach:** ${Math.round(overlap.adjustedReach).toLocaleString()}\n\n`;
-
-            if (overlap.overlapPercentage > 40) {
-                responseContent += `⚠️ **High Overlap Detected**\n`;
-                responseContent += `Your channels have significant audience overlap (${overlap.overlapPercentage.toFixed(0)}%). This means:\n`;
-                responseContent += `• You're reaching fewer unique people than raw numbers suggest\n`;
-                responseContent += `• Consider diversifying to different audience segments\n`;
-                responseContent += `• Frequency may be higher than optimal\n`;
-            } else if (overlap.overlapPercentage > 25) {
-                responseContent += `📊 **Moderate Overlap**\n`;
-                responseContent += `Your channels have typical overlap (${overlap.overlapPercentage.toFixed(0)}%). This is normal for multi-channel campaigns.\n`;
-            } else {
-                responseContent += `✅ **Low Overlap**\n`;
-                responseContent += `Great! Your channels reach relatively distinct audiences (${overlap.overlapPercentage.toFixed(0)}% overlap).\n`;
-            }
-
-            return this.createAgentMessage(responseContent, ['Forecast campaign', 'Optimize my plan']);
         }
 
         // Handle inventory questions (delegated to InventoryService)
@@ -1942,578 +1133,50 @@ export class AgentBrain {
 
     /**
      * Execute a pending action after user confirmation
+     * Delegates to OptimizationManager for pause/scale operations
      */
     private executePendingAction(action: PendingAction): AgentMessage {
+        const plan = this.context.mediaPlan;
+        if (!plan) {
+            return this.createAgentMessage(
+                "Error: No media plan found.",
+                ['Create new campaign']
+            );
+        }
+
+        let result;
         switch (action.type) {
             case 'PAUSE_UNDERPERFORMERS':
-                return this.executePauseUnderperformers(
+                result = executePauseUnderperformers(
+                    plan,
                     action.data.pausePreview,
                     action.data.totalSavings
                 );
+                break;
             case 'SCALE_WINNERS':
-                return this.executeScaleWinners(
+                result = executeScaleWinners(
+                    plan,
                     action.data.scalePreview,
                     action.data.totalBudgetIncrease
                 );
+                break;
             default:
                 return this.createAgentMessage(
                     "Unknown action type. No changes were made.",
                     ['Show performance', 'Optimize']
                 );
         }
-    }
 
-    /**
-     * Execute pause underperformers action
-     */
-    private executePauseUnderperformers(
-        pausePreview: { placementId: string; name: string; roas: number }[],
-        totalSavings: number
-    ): AgentMessage {
-        const plan = this.context.mediaPlan;
-        if (!plan || !plan.campaign.placements) {
-            return this.createAgentMessage(
-                "Error: No media plan found.",
-                ['Create new campaign']
-            );
+        if (result.response) {
+            this.context.history.push(result.response);
+            contextManager.addMessage(this.sessionId, 'assistant', result.response.content);
+            return result.response;
         }
 
-        let pausedCount = 0;
-        const pausedPlacements: string[] = [];
-
-        pausePreview.forEach(preview => {
-            const placement = plan.campaign.placements?.find(p => p.id === preview.placementId);
-            if (placement && placement.performance && placement.performance.status !== 'PAUSED') {
-                placement.performance.status = 'PAUSED';
-                pausedPlacements.push(`${preview.name} (ROAS: ${preview.roas.toFixed(2)})`);
-                pausedCount++;
-            }
-        });
-
-        // Recalculate plan metrics
-        plan.totalSpend = plan.campaign.placements.reduce((acc, p) => acc + p.totalCost, 0);
-        plan.metrics = calculatePlanMetrics(plan.campaign.placements);
-
-        let responseContent = `**Paused ${pausedCount} underperforming placement${pausedCount > 1 ? 's' : ''}**\n\n`;
-        responseContent += `**Placements paused:**\n`;
-        pausedPlacements.forEach(name => {
-            responseContent += `  • ${name}\n`;
-        });
-        responseContent += `\n**Estimated savings:** $${Math.round(totalSavings).toLocaleString('en-US')}`;
-
-        const msg = this.createAgentMessage(
-            responseContent,
-            ['Scale winners', 'Show performance', 'Undo']
+        return this.createAgentMessage(
+            "Action completed.",
+            ['Show performance', 'Optimize']
         );
-        msg.agentsInvoked = ['Performance Agent', 'Insights Agent'];
-        this.context.history.push(msg);
-        contextManager.addMessage(this.sessionId, 'assistant', msg.content);
-        return msg;
-    }
-
-    /**
-     * Execute scale winners action
-     */
-    private executeScaleWinners(
-        scalePreview: { placementId: string; name: string; roas: number; currentCost: number; newCost: number }[],
-        totalBudgetIncrease: number
-    ): AgentMessage {
-        const plan = this.context.mediaPlan;
-        if (!plan || !plan.campaign.placements) {
-            return this.createAgentMessage(
-                "Error: No media plan found.",
-                ['Create new campaign']
-            );
-        }
-
-        let scaledCount = 0;
-        const scaledPlacements: string[] = [];
-
-        scalePreview.forEach(preview => {
-            const placement = plan.campaign.placements?.find(p => p.id === preview.placementId);
-            if (placement) {
-                placement.totalCost = preview.newCost;
-                placement.quantity = Math.floor(placement.quantity * 1.25);
-                if (placement.forecast) {
-                    placement.forecast.impressions = Math.floor(placement.forecast.impressions * 1.25);
-                }
-                scaledPlacements.push(`${preview.name} (ROAS: ${preview.roas.toFixed(2)})`);
-                scaledCount++;
-            }
-        });
-
-        // Recalculate plan metrics
-        plan.totalSpend = plan.campaign.placements.reduce((acc, p) => acc + p.totalCost, 0);
-        plan.metrics = calculatePlanMetrics(plan.campaign.placements);
-
-        let responseContent = `**Scaled ${scaledCount} high-performing placement${scaledCount > 1 ? 's' : ''}**\n\n`;
-        responseContent += `**Placements scaled (+25% budget & impressions):**\n`;
-        scaledPlacements.forEach(name => {
-            responseContent += `  • ${name}\n`;
-        });
-        responseContent += `\n**Total budget increase:** $${Math.round(totalBudgetIncrease).toLocaleString('en-US')}`;
-        responseContent += `\n**New total spend:** $${plan.totalSpend.toLocaleString('en-US')}`;
-
-        const msg = this.createAgentMessage(
-            responseContent,
-            ['Pause underperformers', 'Show performance', 'Undo']
-        );
-        msg.agentsInvoked = ['Performance Agent', 'Yield Agent'];
-        this.context.history.push(msg);
-        contextManager.addMessage(this.sessionId, 'assistant', msg.content);
-        return msg;
-    }
-
-    /**
-     * Handle window management commands (Phase 2 - Canvas Integration)
-     * Returns null if the input doesn't match any window command
-     */
-    private handleWindowCommands(input: string): AgentMessage | null {
-        const match = findMatchingCommand(input);
-        if (!match || match.command.category !== 'WINDOW_MANAGEMENT') {
-            return null;
-        }
-
-        const { command } = match;
-        let responseContent = '';
-        let action: string | undefined;
-        let suggestedActions: string[] = [];
-
-        // Map command IDs to actions and responses
-        switch (command.id) {
-            case 'close_window':
-                action = 'WINDOW_CLOSE';
-                responseContent = "Closing the window.";
-                suggestedActions = ['Open portfolio', 'Show campaigns'];
-                break;
-
-            case 'minimize_window':
-                action = 'WINDOW_MINIMIZE';
-                responseContent = "Minimizing the window.";
-                suggestedActions = ['Restore window', 'Show all windows'];
-                break;
-
-            case 'maximize_window':
-                action = 'WINDOW_MAXIMIZE';
-                responseContent = "Maximizing the window.";
-                suggestedActions = ['Restore window'];
-                break;
-
-            case 'restore_window':
-                action = 'WINDOW_RESTORE';
-                responseContent = "Restoring the window.";
-                suggestedActions = ['Maximize window', 'Tile windows'];
-                break;
-
-            case 'tile_windows': {
-                // Check for horizontal/vertical in the match
-                const tileMatch = input.match(/tile\s+(horizontal|vertical)/i);
-                if (tileMatch) {
-                    const direction = tileMatch[1].toLowerCase();
-                    action = direction === 'horizontal' ? 'WINDOW_TILE_HORIZONTAL' : 'WINDOW_TILE_VERTICAL';
-                    responseContent = `Tiling windows ${direction}ly.`;
-                } else {
-                    action = 'WINDOW_TILE_HORIZONTAL'; // Default to horizontal
-                    responseContent = "Tiling windows horizontally.";
-                }
-                suggestedActions = ['Cascade windows', 'Minimize all'];
-                break;
-            }
-
-            case 'cascade_windows':
-                action = 'WINDOW_CASCADE';
-                responseContent = "Cascading windows.";
-                suggestedActions = ['Tile windows', 'Minimize all'];
-                break;
-
-            case 'minimize_all':
-                action = 'WINDOW_MINIMIZE_ALL';
-                responseContent = "Minimizing all windows.";
-                suggestedActions = ['Restore all', 'Open campaign'];
-                break;
-
-            case 'restore_all':
-                action = 'WINDOW_RESTORE_ALL';
-                responseContent = "Restoring all windows.";
-                suggestedActions = ['Tile windows', 'Cascade windows'];
-                break;
-
-            case 'close_all':
-                action = 'WINDOW_CLOSE_ALL';
-                responseContent = "Closing all windows.";
-                suggestedActions = ['Open portfolio', 'Open campaign'];
-                break;
-
-            case 'focus_window': {
-                // Extract the window name from the match
-                const focusMatch = input.match(/(?:switch|go)\s+to\s+(?:the\s+)?(.+?)(?:\s+window)?$/i) ||
-                                   input.match(/focus\s+(?:on\s+)?(?:the\s+)?(.+?)(?:\s+window)?$/i) ||
-                                   input.match(/bring\s+(.+)\s+to\s+(?:the\s+)?front/i) ||
-                                   input.match(/show\s+(?:me\s+)?(?:the\s+)?(.+?)(?:\s+window)?$/i);
-                const windowName = focusMatch?.[1]?.trim();
-                action = 'WINDOW_FOCUS';
-                responseContent = windowName
-                    ? `Focusing on the ${windowName} window.`
-                    : "Focusing on the window.";
-                suggestedActions = ['Tile windows', 'Close window'];
-                break;
-            }
-
-            case 'open_window': {
-                // Extract window type from the match
-                const openMatch = input.match(/(?:open|new)\s+(?:a\s+)?(?:new\s+)?(campaign|flight|portfolio|report|settings|audience|chat)\s*(?:window)?/i);
-                const windowType = openMatch?.[1]?.toLowerCase();
-                action = 'WINDOW_OPEN';
-                responseContent = windowType
-                    ? `Opening a new ${windowType} window.`
-                    : "Opening a new window.";
-                suggestedActions = ['Tile windows', 'Close window'];
-                break;
-            }
-
-            case 'gather_windows':
-                action = 'WINDOW_GATHER';
-                responseContent = "Bringing all windows back to the visible area.";
-                suggestedActions = ['Tile windows', 'Cascade windows'];
-                break;
-
-            case 'pin_window':
-                action = 'WINDOW_PIN';
-                responseContent = "Pinning this window. It will persist across sessions.";
-                suggestedActions = ['Unpin window', 'Close window'];
-                break;
-
-            case 'unpin_window':
-                action = 'WINDOW_UNPIN';
-                responseContent = "Unpinning this window. It won't persist after you close it.";
-                suggestedActions = ['Pin window', 'Close window'];
-                break;
-
-            default:
-                return null;
-        }
-
-        return this.createAgentMessage(responseContent, suggestedActions, action as any);
-    }
-
-    /**
-     * Handle attribution commands (Phase 2 - Attribution + Chat Integration)
-     * Returns null if the input doesn't match any attribution command
-     */
-    private handleAttributionCommands(input: string): AgentMessage | null {
-        const match = findMatchingCommand(input);
-        if (!match || match.command.category !== 'ATTRIBUTION') {
-            return null;
-        }
-
-        const { command } = match;
-        let responseContent = '';
-        let action: string | undefined;
-        let suggestedActions: string[] = [];
-
-        // Check if we have a campaign context (required for most attribution commands)
-        // Can be: specific campaign window, media plan in progress, or brand with campaigns
-        const hasCampaign = this.context.windowContext?.campaignId ||
-            this.context.mediaPlan ||
-            (this.context.brand?.campaigns && this.context.brand.campaigns.length > 0);
-
-        switch (command.id) {
-            // --- Navigation Commands ---
-            case 'open_attribution':
-                if (!hasCampaign) {
-                    responseContent = "To view attribution analysis, please select a campaign first.";
-                    suggestedActions = ['Show campaigns', 'Open portfolio'];
-                } else {
-                    action = 'OPEN_ATTRIBUTION';
-                    responseContent = "Opening the Attribution dashboard.";
-                    suggestedActions = ['Compare models', 'Show incrementality', 'View time analysis'];
-                }
-                break;
-
-            case 'open_attribution_overview':
-                if (!hasCampaign) {
-                    responseContent = "Please select a campaign to view attribution overview.";
-                    suggestedActions = ['Show campaigns'];
-                } else {
-                    action = 'OPEN_ATTRIBUTION_OVERVIEW';
-                    responseContent = "Opening Attribution Overview with channel breakdown and conversion paths.";
-                    suggestedActions = ['Change model', 'View time analysis', 'Compare models'];
-                }
-                break;
-
-            case 'open_incrementality':
-                if (!hasCampaign) {
-                    responseContent = "Please select a campaign to view incrementality testing.";
-                    suggestedActions = ['Show campaigns'];
-                } else {
-                    action = 'OPEN_ATTRIBUTION_INCREMENTALITY';
-                    responseContent = "Opening Incrementality Testing. Here you can set up holdout tests to measure true channel lift.";
-                    suggestedActions = ['Create new test', 'Explain incrementality', 'View overview'];
-                }
-                break;
-
-            case 'open_time_analysis':
-                if (!hasCampaign) {
-                    responseContent = "Please select a campaign to view time analysis.";
-                    suggestedActions = ['Show campaigns'];
-                } else {
-                    action = 'OPEN_ATTRIBUTION_TIME';
-                    responseContent = "Opening Time Analysis. This shows how long it takes users to convert after their first touchpoint.";
-                    suggestedActions = ['View frequency', 'Compare models', 'Show overview'];
-                }
-                break;
-
-            case 'open_frequency_analysis':
-                if (!hasCampaign) {
-                    responseContent = "Please select a campaign to view touchpoint frequency.";
-                    suggestedActions = ['Show campaigns'];
-                } else {
-                    action = 'OPEN_ATTRIBUTION_FREQUENCY';
-                    responseContent = "Opening Touchpoint Frequency analysis. This shows how many interactions users typically have before converting.";
-                    suggestedActions = ['View time analysis', 'Show overview', 'Compare models'];
-                }
-                break;
-
-            case 'open_model_comparison':
-                if (!hasCampaign) {
-                    responseContent = "Please select a campaign to compare attribution models.";
-                    suggestedActions = ['Show campaigns'];
-                } else {
-                    action = 'OPEN_ATTRIBUTION_MODELS';
-                    responseContent = "Opening Model Comparison. Compare how different attribution models allocate credit across your channels.";
-                    suggestedActions = ['Explain models', 'View overview', 'Show incrementality'];
-                }
-                break;
-
-            // --- Pop-out Commands ---
-            case 'popout_attribution_view': {
-                const viewMatch = input.match(/(?:pop\s*out|open|detach|separate)\s+(?:the\s+)?(overview|incrementality|time|frequency|model)/i);
-                const viewType = viewMatch?.[1]?.toLowerCase();
-
-                if (!hasCampaign) {
-                    responseContent = "Please select a campaign first to pop out attribution views.";
-                    suggestedActions = ['Show campaigns'];
-                } else {
-                    const viewMap: Record<string, string> = {
-                        'overview': 'POPOUT_ATTRIBUTION_OVERVIEW',
-                        'incrementality': 'POPOUT_ATTRIBUTION_INCREMENTALITY',
-                        'time': 'POPOUT_ATTRIBUTION_TIME',
-                        'frequency': 'POPOUT_ATTRIBUTION_FREQUENCY',
-                        'model': 'POPOUT_ATTRIBUTION_MODELS'
-                    };
-                    action = viewMap[viewType || 'overview'];
-                    responseContent = `Opening ${viewType || 'overview'} in a new window. You can now compare this view side-by-side with other windows.`;
-                    suggestedActions = ['Pop out another view', 'Tile windows', 'Show overview'];
-                }
-                break;
-            }
-
-            // --- Model Commands ---
-            case 'change_attribution_model': {
-                const modelMatch = input.match(/(first[- ]?touch|last[- ]?touch|linear|time[- ]?decay|position[- ]?based)/i);
-                const modelName = modelMatch?.[1]?.toLowerCase().replace(/[- ]/g, '_').toUpperCase();
-
-                if (!hasCampaign) {
-                    responseContent = "Please select a campaign first to change the attribution model.";
-                    suggestedActions = ['Show campaigns', 'Open attribution'];
-                } else {
-                    const modelDisplayNames: Record<string, string> = {
-                        'FIRST_TOUCH': 'First Touch',
-                        'LAST_TOUCH': 'Last Touch',
-                        'LINEAR': 'Linear',
-                        'TIME_DECAY': 'Time Decay',
-                        'POSITION_BASED': 'Position Based'
-                    };
-                    const displayName = modelDisplayNames[modelName || 'LINEAR'] || 'Linear';
-                    action = `SET_ATTRIBUTION_MODEL_${modelName || 'LINEAR'}`;
-                    responseContent = `Switched to **${displayName}** attribution model.\n\n`;
-
-                    // Add model-specific explanation
-                    switch (modelName) {
-                        case 'FIRST_TOUCH':
-                            responseContent += "This model gives 100% credit to the first interaction. It's useful for understanding which channels introduce customers to your brand.";
-                            break;
-                        case 'LAST_TOUCH':
-                            responseContent += "This model gives 100% credit to the last interaction before conversion. It highlights which channels close the deal.";
-                            break;
-                        case 'LINEAR':
-                            responseContent += "This model distributes credit equally across all touchpoints. It values every interaction in the customer journey.";
-                            break;
-                        case 'TIME_DECAY':
-                            responseContent += "This model gives more credit to recent interactions using a 7-day half-life. Recent touchpoints are weighted more heavily.";
-                            break;
-                        case 'POSITION_BASED':
-                            responseContent += "This model gives 40% credit to the first touch, 40% to the last, and distributes 20% among middle interactions.";
-                            break;
-                    }
-                    suggestedActions = ['Compare models', 'Show overview', 'Explain model differences'];
-                }
-                break;
-            }
-
-            case 'explain_attribution_model': {
-                const modelMatch = input.match(/(first[- ]?touch|last[- ]?touch|linear|time[- ]?decay|position[- ]?based)/i);
-                const modelName = modelMatch?.[1]?.toLowerCase().replace(/[- ]/g, ' ');
-
-                if (input.match(/difference|compare/i)) {
-                    // User wants to understand differences between models
-                    responseContent = `**Attribution Model Comparison**\n\n` +
-                        `| Model | Best For | Limitation |\n` +
-                        `|-------|----------|------------|\n` +
-                        `| **First Touch** | Awareness campaigns | Ignores conversion-driving channels |\n` +
-                        `| **Last Touch** | Performance campaigns | Ignores awareness-building |\n` +
-                        `| **Linear** | Balanced view | May overvalue minor touchpoints |\n` +
-                        `| **Time Decay** | Short sales cycles | May undervalue early awareness |\n` +
-                        `| **Position Based** | Balanced awareness + conversion | Arbitrary 40/40/20 split |\n\n` +
-                        `For most campaigns, I recommend starting with **Linear** for a balanced view, then comparing with **Position Based** to see how first/last touch channels differ.`;
-                    suggestedActions = ['Compare models', 'Switch to linear', 'Show model comparison'];
-                } else {
-                    // Explain specific model
-                    const explanations: Record<string, string> = {
-                        'first touch': `**First Touch Attribution**\n\nThis model assigns 100% of the conversion credit to the first interaction a customer has with your brand.\n\n**When to use:**\n- Measuring brand awareness effectiveness\n- Understanding which channels introduce new customers\n- Top-of-funnel optimization\n\n**Example:** If a customer sees a Display ad, then clicks a Search ad, then converts via Email, Display gets 100% credit.`,
-                        'last touch': `**Last Touch Attribution**\n\nThis model assigns 100% of the conversion credit to the final interaction before conversion.\n\n**When to use:**\n- Performance-focused campaigns\n- When you need to optimize for immediate conversions\n- Simple ROI calculations\n\n**Example:** If a customer sees a Display ad, then clicks a Search ad, then converts via Email, Email gets 100% credit.`,
-                        'linear': `**Linear Attribution**\n\nThis model distributes conversion credit equally across all touchpoints in the customer journey.\n\n**When to use:**\n- When all interactions are considered equally valuable\n- For a balanced view of the full funnel\n- Understanding multi-channel journeys\n\n**Example:** If there are 4 touchpoints, each receives 25% credit.`,
-                        'time decay': `**Time Decay Attribution**\n\nThis model gives more credit to touchpoints closer to the conversion, using a half-life decay (typically 7 days).\n\n**When to use:**\n- Short sales cycles\n- When recent interactions likely have more influence\n- B2C with quick purchase decisions\n\n**Example:** A touchpoint 1 day before conversion gets more credit than one from 2 weeks ago.`,
-                        'position based': `**Position-Based Attribution** (U-Shaped)\n\nThis model gives 40% credit to the first touch, 40% to the last touch, and distributes the remaining 20% among middle interactions.\n\n**When to use:**\n- Valuing both awareness and conversion\n- When first impression and final decision are key moments\n- Balanced multi-touch analysis\n\n**Example:** In a 5-touchpoint journey, first and last each get 40%, and the 3 middle touchpoints share 20%.`
-                    };
-                    responseContent = explanations[modelName || 'linear'] || explanations['linear'];
-                    suggestedActions = [`Switch to ${modelName || 'linear'}`, 'Compare all models', 'Show overview'];
-                }
-                break;
-            }
-
-            // --- Incrementality Commands ---
-            case 'create_incrementality_test': {
-                const channelMatch = input.match(/test\s+(?:for\s+)?(\w+)|(\w+)\s+test/i);
-                const channel = channelMatch?.[1] || channelMatch?.[2];
-
-                if (!hasCampaign) {
-                    responseContent = "Please select a campaign first to create an incrementality test.";
-                    suggestedActions = ['Show campaigns'];
-                } else {
-                    action = channel ? `CREATE_INCREMENTALITY_TEST_${channel.toUpperCase()}` : 'OPEN_INCREMENTALITY_FORM';
-                    responseContent = channel
-                        ? `I'll help you set up an incrementality test for **${channel}**.\n\nTo measure true lift, we'll create a holdout group that doesn't see ${channel} ads. I recommend:\n- **Test duration:** 2-4 weeks for statistical significance\n- **Holdout size:** 10-20% of your audience\n\nOpening the test creation form...`
-                        : `Let's set up an incrementality test to measure true channel lift.\n\nI'll open the test creation form where you can:\n1. Select the channel to test\n2. Define test and control group parameters\n3. Set the test duration\n\nWhat channel would you like to test?`;
-                    suggestedActions = channel
-                        ? ['Start test', 'Explain incrementality', 'View existing tests']
-                        : ['Test Search', 'Test Social', 'Test Display', 'Explain incrementality'];
-                }
-                break;
-            }
-
-            case 'view_test_results': {
-                if (!hasCampaign) {
-                    responseContent = "Please select a campaign first to view test results.";
-                    suggestedActions = ['Show campaigns'];
-                } else {
-                    action = 'OPEN_ATTRIBUTION_INCREMENTALITY';
-                    responseContent = "Opening the Incrementality Testing panel to view your test results.";
-                    suggestedActions = ['Create new test', 'Explain lift', 'View overview'];
-                }
-                break;
-            }
-
-            // --- Analysis Commands ---
-            case 'analyze_channel_attribution': {
-                const channelMatch = input.match(/(?:how|what)\s+(?:is|are)\s+(\w+)\s+(?:performing|doing|attributed)/i) ||
-                                    input.match(/(?:analyze|show)\s+(?:me\s+)?(\w+)\s+(?:attribution|performance)/i);
-                const channel = channelMatch?.[1];
-                const openerCloserMatch = input.match(/(?:best|top)\s+(opener|closer)/i);
-
-                if (!hasCampaign) {
-                    responseContent = "Please select a campaign first to analyze channel attribution.";
-                    suggestedActions = ['Show campaigns', 'Open attribution'];
-                } else if (openerCloserMatch) {
-                    const role = openerCloserMatch[1].toLowerCase();
-                    action = 'OPEN_ATTRIBUTION_OVERVIEW';
-                    responseContent = role === 'opener'
-                        ? "To find your best **opener** channels, let's look at **First Touch** attribution. Channels that introduce customers to your brand will show highest credit.\n\nOpening the Attribution Overview..."
-                        : "To find your best **closer** channels, let's look at **Last Touch** attribution. Channels that drive final conversions will show highest credit.\n\nOpening the Attribution Overview...";
-                    suggestedActions = ['Switch to first touch', 'Switch to last touch', 'Compare models'];
-                } else if (channel) {
-                    action = 'ANALYZE_CHANNEL';
-                    responseContent = `Analyzing **${channel}** performance across attribution models...\n\nI'll show you how ${channel} performs as both an opener (first touch) and closer (last touch), along with its overall contribution.`;
-                    suggestedActions = ['Compare models', 'View conversion paths', 'Show overview'];
-                } else {
-                    action = 'OPEN_ATTRIBUTION_OVERVIEW';
-                    responseContent = "Opening Attribution Overview to analyze channel performance.";
-                    suggestedActions = ['Which channel is best opener', 'Which channel is best closer', 'Compare models'];
-                }
-                break;
-            }
-
-            case 'show_conversion_paths':
-                if (!hasCampaign) {
-                    responseContent = "Please select a campaign first to view conversion paths.";
-                    suggestedActions = ['Show campaigns'];
-                } else {
-                    action = 'OPEN_ATTRIBUTION_OVERVIEW';
-                    responseContent = "Opening Attribution Overview to show conversion paths.\n\nThe **Sankey diagram** shows how customers flow through channels, and you'll see the **top conversion paths** that lead to purchases.";
-                    suggestedActions = ['View time analysis', 'View frequency', 'Compare models'];
-                }
-                break;
-
-            case 'attribution_insights':
-                if (!hasCampaign) {
-                    responseContent = "Please select a campaign first to get attribution insights.";
-                    suggestedActions = ['Show campaigns'];
-                } else {
-                    action = 'SHOW_ATTRIBUTION_INSIGHTS';
-                    responseContent = "Analyzing your attribution data for insights...\n\n**Key Recommendations:**\n\n" +
-                        "1. **Compare first-touch vs last-touch** to identify if you have dedicated \"opener\" and \"closer\" channels\n" +
-                        "2. **Check time-to-conversion** - if most conversions happen quickly, prioritize last-touch channels\n" +
-                        "3. **Review touchpoint frequency** - high-frequency paths suggest the need for multi-channel presence\n" +
-                        "4. **Run incrementality tests** on your top-spending channels to validate true lift\n\n" +
-                        "Would you like me to dive deeper into any of these areas?";
-                    suggestedActions = ['Compare models', 'View time analysis', 'Create incrementality test', 'Show overview'];
-                }
-                break;
-
-            // --- Help Commands ---
-            case 'explain_incrementality':
-                responseContent = `**Incrementality Testing** (also called Lift Testing)\n\n` +
-                    `Incrementality measures the **true causal impact** of your marketing by comparing:\n` +
-                    `- **Test Group:** Users who see your ads\n` +
-                    `- **Control Group:** Users who don't see your ads (holdout)\n\n` +
-                    `**Why it matters:**\n` +
-                    `Attribution models show correlation, but incrementality shows causation. A channel might get high attribution credit, but some of those conversions would have happened anyway.\n\n` +
-                    `**Key metrics:**\n` +
-                    `- **Lift:** The % increase in conversions from the test group vs control\n` +
-                    `- **Confidence:** Statistical certainty (aim for >90%)\n` +
-                    `- **iROAS:** Incremental Return on Ad Spend\n\n` +
-                    `A good incrementality test typically runs 2-4 weeks with a 10-20% holdout.`;
-                suggestedActions = ['Create incrementality test', 'View test results', 'Open incrementality panel'];
-                break;
-
-            case 'attribution_help':
-                responseContent = `**Attribution Analysis Help**\n\n` +
-                    `Here's what you can do in the Attribution dashboard:\n\n` +
-                    `**Overview**\n` +
-                    `- View channel attribution breakdown\n` +
-                    `- See conversion path visualizations (Sankey diagram)\n` +
-                    `- Switch between 5 attribution models\n\n` +
-                    `**Incrementality Testing**\n` +
-                    `- Set up A/B holdout tests\n` +
-                    `- Measure true channel lift\n` +
-                    `- Validate attribution assumptions\n\n` +
-                    `**Analysis Views**\n` +
-                    `- Time Analysis: How long until conversion\n` +
-                    `- Frequency: Touchpoints before conversion\n` +
-                    `- Model Comparison: Compare all models side-by-side\n\n` +
-                    `**Try saying:**\n` +
-                    `- "Compare attribution models"\n` +
-                    `- "Which channel is the best opener?"\n` +
-                    `- "Set up a holdout test for Search"\n` +
-                    `- "Switch to time decay model"`;
-                suggestedActions = ['Show overview', 'Compare models', 'Explain incrementality', 'Create test'];
-                break;
-
-            default:
-                return null;
-        }
-
-        return this.createAgentMessage(responseContent, suggestedActions, action as any);
     }
 
     private createAgentMessage(content: string, suggestedActions: string[], action?: AgentMessage['action']): AgentMessage {
